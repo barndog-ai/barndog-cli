@@ -1,5 +1,4 @@
-import { test } from "node:test";
-import assert from "node:assert/strict";
+import { expect, test, type TestContext } from "vitest";
 import {
   mkdtemp,
   mkdir,
@@ -23,9 +22,9 @@ import type { Harness } from "../harnesses/registry.js";
 
 const id = "729b9d5a-4a8c-4aa7-9b8d-975a55ac373e";
 
-async function setup(t: { after: (fn: () => Promise<void>) => void }) {
+async function setup(t: TestContext) {
   const root = await realpath(await mkdtemp(join(tmpdir(), "barndog-test-")));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  t.onTestFinished(() => rm(root, { recursive: true, force: true }));
   const home = join(root, "home");
   const source = join(root, "source", "example");
   const config = settingsPath(home);
@@ -49,7 +48,7 @@ async function setup(t: { after: (fn: () => Promise<void>) => void }) {
   );
   const configure = async (enabled: boolean) => {
     const current = (await readSettings(home))!;
-    assert.equal(current.version, 1);
+    expect(current.version).toBe(1);
     if (current.version !== 1) throw new Error("Expected legacy fixture");
     await saveSettings(
       { ...current, skills: [{ ...skills[0]!, enabled }] },
@@ -68,25 +67,22 @@ test("all three harness links expose the whole package; repeat sync preserves li
   const before = await Promise.all(f.targets.map((path) => lstat(path)));
   const state = await readFile(join(f.home, ".barndog/state.json"), "utf8");
   for (const target of f.targets) {
-    assert.equal(await readlink(target), f.source);
-    assert.equal(
-      await readFile(join(target, "references/check.txt"), "utf8"),
+    expect(await readlink(target)).toBe(f.source);
+    expect(await readFile(join(target, "references/check.txt"), "utf8")).toBe(
       "supporting content",
     );
   }
-  assert.ok(
+  expect(
     (await sync(f.config, f.home)).every((line) => line.type === "unchanged"),
-  );
-  assert.equal(
-    await readFile(join(f.home, ".barndog/state.json"), "utf8"),
+  ).toBeTruthy();
+  expect(await readFile(join(f.home, ".barndog/state.json"), "utf8")).toBe(
     state,
   );
   for (const [index, target] of f.targets.entries())
-    assert.equal((await lstat(target)).ino, before[index]!.ino);
+    expect((await lstat(target)).ino).toBe(before[index]!.ino);
   await writeFile(join(f.source, "references/check.txt"), "updated content");
   for (const target of f.targets)
-    assert.equal(
-      await readFile(join(target, "references/check.txt"), "utf8"),
+    expect(await readFile(join(target, "references/check.txt"), "utf8")).toBe(
       "updated content",
     );
 });
@@ -97,16 +93,14 @@ test("disable preserves selection and source; re-enable restores all three links
   await f.configure(false);
   await sync(f.config, f.home);
   for (const target of f.targets)
-    await assert.rejects(lstat(target), { code: "ENOENT" });
-  assert.match(await readFile(f.config, "utf8"), /enabled: false/);
-  assert.match(
-    await readFile(join(f.source, "SKILL.md"), "utf8"),
+    await expect(lstat(target)).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await readFile(f.config, "utf8")).toMatch(/enabled: false/);
+  expect(await readFile(join(f.source, "SKILL.md"), "utf8")).toMatch(
     /name: example/,
   );
   await f.configure(true);
   await sync(f.config, f.home);
-  for (const target of f.targets)
-    assert.equal(await readlink(target), f.source);
+  for (const target of f.targets) expect(await readlink(target)).toBe(f.source);
 });
 
 for (const conflictIndex of [0, 1, 2])
@@ -115,10 +109,10 @@ for (const conflictIndex of [0, 1, 2])
     const conflict = f.targets[conflictIndex]!;
     await mkdir(conflict, { recursive: true });
     await writeFile(join(conflict, "keep.txt"), "mine");
-    await assert.rejects(sync(f.config, f.home), /unmanaged/);
+    await expect(sync(f.config, f.home)).rejects.toThrow(/unmanaged/);
     for (const target of f.targets.filter((path) => path !== conflict))
-      await assert.rejects(lstat(target), { code: "ENOENT" });
-    assert.equal(await readFile(join(conflict, "keep.txt"), "utf8"), "mine");
+      await expect(lstat(target)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readFile(join(conflict, "keep.txt"), "utf8")).toBe("mine");
   });
 
 test("existing Claude and Codex state gains Cursor without reinstalling previous links", async (t) => {
@@ -135,16 +129,15 @@ test("existing Claude and Codex state gains Cursor without reinstalling previous
     f.targets.slice(0, 2).map((path) => lstat(path)),
   );
   const messages = await sync(f.config, f.home);
-  assert.equal(messages.filter((line) => line.type === "unchanged").length, 2);
-  assert.equal(
+  expect(messages.filter((line) => line.type === "unchanged").length).toBe(2);
+  expect(
     messages.filter(
       (line) => line.type === "installed" && line.link.harness === "cursor",
     ).length,
-    1,
-  );
-  assert.equal(await readlink(f.targets[2]!), f.source);
+  ).toBe(1);
+  expect(await readlink(f.targets[2]!)).toBe(f.source);
   for (const [index, target] of f.targets.slice(0, 2).entries())
-    assert.equal((await lstat(target)).ino, before[index]!.ino);
+    expect((await lstat(target)).ino).toBe(before[index]!.ino);
   await sync(f.config, f.home);
 });
 
@@ -154,15 +147,15 @@ test("externally replaced managed link is preserved on disable", async (t) => {
   await rm(f.targets[0]!);
   await symlink(f.root, f.targets[0]!, "dir");
   await f.configure(false);
-  await assert.rejects(sync(f.config, f.home), /changed externally/);
-  assert.equal(await readlink(f.targets[0]!), f.root);
-  assert.equal(await readlink(f.targets[1]!), f.source);
+  await expect(sync(f.config, f.home)).rejects.toThrow(/changed externally/);
+  expect(await readlink(f.targets[0]!)).toBe(f.root);
+  expect(await readlink(f.targets[1]!)).toBe(f.source);
 });
 
 test("invalid skill fails before installation and removed selections clean up", async (t) => {
   const f = await setup(t);
   await writeFile(join(f.source, "SKILL.md"), "missing frontmatter");
-  await assert.rejects(sync(f.config, f.home), /Invalid SKILL.md/);
+  await expect(sync(f.config, f.home)).rejects.toThrow(/Invalid SKILL.md/);
   await writeFile(
     join(f.source, "SKILL.md"),
     "---\nname: example\ndescription: Example\n---\nCheck",
@@ -171,7 +164,7 @@ test("invalid skill fails before installation and removed selections clean up", 
   await saveSettings({ ...(await readSettings(f.home))!, skills: [] }, f.home);
   await sync(f.config, f.home);
   for (const target of f.targets)
-    await assert.rejects(lstat(target), { code: "ENOENT" });
+    await expect(lstat(target)).rejects.toMatchObject({ code: "ENOENT" });
 });
 
 test("missing managed links are repaired; disabled missing sources can be cleaned up", async (t) => {
@@ -179,34 +172,33 @@ test("missing managed links are repaired; disabled missing sources can be cleane
   await sync(f.config, f.home);
   await rm(f.targets[0]!);
   await sync(f.config, f.home);
-  assert.equal(await readlink(f.targets[0]!), f.source);
+  expect(await readlink(f.targets[0]!)).toBe(f.source);
   await rm(f.source, { recursive: true });
   await f.configure(false);
   await sync(f.config, f.home);
   for (const target of f.targets)
-    await assert.rejects(lstat(target), { code: "ENOENT" });
+    await expect(lstat(target)).rejects.toMatchObject({ code: "ENOENT" });
 });
 
 test("sync targets only selected harnesses and reconciles deselection without losing skill selections", async (t) => {
   const f = await setup(t);
   await f.selectHarnesses(["codex"]);
   await sync(f.config, f.home);
-  await assert.rejects(lstat(f.targets[0]!), { code: "ENOENT" });
-  await assert.rejects(lstat(f.targets[2]!), { code: "ENOENT" });
-  assert.equal(await readlink(f.targets[1]!), f.source);
+  await expect(lstat(f.targets[0]!)).rejects.toMatchObject({ code: "ENOENT" });
+  await expect(lstat(f.targets[2]!)).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await readlink(f.targets[1]!)).toBe(f.source);
   const selected = (await readSettings(f.home))!.skills;
   await f.selectHarnesses(["claude", "cursor"]);
   await sync(f.config, f.home);
-  await assert.rejects(lstat(f.targets[1]!), { code: "ENOENT" });
+  await expect(lstat(f.targets[1]!)).rejects.toMatchObject({ code: "ENOENT" });
   for (const index of [0, 2])
-    assert.equal(await readlink(f.targets[index]!), f.source);
+    expect(await readlink(f.targets[index]!)).toBe(f.source);
   await f.selectHarnesses([]);
   await sync(f.config, f.home);
   for (const target of f.targets)
-    await assert.rejects(lstat(target), { code: "ENOENT" });
-  assert.deepEqual((await readSettings(f.home))!.skills, selected);
-  assert.match(
-    await readFile(join(f.source, "SKILL.md"), "utf8"),
+    await expect(lstat(target)).rejects.toMatchObject({ code: "ENOENT" });
+  expect((await readSettings(f.home))!.skills).toStrictEqual(selected);
+  expect(await readFile(join(f.source, "SKILL.md"), "utf8")).toMatch(
     /name: example/,
   );
 });
@@ -216,15 +208,17 @@ test("sync requires onboarding and rejects invalid settings before touching link
   const settings = settingsPath(f.home);
   const original = await readFile(settings, "utf8");
   await rm(settings);
-  await assert.rejects(sync(f.config, f.home), { name: "SetupRequiredError" });
+  await expect(sync(f.config, f.home)).rejects.toMatchObject({
+    name: "SetupRequiredError",
+  });
   for (const target of f.targets)
-    await assert.rejects(lstat(target), { code: "ENOENT" });
+    await expect(lstat(target)).rejects.toMatchObject({ code: "ENOENT" });
   await writeFile(settings, original);
   await f.selectHarnesses(["codex"]);
   await sync(f.config, f.home);
   await writeFile(settings, "version: 1\nharnesses: [typo]\n");
-  await assert.rejects(sync(f.config, f.home), /Invalid user settings/);
-  assert.equal(await readlink(f.targets[1]!), f.source);
+  await expect(sync(f.config, f.home)).rejects.toThrow(/Invalid user settings/);
+  expect(await readlink(f.targets[1]!)).toBe(f.source);
 });
 
 test("default sync uses the home config and shared state regardless of working directory", async (t) => {
@@ -240,14 +234,11 @@ test("default sync uses the home config and shared state regardless of working d
     const before = await Promise.all(f.targets.map((target) => lstat(target)));
     process.chdir(f.source);
     const messages = await sync(undefined, f.home);
-    assert.equal(
-      messages.filter((line) => line.type === "unchanged").length,
-      3,
-    );
+    expect(messages.filter((line) => line.type === "unchanged").length).toBe(3);
     for (const [index, target] of f.targets.entries())
-      assert.equal((await lstat(target)).ino, before[index]!.ino);
+      expect((await lstat(target)).ino).toBe(before[index]!.ino);
     await readFile(join(f.home, ".barndog/state.json"));
-    await assert.rejects(lstat(join(unrelated, ".barndog")), {
+    await expect(lstat(join(unrelated, ".barndog"))).rejects.toMatchObject({
       code: "ENOENT",
     });
   } finally {
@@ -264,10 +255,9 @@ test("explicit config override includes harnesses and skills but shares machine 
     `version: 1\nharnesses: [codex]\nskills:\n  - id: ${id}\n    source: ./source/example\n    enabled: true\n`,
   );
   await sync(override, f.home);
-  await assert.rejects(lstat(f.targets[0]!), { code: "ENOENT" });
-  await assert.rejects(lstat(f.targets[2]!), { code: "ENOENT" });
-  assert.equal(await readlink(f.targets[1]!), f.source);
+  await expect(lstat(f.targets[0]!)).rejects.toMatchObject({ code: "ENOENT" });
+  await expect(lstat(f.targets[2]!)).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await readlink(f.targets[1]!)).toBe(f.source);
   await sync(undefined, f.home);
-  for (const target of f.targets)
-    assert.equal(await readlink(target), f.source);
+  for (const target of f.targets) expect(await readlink(target)).toBe(f.source);
 });

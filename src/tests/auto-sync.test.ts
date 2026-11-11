@@ -1,5 +1,4 @@
-import { test } from "node:test";
-import assert from "node:assert/strict";
+import { expect, test } from "vitest";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
@@ -11,12 +10,12 @@ import { updateCredentials } from "../features/auth/credentials.js";
 import { autoSync } from "../features/environment/auto-sync.js";
 import { synchronize } from "../features/environment/sync.js";
 
-type TestContext = Parameters<NonNullable<Parameters<typeof test>[0]>>[0];
+type TestContext = import("vitest").TestContext;
 
 async function connectedHome(t: TestContext, extra: Partial<SettingsV2> = {}) {
   const home = await mkdtemp(join(tmpdir(), "barndog-auto-sync-"));
 
-  t.after(() => rm(home, { recursive: true, force: true }));
+  t.onTestFinished(() => rm(home, { recursive: true, force: true }));
 
   const organizationId = randomUUID();
   const developerId = randomUUID();
@@ -61,7 +60,9 @@ async function connectedHome(t: TestContext, extra: Partial<SettingsV2> = {}) {
   });
 
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  t.after(() => new Promise<void>((resolve) => server.close(() => resolve())));
+  t.onTestFinished(
+    () => new Promise<void>((resolve) => server.close(() => resolve())),
+  );
 
   const url = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
 
@@ -115,36 +116,36 @@ test("auto sync skips a cloud workspace until its catalog changes", async (t) =>
   const { backend, expire, run, syncs } = await connectedHome(t);
 
   await run();
-  assert.equal(syncs(), 1, "the first check always syncs");
+  expect(syncs(), "the first check always syncs").toBe(1);
 
   await run();
-  assert.equal(backend.requests, 1, "a recent check does not reach the server");
-  assert.equal(syncs(), 1);
+  expect(backend.requests, "a recent check does not reach the server").toBe(1);
+  expect(syncs()).toBe(1);
 
   await expire();
   await run();
-  assert.equal(backend.requests, 2);
-  assert.equal(syncs(), 1, "an unchanged revision does not sync");
+  expect(backend.requests).toBe(2);
+  expect(syncs(), "an unchanged revision does not sync").toBe(1);
 
   await expire();
   backend.revision = "two";
   await run();
-  assert.equal(syncs(), 2, "a new revision syncs");
+  expect(syncs(), "a new revision syncs").toBe(2);
 });
 
 test("auto sync retries a change whose sync failed", async (t) => {
   const { backend, expire, run, syncs } = await connectedHome(t);
 
-  await assert.rejects(run(true), /sync failed/);
-  assert.equal(syncs(), 1);
+  await expect(run(true)).rejects.toThrow(/sync failed/);
+  expect(syncs()).toBe(1);
 
   await run();
-  assert.equal(syncs(), 1, "a failure still counts toward the limit");
+  expect(syncs(), "a failure still counts toward the limit").toBe(1);
 
   await expire();
   backend.revision = "one";
   await run();
-  assert.equal(syncs(), 2, "the undelivered revision is tried again");
+  expect(syncs(), "the undelivered revision is tried again").toBe(2);
 });
 
 test("auto sync keeps the limit when the server can't answer", async (t) => {
@@ -153,13 +154,13 @@ test("auto sync keeps the limit when the server can't answer", async (t) => {
   await run();
   await expire();
   backend.status = 503;
-  await assert.rejects(run());
-  assert.equal(syncs(), 1);
+  await expect(run()).rejects.toThrow();
+  expect(syncs()).toBe(1);
 
   const requests = backend.requests;
 
   await run();
-  assert.equal(backend.requests, requests, "the limit applies while offline");
+  expect(backend.requests, "the limit applies while offline").toBe(requests);
 });
 
 test("auto sync still syncs against a server without the check", async (t) => {
@@ -167,14 +168,14 @@ test("auto sync still syncs against a server without the check", async (t) => {
 
   backend.revision = null;
   await run();
-  assert.equal(syncs(), 1);
+  expect(syncs()).toBe(1);
 
   await run();
-  assert.equal(syncs(), 1, "the limit still applies");
+  expect(syncs(), "the limit still applies").toBe(1);
 
   await expire();
   await run();
-  assert.equal(syncs(), 2);
+  expect(syncs()).toBe(2);
 });
 
 test("a local folder beside cloud always syncs", async (t) => {
@@ -184,8 +185,8 @@ test("a local folder beside cloud always syncs", async (t) => {
 
   await run();
   await run();
-  assert.equal(syncs(), 2);
-  assert.equal(backend.requests, 0);
+  expect(syncs()).toBe(2);
+  expect(backend.requests).toBe(0);
 });
 
 test("syncing a cloud workspace registers the session-start sync", async (t) => {
@@ -197,10 +198,10 @@ test("syncing a cloud workspace registers the session-start sync", async (t) => 
     await readFile(join(home, ".claude/settings.json"), "utf8"),
   );
 
-  assert.ok(
+  expect(
     settings.hooks.SessionStart.some(
       (entry: { hooks: { command: string }[] }) =>
         entry.hooks[0]!.command.includes("git-workspace/startup.js"),
     ),
-  );
+  ).toBeTruthy();
 });

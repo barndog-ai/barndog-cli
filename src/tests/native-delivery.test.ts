@@ -1,5 +1,4 @@
-import { test } from "node:test";
-import assert from "node:assert/strict";
+import { expect, test } from "vitest";
 import {
   mkdtemp,
   mkdir,
@@ -53,40 +52,33 @@ test("native MCP changes preserve unmanaged entries, credentials, settings and c
     '{\n // User comment\n "theme": "dark",\n "mcpServers": { "mine": { "command": "mine", "env": { "TOKEN": "local-user-secret" } } }\n}\n';
   const managed = entry("claude");
   const installed = patchNative(original, [], [managed]);
-  assert.ok(installed.includes("// User comment"));
-  assert.ok(
-    installed.includes(
-      '"mine": { "command": "mine", "env": { "TOKEN": "local-user-secret" } }',
-    ),
+  expect(installed).toContain("// User comment");
+  expect(installed).toContain(
+    '"mine": { "command": "mine", "env": { "TOKEN": "local-user-secret" } }',
   );
-  assert.deepEqual(
-    parseJson(installed).mcpServers.mine,
+  expect(parseJson(installed).mcpServers.mine).toStrictEqual(
     parseJson(original).mcpServers.mine,
   );
-  assert.equal(patchNative(installed, [managed], [managed]), installed);
+  expect(patchNative(installed, [managed], [managed])).toBe(installed);
   const updated = { ...managed, value: { url: "https://example.org/new" } };
   const changed = patchNative(installed, [managed], [updated]);
-  assert.deepEqual(
-    parseJson(changed).mcpServers.mine,
+  expect(parseJson(changed).mcpServers.mine).toStrictEqual(
     parseJson(original).mcpServers.mine,
   );
   const removed = patchNative(changed, [updated], []);
-  assert.deepEqual(parseJson(removed), parseJson(original));
-  assert.throws(() => patchNative(installed, [], [managed]), /unmanaged MCP/);
-  assert.throws(
-    () =>
-      patchNative(
-        installed.replace(
-          "https://example.org/mcp",
-          "https://manual.example.org",
-        ),
-        [managed],
-        [updated],
+  expect(parseJson(removed)).toStrictEqual(parseJson(original));
+  expect(() => patchNative(installed, [], [managed])).toThrow(/unmanaged MCP/);
+  expect(() =>
+    patchNative(
+      installed.replace(
+        "https://example.org/mcp",
+        "https://manual.example.org",
       ),
-    /changed externally/,
-  );
-  assert.throws(
-    () => patchNative(original, [managed], []),
+      [managed],
+      [updated],
+    ),
+  ).toThrow(/changed externally/);
+  expect(() => patchNative(original, [managed], [])).toThrow(
     /changed externally/,
   );
 });
@@ -100,14 +92,13 @@ test("TOML edits preserve unrelated sections, header references, comments and mu
     env_vars: ["DOCS_TOKEN"],
   });
   const installed = patchNative(original, [], [managed]);
-  assert.ok(installed.startsWith(original.trimEnd()));
-  assert.deepEqual(
+  expect(installed.startsWith(original.trimEnd())).toBeTruthy();
+  expect(
     JSON.parse(JSON.stringify(parseToml(installed).mcp_servers)),
-    {
-      mine: { command: "mine", env: { TOKEN: "local-user-secret" } },
-      docs: managed.value,
-    },
-  );
+  ).toStrictEqual({
+    mine: { command: "mine", env: { TOKEN: "local-user-secret" } },
+    docs: managed.value,
+  });
   const updated = {
     ...managed,
     value: {
@@ -116,28 +107,24 @@ test("TOML edits preserve unrelated sections, header references, comments and mu
     },
   };
   const changed = patchNative(installed, [managed], [updated]);
-  assert.ok(changed.includes('TOKEN = "local-user-secret"'));
-  assert.ok(changed.includes("# Keep this token local"));
-  assert.deepEqual(
-    parseToml(patchNative(changed, [updated], [])),
+  expect(changed).toContain('TOKEN = "local-user-secret"');
+  expect(changed).toContain("# Keep this token local");
+  expect(parseToml(patchNative(changed, [updated], []))).toStrictEqual(
     parseToml(original),
   );
-  assert.throws(() => patchNative(installed, [], [managed]), /unmanaged MCP/);
-  assert.throws(
-    () =>
-      patchNative(
-        installed.replace('"a script.js"', '"edited.js"'),
-        [managed],
-        [],
-      ),
-    /changed externally/,
-  );
-  assert.deepEqual(
+  expect(() => patchNative(installed, [], [managed])).toThrow(/unmanaged MCP/);
+  expect(() =>
+    patchNative(
+      installed.replace('"a script.js"', '"edited.js"'),
+      [managed],
+      [],
+    ),
+  ).toThrow(/changed externally/);
+  expect(
     JSON.parse(
       JSON.stringify(parseToml(patchNative(null, [], [managed])).mcp_servers),
     ),
-    { docs: managed.value },
-  );
+  ).toStrictEqual({ docs: managed.value });
 });
 
 test("Hook array reconciliation preserves unmanaged registrations and detects edits", () => {
@@ -153,27 +140,23 @@ test("Hook array reconciliation preserves unmanaged registrations and detects ed
     command: "second-owned-hook",
   });
   const installed = patchNative(original, [], [first, second]);
-  assert.deepEqual(parseJson(installed).hooks.sessionStart[0], {
+  expect(parseJson(installed).hooks.sessionStart[0]).toStrictEqual({
     command: "my-own-hook",
   });
-  assert.equal(
-    patchNative(installed, [first, second], [first, second]),
+  expect(patchNative(installed, [first, second], [first, second])).toBe(
     installed,
   );
-  assert.deepEqual(
-    parseJson(patchNative(installed, [first, second], [])),
+  expect(parseJson(patchNative(installed, [first, second], []))).toStrictEqual(
     parseJson(original),
   );
-  assert.throws(
-    () =>
-      patchNative(
-        installed.replace("barndog-owned-hook", "manual-edit"),
-        [first, second],
-        [],
-      ),
-    /changed externally/,
-  );
-  assert.throws(() => patchNative(installed, [], [first]), /unmanaged Hook/);
+  expect(() =>
+    patchNative(
+      installed.replace("barndog-owned-hook", "manual-edit"),
+      [first, second],
+      [],
+    ),
+  ).toThrow(/changed externally/);
+  expect(() => patchNative(installed, [], [first])).toThrow(/unmanaged Hook/);
 });
 
 test("MCP adapters retain secret references and support Codex environment aliases", () => {
@@ -193,10 +176,10 @@ test("MCP adapters retain secret references and support Codex environment aliase
       "/fixture",
     );
     if (harness === "codex") {
-      assert.equal(result.value.command, process.execPath);
-      assert.deepEqual(result.value.env_vars, ["COMPANY_DOCS_TOKEN"]);
+      expect(result.value.command).toBe(process.execPath);
+      expect(result.value.env_vars).toStrictEqual(["COMPANY_DOCS_TOKEN"]);
     } else
-      assert.deepEqual(result.value.env, {
+      expect(result.value.env).toStrictEqual({
         API_KEY:
           harness === "cursor"
             ? "${env:COMPANY_DOCS_TOKEN}"
@@ -215,8 +198,8 @@ test("Hook root binding preserves author quoting and paths containing spaces and
     ],
     { encoding: "utf8" },
   );
-  assert.equal(result.status, 0);
-  assert.equal(result.stdout, `${root}/scripts/check.sh`);
+  expect(result.status).toBe(0);
+  expect(result.stdout).toBe(`${root}/scripts/check.sh`);
 });
 
 test("selection migration preserves independent choices and local sources", () => {
@@ -240,18 +223,18 @@ test("selection migration preserves independent choices and local sources", () =
   };
   const state = selectionState(previous),
     migrated = withSelection(previous, state);
-  assert.deepEqual(state.individualAssetIds, [id]);
-  assert.deepEqual(state.disabledAssetIds, [id]);
-  assert.deepEqual(migrated.skills, previous.skills.slice(1));
-  assert.deepEqual(migrated.connection, previous.connection);
+  expect(state.individualAssetIds).toStrictEqual([id]);
+  expect(state.disabledAssetIds).toStrictEqual([id]);
+  expect(migrated.skills).toStrictEqual(previous.skills.slice(1));
+  expect(migrated.connection).toStrictEqual(previous.connection);
 });
 
 test("interrupted native writes roll forward and refuse to overwrite later user changes", async (t) => {
   const home = await mkdtemp(join(tmpdir(), "barndog-transaction-"));
-  t.after(() => rm(home, { recursive: true, force: true }));
+  t.onTestFinished(() => rm(home, { recursive: true, force: true }));
   const a = nativeFile("claude", "mcp", home),
     b = nativeFile("cursor", "mcp", home);
-  await assert.rejects(
+  await expect(
     locked(home, () =>
       transact(
         home,
@@ -265,26 +248,24 @@ test("interrupted native writes roll forward and refuse to overwrite later user 
         },
       ),
     ),
-    /interrupted/,
-  );
-  assert.notEqual(await fileText(a), null);
-  assert.equal(await fileText(b), null);
+  ).rejects.toThrow(/interrupted/);
+  expect(await fileText(a)).not.toBe(null);
+  expect(await fileText(b)).toBe(null);
   await writeFile(a, '{"mcpServers":{},"userSetting":true}');
-  await assert.rejects(
-    locked(home, async () => undefined),
+  await expect(locked(home, async () => undefined)).rejects.toThrow(
     /changed.*recovery/,
   );
-  assert.equal(await fileText(a), '{"mcpServers":{},"userSetting":true}');
-  assert.equal(await fileText(b), null);
+  expect(await fileText(a)).toBe('{"mcpServers":{},"userSetting":true}');
+  expect(await fileText(b)).toBe(null);
   await writeFile(a, '{"mcpServers":{}}');
   await locked(home, async () => undefined);
-  assert.equal(await fileText(b), '{"mcpServers":{}}');
-  assert.equal(await fileText(join(home, ".barndog/pending-sync.json")), null);
+  expect(await fileText(b)).toBe('{"mcpServers":{}}');
+  expect(await fileText(join(home, ".barndog/pending-sync.json"))).toBe(null);
 });
 
 test("unified delivery refuses unmanaged links and only unlinks managed Skills", async (t) => {
   const home = await mkdtemp(join(tmpdir(), "barndog-unified-"));
-  t.after(() => rm(home, { recursive: true, force: true }));
+  t.onTestFinished(() => rm(home, { recursive: true, force: true }));
   const source = join(home, "source/example");
   await mkdir(source, { recursive: true });
   await writeFile(
@@ -297,15 +278,13 @@ test("unified delivery refuses unmanaged links and only unlinks managed Skills",
     skills: [{ id, source, enabled: true }],
   };
   await synchronize(undefined, home, settings);
-  assert.equal(
-    await readlink(join(home, ".claude/skills/example")),
+  expect(await readlink(join(home, ".claude/skills/example"))).toBe(
     await realpath(source),
   );
   await synchronize(undefined, home, { ...settings, skills: [] });
-  assert.ok(await readFile(join(source, "SKILL.md"), "utf8"));
+  expect(await readFile(join(source, "SKILL.md"), "utf8")).toBeTruthy();
   await symlink(source, join(home, ".claude/skills/example"));
-  await assert.rejects(
-    synchronize(undefined, home, settings),
+  await expect(synchronize(undefined, home, settings)).rejects.toThrow(
     /unmanaged Skill/,
   );
 });
@@ -392,17 +371,17 @@ test("command parsing delegates scope, native and mirror operations", async () =
     ],
     { from: "user" },
   );
-  assert.equal((calls[3] as [string])[0], "github-import");
-  assert.equal((calls[4] as [string])[0], "github-create-repository");
-  assert.deepEqual(calls[0], [
+  expect((calls[3] as [string])[0]).toBe("github-import");
+  expect((calls[4] as [string])[0]).toBe("github-create-repository");
+  expect(calls[0]).toStrictEqual([
     "switch",
     { origin: "team/platform", mode: "all", overrides: "preserve" },
   ]);
-  assert.deepEqual(calls[1], [
+  expect(calls[1]).toStrictEqual([
     "install",
     { kind: "mcp", name: "docs", origin: "team/platform" },
   ]);
-  assert.equal((calls[2] as [string])[0], "github-mirror-resolve");
+  expect((calls[2] as [string])[0]).toBe("github-mirror-resolve");
 });
 
 test("owned Hook removal retains adjacent unmanaged comments and trailing-comma JSONC", () => {
@@ -412,12 +391,13 @@ test("owned Hook removal retains adjacent unmanaged comments and trailing-comma 
   const original =
     '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"unmanaged"}]}, /* keep this comment */ {"hooks":[{"type":"command","command":"owned"}]},]}}';
   const removed = patchNative(original, [managed], []);
-  assert.ok(removed.includes("/* keep this comment */"));
-  assert.equal(
-    parseJson(removed).hooks.SessionStart[0].hooks[0].command,
+  expect(removed).toContain("/* keep this comment */");
+  expect(parseJson(removed).hooks.SessionStart[0].hooks[0].command).toBe(
     "unmanaged",
   );
   const only =
     '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"owned"}]},]}}';
-  assert.deepEqual(parseJson(patchNative(only, [managed], [])), { hooks: {} });
+  expect(parseJson(patchNative(only, [managed], []))).toStrictEqual({
+    hooks: {},
+  });
 });

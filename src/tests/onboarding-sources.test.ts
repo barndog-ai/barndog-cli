@@ -1,5 +1,4 @@
-import { test } from "node:test";
-import assert from "node:assert/strict";
+import { expect, test } from "vitest";
 import { randomUUID } from "node:crypto";
 import {
   onboardingSources,
@@ -80,25 +79,22 @@ function fixture(): EnvironmentChoices {
 test("setup defaults organization and sole membership team, regardless of other visible teams and repositories", () => {
   const choices = fixture();
   const sources = onboardingSources(choices);
-  assert.deepEqual(
-    sources.map((s) => s.scope.type),
-    ["org", "team", "dev"],
-  );
-  assert.deepEqual(
-    sources.map((s) => s.checked),
-    [true, true, false],
-  );
+  expect(sources.map((s) => s.scope.type)).toStrictEqual([
+    "org",
+    "team",
+    "dev",
+  ]);
+  expect(sources.map((s) => s.checked)).toStrictEqual([true, true, false]);
   choices.memberTeamIds = choices.scopes
     .filter((s) => s.type === "team")
     .map((s) => s.id);
-  assert.deepEqual(
+  expect(
     onboardingSources(choices)
       .filter((s) => s.scope.type === "team")
       .map((s) => s.checked),
-    [false, false],
-  );
+  ).toStrictEqual([false, false]);
   choices.firstSetup = false;
-  assert.ok(onboardingSources(choices).every((s) => !s.checked));
+  expect(onboardingSources(choices).every((s) => !s.checked)).toBeTruthy();
 });
 
 test("setup replaces the environment with exactly the chosen sources", () => {
@@ -117,7 +113,9 @@ test("setup replaces the environment with exactly the chosen sources", () => {
   };
   const sources = onboardingSources(choices);
   // A subscribed repository is offered so leaving it unchecked removes it.
-  assert.ok(sources.some((s) => s.scope.type === "repo" && s.checked));
+  expect(
+    sources.some((s) => s.scope.type === "repo" && s.checked),
+  ).toBeTruthy();
   const selected = selectOnboardingSources([
     {
       source: sources[0]!,
@@ -125,19 +123,17 @@ test("setup replaces the environment with exactly the chosen sources", () => {
       assetIds: [choices.catalog.assets[1]!.id],
     },
   ]);
-  assert.deepEqual(selected, {
+  expect(selected).toStrictEqual({
     subscriptions: [],
     individualAssetIds: [choices.catalog.assets[1]!.id],
     excludedAssetIds: [],
     disabledAssetIds: [],
   });
-  assert.throws(
-    () =>
-      selectOnboardingSources([
-        { source: sources[0]!, mode: "custom", assetIds: [outside] },
-      ]),
-    /outside this source/,
-  );
+  expect(() =>
+    selectOnboardingSources([
+      { source: sources[0]!, mode: "custom", assetIds: [outside] },
+    ]),
+  ).toThrow(/outside this source/);
 });
 
 test("own assets offer all, recommended, and custom without including other developers", () => {
@@ -150,17 +146,14 @@ test("own assets offer all, recommended, and custom without including other deve
   });
   const sources = onboardingSources(choices);
   const personal = sources.find((s) => s.scope.type === "dev")!;
-  assert.deepEqual(
-    personal.assets.map((a) => a.id),
-    [own.id],
-  );
-  assert.deepEqual(personal.recommendedIds, [own.id]);
+  expect(personal.assets.map((a) => a.id)).toStrictEqual([own.id]);
+  expect(personal.recommendedIds).toStrictEqual([own.id]);
   for (const mode of ["all", "recommended", "custom"] as const) {
     const state = selectOnboardingSources([
       { source: personal, mode, assetIds: [own.id] },
     ]);
-    assert.deepEqual(state.individualAssetIds, [own.id]);
-    assert.deepEqual(state.subscriptions, []);
+    expect(state.individualAssetIds).toStrictEqual([own.id]);
+    expect(state.subscriptions).toStrictEqual([]);
   }
 });
 
@@ -177,10 +170,12 @@ test("legacy optional selections reopen as custom and a re-chosen subscription i
     ],
   };
   const sources = onboardingSources(choices);
-  assert.equal(sources[0]!.mode, "custom");
-  assert.deepEqual(sources[0]!.selectedIds, [choices.catalog.assets[1]!.id]);
+  expect(sources[0]!.mode).toBe("custom");
+  expect(sources[0]!.selectedIds).toStrictEqual([
+    choices.catalog.assets[1]!.id,
+  ]);
   const next = selectOnboardingSources([{ source: sources[0]!, mode: "all" }]);
-  assert.equal(next.subscriptions[0]!.enabled, true);
+  expect(next.subscriptions[0]!.enabled).toBe(true);
 });
 
 test("reopening a subscribed source keeps its subscription and drops earlier individual picks", () => {
@@ -194,10 +189,10 @@ test("reopening a subscribed source keeps its subscription and drops earlier ind
   };
   choices.firstSetup = false;
   const sources = onboardingSources(choices);
-  assert.equal(sources[0]!.mode, "recommended");
+  expect(sources[0]!.mode).toBe("recommended");
   const next = selectOnboardingSources([
     { source: sources[0]!, mode: sources[0]!.mode },
   ]);
-  assert.deepEqual(next.subscriptions, choices.previous.subscriptions);
-  assert.deepEqual(next.individualAssetIds, []);
+  expect(next.subscriptions).toStrictEqual(choices.previous.subscriptions);
+  expect(next.individualAssetIds).toStrictEqual([]);
 });

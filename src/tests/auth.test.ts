@@ -1,5 +1,4 @@
-import { test } from "node:test";
-import assert from "node:assert/strict";
+import { expect, test, type TestContext } from "vitest";
 import { createServer } from "node:http";
 import { mkdtemp, stat, rm, readFile, chmod } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -14,7 +13,7 @@ import { normalizeServer, serverFetch } from "../features/auth/transport.js";
 import { saveSettings } from "../config/settings.js";
 import { createProgram } from "../program.js";
 
-async function fixture(t: { after: (callback: () => Promise<void>) => void }) {
+async function fixture(t: TestContext) {
   const home = await mkdtemp(join(tmpdir(), "barndog-login-"));
   const context = {
     organization: { id: randomUUID(), slug: "acme", name: "Acme" },
@@ -57,7 +56,7 @@ async function fixture(t: { after: (callback: () => Promise<void>) => void }) {
     if (request.url === "/v1/auth/cli/poll") {
       let body = "";
       for await (const chunk of request) body += chunk;
-      assert.equal(JSON.parse(body).pollingToken, "p".repeat(43));
+      expect(JSON.parse(body).pollingToken).toBe("p".repeat(43));
       if (pending) {
         pending = false;
         json({ status: "pending", interval: 0.001 });
@@ -71,7 +70,7 @@ async function fixture(t: { after: (callback: () => Promise<void>) => void }) {
       });
       return;
     }
-    assert.equal(request.headers.authorization, `Bearer ${token}`);
+    expect(request.headers.authorization).toBe(`Bearer ${token}`);
     if (request.url === "/v1/auth/cli/session") {
       revoked = true;
       response.writeHead(204);
@@ -94,7 +93,7 @@ async function fixture(t: { after: (callback: () => Promise<void>) => void }) {
   if (!address || typeof address === "string")
     throw new Error("Missing server");
   const origin = `http://127.0.0.1:${address.port}`;
-  t.after(async () => {
+  t.onTestFinished(async () => {
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
     await rm(home, { recursive: true, force: true });
@@ -122,29 +121,28 @@ test("browser verification, pending polling, private credential storage, status 
       verification = value;
     },
   });
-  assert.equal(result.context.developer.id, f.context.developer.id);
-  assert.deepEqual(verification, {
+  expect(result.context.developer.id).toBe(f.context.developer.id);
+  expect(verification).toStrictEqual({
     userCode: "TEST-CODE",
     url: "https://example.com/device",
     browserUrl: "https://example.com/device?code=TEST-CODE",
   });
   const path = join(f.home, ".barndog", "credentials.json");
-  assert.equal((await stat(path)).mode & 0o777, 0o600);
-  assert.equal((await stat(join(f.home, ".barndog"))).mode & 0o777, 0o700);
-  assert.equal(
-    (await authStatus(f.home)).context.developer.id,
+  expect((await stat(path)).mode & 0o777).toBe(0o600);
+  expect((await stat(join(f.home, ".barndog"))).mode & 0o777).toBe(0o700);
+  expect((await authStatus(f.home)).context.developer.id).toBe(
     f.context.developer.id,
   );
-  assert.ok(
+  expect(
     f.requests
       .filter((request) => /start|poll/.test(request.path))
       .every((request) => !request.authorization),
-  );
-  assert.equal((await logout(f.home)).revoked, true);
-  assert.equal(f.revoked(), true);
-  assert.equal((await readCredentials(f.home)).servers[f.origin], undefined);
-  assert.ok(!(await readFile(path, "utf8")).includes(f.token));
-  await assert.rejects(authStatus(f.home), /barndog login/);
+  ).toBeTruthy();
+  expect((await logout(f.home)).revoked).toBe(true);
+  expect(f.revoked()).toBe(true);
+  expect((await readCredentials(f.home)).servers[f.origin]).toBe(undefined);
+  expect(await readFile(path, "utf8")).not.toContain(f.token);
+  await expect(authStatus(f.home)).rejects.toThrow(/barndog login/);
 });
 
 test("API selections prevent account switches without changing saved credentials", async (t) => {
@@ -170,43 +168,42 @@ test("API selections prevent account switches without changing saved credentials
     f.home,
   );
   const before = await readCredentials(f.home);
-  await assert.rejects(
+  await expect(
     login({ server: f.origin, home: f.home, verification: async () => {} }),
-    /Remove API selections/,
-  );
-  assert.deepEqual(await readCredentials(f.home), before);
-  assert.equal(f.revoked(), true);
+  ).rejects.toThrow(/Remove API selections/);
+  expect(await readCredentials(f.home)).toStrictEqual(before);
+  expect(f.revoked()).toBe(true);
 });
 
 test("authenticated transport rejects insecure origins, redirects, cross-server requests and missing credentials", async (t) => {
   const f = await fixture(t);
-  assert.throws(() => normalizeServer("http://example.com"), /HTTPS/);
-  assert.throws(() => normalizeServer("https://example.com/path"), /origin/);
+  expect(() => normalizeServer("http://example.com")).toThrow(/HTTPS/);
+  expect(() => normalizeServer("https://example.com/path")).toThrow(/origin/);
   for (const origin of [
     "http://127.0.0.1:3000",
     "http://[::1]:3000",
     "https://example.com",
   ])
-    assert.equal(normalizeServer(origin), origin);
-  await assert.rejects(
+    expect(normalizeServer(origin)).toBe(origin);
+  await expect(
     serverFetch(f.origin, f.home)(`${f.origin}/v1/context`),
-    /barndog login/,
-  );
+  ).rejects.toThrow(/barndog login/);
   await login({ server: f.origin, home: f.home, verification: async () => {} });
-  await assert.rejects(
+  await expect(
     serverFetch(f.origin, f.home)("https://example.com/v1/context"),
-    /another server/,
-  );
+  ).rejects.toThrow(/another server/);
   f.redirect();
-  await assert.rejects(serverFetch(f.origin, f.home)(`${f.origin}/v1/context`));
+  await expect(
+    serverFetch(f.origin, f.home)(`${f.origin}/v1/context`),
+  ).rejects.toThrow();
   await chmod(join(f.home, ".barndog", "credentials.json"), 0o644);
-  await assert.rejects(readCredentials(f.home), /only to its owner/);
+  await expect(readCredentials(f.home)).rejects.toThrow(/only to its owner/);
 });
 
 test("cancelling login never creates a credential", async (t) => {
   const f = await fixture(t);
   const controller = new AbortController();
-  await assert.rejects(
+  await expect(
     login({
       server: f.origin,
       home: f.home,
@@ -215,8 +212,8 @@ test("cancelling login never creates a credential", async (t) => {
         controller.abort();
       },
     }),
-  );
-  assert.deepEqual((await readCredentials(f.home)).servers, {});
+  ).rejects.toThrow();
+  expect((await readCredentials(f.home)).servers).toStrictEqual({});
 });
 
 test("auth command parsing delegates flags and never renders credentials", async () => {
@@ -239,7 +236,7 @@ test("auth command parsing delegates flags and never renders credentials", async
   );
   await program.parseAsync(["logout"], { from: "user" });
   await program.parseAsync(["auth", "status"], { from: "user" });
-  assert.deepEqual(calls, [
+  expect(calls).toStrictEqual([
     { server: "https://example.com", browser: false },
     "logout",
     "status",

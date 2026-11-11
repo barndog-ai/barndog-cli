@@ -11,13 +11,15 @@
   "scripts": {
     "lint": "eslint . --max-warnings=0",
     "lint:fix": "eslint . --fix --max-warnings=0",
-    "format": "npm run lint:fix && prettier --write .",
+    "format": "pnpm lint:fix && prettier --write .",
     "format:check": "prettier --check .",
     "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
-    "build": "npm run clean && tsc && node scripts/finish-build.mjs",
+    "build": "pnpm clean && tsc -p tsconfig.build.json && node scripts/finish-build.mjs",
     "barndog": "node dist/cli.js",
-    "test": "npm run build && node --import ./dist/tests/setup.js --test dist/tests/*.test.js",
-    "prepack": "npm run build"
+    "test": "vitest run",
+    "prepack": "pnpm build",
+    "typecheck": "tsc",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@barndog-ai/api-contract": "^0.1.0",
@@ -46,7 +48,8 @@
     "globals": "^17.13.0",
     "prettier": "^3.9.10",
     "typescript": "^5.9.0",
-    "typescript-eslint": "^8.72.0"
+    "typescript-eslint": "^8.72.0",
+    "vitest": "^5.1.0"
   },
   "license": "MIT",
   "description": "Manage Skills, MCP configurations, Hooks, and shared knowledge across Claude Code, Codex, and Cursor.",
@@ -59,8 +62,7 @@
     "url": "https://github.com/barndog-ai/barndog-cli/issues"
   },
   "files": [
-    "dist",
-    "!dist/tests"
+    "dist"
   ],
   "keywords": [
     "ai",
@@ -71,5 +73,6 @@
     "mcp",
     "hooks",
     "cli"
-  ]
+  ],
+  "packageManager": "pnpm@12.10.1"
 }

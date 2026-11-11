@@ -1,5 +1,4 @@
-import { test } from "node:test";
-import assert from "node:assert/strict";
+import { expect, test } from "vitest";
 import { runSetInstall } from "../ui/scope-install.js";
 import type { EnvironmentOptions } from "../features/environment/operations.js";
 
@@ -24,15 +23,14 @@ function fixture() {
 
 test("scope install requires a mode outside a terminal and explicit modes never prompt", async () => {
   const f = fixture();
-  await assert.rejects(
+  await expect(
     runSetInstall(
       f.context,
       { origin: "repo/dashboard" },
       { interactive: false },
     ),
-    /--mode/,
-  );
-  assert.deepEqual(f.calls, []);
+  ).rejects.toThrow(/--mode/);
+  expect(f.calls).toStrictEqual([]);
   await runSetInstall(
     f.context,
     { origin: "repo/dashboard", mode: "all" },
@@ -43,7 +41,7 @@ test("scope install requires a mode outside a terminal and explicit modes never 
       },
     },
   );
-  assert.deepEqual(f.calls, [
+  expect(f.calls).toStrictEqual([
     {
       action: "sets-install",
       options: { origin: "repo/dashboard", mode: "all" },
@@ -60,23 +58,23 @@ test("scope install prompts for a mode and custom selection applies once", async
       interactive: true,
       mode: async () => "custom",
       assets: async (assets) => {
-        assert.deepEqual(assets, [f.asset]);
+        expect(assets).toStrictEqual([f.asset]);
         return [f.asset.id];
       },
     },
   );
-  assert.deepEqual(
-    f.calls.map((call) => call.action),
-    ["sets-preview", "sets-install-custom"],
-  );
-  assert.deepEqual(f.calls[1]!.options.assetIds, [f.asset.id]);
+  expect(f.calls.map((call) => call.action)).toStrictEqual([
+    "sets-preview",
+    "sets-install-custom",
+  ]);
+  expect(f.calls[1]!.options.assetIds).toStrictEqual([f.asset.id]);
   f.calls.length = 0;
   await runSetInstall(
     f.context,
     { origin: "repo/dashboard" },
     { interactive: true, mode: async () => "recommended" },
   );
-  assert.deepEqual(f.calls, [
+  expect(f.calls).toStrictEqual([
     {
       action: "sets-install",
       options: { origin: "repo/dashboard", mode: "recommended" },
@@ -91,12 +89,9 @@ test("empty or cancelled custom selection never writes", async () => {
     { origin: "repo/dashboard" },
     { interactive: true, mode: async () => "custom", assets: async () => [] },
   );
-  assert.deepEqual(
-    f.calls.map((call) => call.action),
-    ["sets-preview"],
-  );
+  expect(f.calls.map((call) => call.action)).toStrictEqual(["sets-preview"]);
   f.calls.length = 0;
-  await assert.rejects(
+  await expect(
     runSetInstall(
       f.context,
       { origin: "repo/dashboard" },
@@ -108,10 +103,6 @@ test("empty or cancelled custom selection never writes", async () => {
         },
       },
     ),
-    /cancelled/,
-  );
-  assert.deepEqual(
-    f.calls.map((call) => call.action),
-    ["sets-preview"],
-  );
+  ).rejects.toThrow(/cancelled/);
+  expect(f.calls.map((call) => call.action)).toStrictEqual(["sets-preview"]);
 });

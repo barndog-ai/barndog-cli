@@ -1,6 +1,6 @@
-import { test, type TestContext } from "node:test";
-import assert from "node:assert/strict";
+import { assert, expect, test, type TestContext } from "vitest";
 import { spawn } from "node:child_process";
+import { built } from "./built.js";
 import { existsSync } from "node:fs";
 import {
   mkdir,
@@ -12,7 +12,6 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { setTimeout as sleep } from "node:timers/promises";
 
 import { ApiError, mcpDefinitionSchema } from "@barndog-ai/api-contract";
@@ -49,7 +48,7 @@ const plain = (lines: string[]) =>
 
 async function temp(t: TestContext) {
   const root = await realpath(await mkdtemp(join(tmpdir(), "barndog-cli-")));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  t.onTestFinished(() => rm(root, { recursive: true, force: true }));
   return root;
 }
 
@@ -68,7 +67,7 @@ async function localHome(t: TestContext) {
     choose: async () => ["claude"],
   });
   const settings = await readSettings(home);
-  assert.ok(settings?.version === 2 && settings.localWorkspace);
+  assert(settings?.version === 2 && settings.localWorkspace);
   return { root, home, folder: settings.localWorkspace.path };
 }
 
@@ -108,12 +107,10 @@ test("mcp add takes JSON through --config, leaving --json as the output flag", a
     { config: JSON.stringify({ command: "node", args: ["server.js"] }) },
     quiet(home),
   );
-  assert.match(
-    await readFile(join(folder, "org/mcp/docs.yaml"), "utf8"),
+  expect(await readFile(join(folder, "org/mcp/docs.yaml"), "utf8")).toMatch(
     /command: node/,
   );
-  await assert.rejects(
-    addMcp('{"command":"node"}', {}, quiet(home)),
+  await expect(addMcp('{"command":"node"}', {}, quiet(home))).rejects.toThrow(
     /looks like the configuration/,
   );
   const { instance } = program({
@@ -122,36 +119,32 @@ test("mcp add takes JSON through --config, leaving --json as the output flag", a
   const add = instance.commands
     .find((c) => c.name() === "mcp")!
     .commands.find((c) => c.name() === "add")!;
-  assert.ok(add.options.some((o) => o.long === "--config"));
-  assert.ok(!add.options.some((o) => o.long === "--json"));
+  expect(add.options.some((o) => o.long === "--config")).toBeTruthy();
+  expect(add.options.some((o) => o.long === "--json")).toBeFalsy();
 });
 
 test("mcp add marks OAuth servers, by flag or from the pasted JSON", () => {
   const server = { name: "docs", server: { url: "https://docs.test/mcp" } };
-  assert.equal(
+  expect(
     convertServer(server).definition.authentication,
-    "none",
     "nothing says this server signs in",
-  );
+  ).toBe("none");
   const flagged = convertServer(server, undefined, true);
-  assert.equal(flagged.definition.authentication, "native-oauth");
-  assert.match(flagged.notes.join(), /mcp auth docs --origin local/);
-  assert.equal(
+  expect(flagged.definition.authentication).toBe("native-oauth");
+  expect(flagged.notes.join()).toMatch(/mcp auth docs --origin local/);
+  expect(
     convertServer({
       name: "docs",
       server: { url: "https://docs.test/mcp", oauth: { clientId: "x" } },
     }).definition.authentication,
-    "native-oauth",
-  );
-  assert.throws(
-    () =>
-      convertServer(
-        { name: "tool", server: { command: "node" } },
-        undefined,
-        true,
-      ),
-    /only HTTP servers/,
-  );
+  ).toBe("native-oauth");
+  expect(() =>
+    convertServer(
+      { name: "tool", server: { command: "node" } },
+      undefined,
+      true,
+    ),
+  ).toThrow(/only HTTP servers/);
 });
 
 test("--json covers review commands and selection changes", async () => {
@@ -160,7 +153,7 @@ test("--json covers review commands and selection changes", async () => {
   await list.instance.parseAsync(["changes", "list", "--json"], {
     from: "user",
   });
-  assert.deepEqual(JSON.parse(list.output.join("\n")), change);
+  expect(JSON.parse(list.output.join("\n"))).toStrictEqual(change);
 
   const removed = { status: "applied", events: [] };
   const selection = program({ environment: async () => removed });
@@ -168,33 +161,32 @@ test("--json covers review commands and selection changes", async () => {
     ["skills", "remove", "x", "--origin", "org", "--json"],
     { from: "user" },
   );
-  assert.deepEqual(JSON.parse(selection.output.join("\n")), removed);
+  expect(JSON.parse(selection.output.join("\n"))).toStrictEqual(removed);
 });
 
 test("failures render as JSON with the same fix people see", () => {
   const error = new CliError("It broke.", "barndog sync");
-  assert.deepEqual(JSON.parse(renderJsonError(error)), {
+  expect(JSON.parse(renderJsonError(error))).toStrictEqual({
     error: { message: "It broke.", fix: "barndog sync" },
   });
-  assert.deepEqual(
+  expect(
     JSON.parse(
       renderJsonError(new ApiError(403, "X", "PUBLICATION_FORBIDDEN")),
     ),
-    {
-      error: {
-        message:
-          "You can't publish here directly. Propose it for review instead.",
-        fix: "barndog push",
-        status: 403,
-      },
+  ).toStrictEqual({
+    error: {
+      message:
+        "You can't publish here directly. Propose it for review instead.",
+      fix: "barndog push",
+      status: 403,
     },
-  );
+  });
 });
 
 test("common server refusals carry a Fix line", () => {
   const text = renderError(new ApiError(403, "X", "CHANGE_AUTHOR_REQUIRED"));
-  assert.match(text, /Only the author/);
-  assert.match(text, /Fix:.*barndog push --new/);
+  expect(text).toMatch(/Only the author/);
+  expect(text).toMatch(/Fix:.*barndog push --new/);
 });
 
 test("a change ID from the other list points there", async () => {
@@ -203,8 +195,9 @@ test("a change ID from the other list points there", async () => {
       throw new ApiError(404, "X", "CHANGE_NOT_FOUND");
     },
   });
-  await assert.rejects(
+  await expect(
     instance.parseAsync(["changes", "show", "abc"], { from: "user" }),
+  ).rejects.toSatisfy(
     (error: CliError) =>
       /No Skill/.test(error.message) &&
       error.hint === "barndog hooks changes show abc",
@@ -221,7 +214,7 @@ test("skills update installs what it changed", async () => {
     },
   });
   await instance.parseAsync(["skills", "update"], { from: "user" });
-  assert.equal(synced, 0, "nothing changed, so nothing to install");
+  expect(synced, "nothing changed, so nothing to install").toBe(0);
   const changed = program({
     capability: async () => [
       { name: "a", changes: [{ kind: "modified", path: "x", patch: "" }] },
@@ -232,26 +225,25 @@ test("skills update installs what it changed", async () => {
     },
   });
   await changed.instance.parseAsync(["skills", "update"], { from: "user" });
-  assert.equal(synced, 1);
-  assert.match(plain(changed.output), /Update installed/);
-  assert.equal(output.join("").includes("Update installed"), false);
+  expect(synced).toBe(1);
+  expect(plain(changed.output)).toMatch(/Update installed/);
+  expect(output.join("").includes("Update installed")).toBe(false);
 });
 
 test("status flags a hand-edited install the way sync and doctor do", async (t) => {
   const { root, home, folder } = await localHome(t);
   const installed = await addSkill(root, home);
   const before = (await inventory(home)).items.find((i) => i.name === "review");
-  assert.equal(before?.state, "installed");
+  expect(before?.state).toBe("installed");
   await writeFile(join(installed, "SKILL.md"), "edited");
   const after = (await inventory(home)).items.find((i) => i.name === "review");
-  assert.equal(after?.state, "modified");
-  await assert.rejects(
-    synchronize(undefined, home),
+  expect(after?.state).toBe("modified");
+  await expect(synchronize(undefined, home)).rejects.toSatisfy(
     (error: CliError) =>
       /copy that folder somewhere else/.test(error.message) &&
       !/skills pull/.test(error.message),
   );
-  assert.ok(folder);
+  expect(folder).toBeTruthy();
 });
 
 test("a knowledge file with a bad field is reported, not dropped silently", async (t) => {
@@ -262,15 +254,17 @@ test("a knowledge file with a bad field is reported, not dropped silently", asyn
     "---\ndescription: Guide\naccess: always\n---\nBody\n",
   );
   const [problem] = await knowledgeProblems(home);
-  assert.equal(problem?.path, "org/knowledge/guide.md");
-  assert.match(problem!.reason, /access/);
+  expect(problem?.path).toBe("org/knowledge/guide.md");
+  expect(problem!.reason).toMatch(/access/);
   const events = await synchronize(undefined, home);
-  assert.ok(
+  expect(
     events.some(
       (e) => e.type === "notice" && e.message.includes("guide.md was skipped"),
     ),
-  );
-  assert.ok((await doctor(home)).some((c) => /guide\.md/.test(c.detail)));
+  ).toBeTruthy();
+  expect(
+    (await doctor(home)).some((c) => /guide\.md/.test(c.detail)),
+  ).toBeTruthy();
 });
 
 test("knowledge list reflects whether session-start listing is on", async (t) => {
@@ -280,7 +274,7 @@ test("knowledge list reflects whether session-start listing is on", async (t) =>
     join(folder, "org/knowledge/guide.md"),
     "---\ndescription: Guide\naccessMode: always\n---\nBody\n",
   );
-  assert.equal((await knowledgeList(home))[0]?.listedAtStart, true);
+  expect((await knowledgeList(home))[0]?.listedAtStart).toBe(true);
   const path = join(home, ".barndog/config.yaml");
   await writeFile(path, `${await readFile(path, "utf8")}\nknowledge: false\n`);
   const text = await readFile(path, "utf8");
@@ -288,7 +282,7 @@ test("knowledge list reflects whether session-start listing is on", async (t) =>
     path,
     `${text.replace(/^knowledge: true\n/m, "").trimEnd()}\n`,
   );
-  assert.equal((await knowledgeList(home))[0]?.listedAtStart, false);
+  expect((await knowledgeList(home))[0]?.listedAtStart).toBe(false);
   const { instance, output } = program({
     capability: async (action) =>
       action === "knowledge-list"
@@ -303,8 +297,8 @@ test("knowledge list reflects whether session-start listing is on", async (t) =>
         : [],
   });
   await instance.parseAsync(["knowledge", "list"], { from: "user" });
-  assert.doesNotMatch(plain(output), /every session/);
-  assert.match(plain(output), /barndog knowledge enable/);
+  expect(plain(output)).not.toMatch(/every session/);
+  expect(plain(output)).toMatch(/barndog knowledge enable/);
 });
 
 test("sync doesn't call skipped or stale results up to date", () => {
@@ -313,13 +307,13 @@ test("sync doesn't call skipped or stale results up to date", () => {
       { type: "invalid", kind: "skill", name: "bad", reason: "Broken" },
     ]),
   );
-  assert.doesNotMatch(skipped, /Everything is up to date/);
-  assert.match(skipped, /Nothing else changed/);
+  expect(skipped).not.toMatch(/Everything is up to date/);
+  expect(skipped).toMatch(/Nothing else changed/);
   const stale = plain(
     renderSyncOutput([{ type: "notice", message: "Can't reach the repo." }]),
   );
-  assert.doesNotMatch(stale, /Everything is up to date/);
-  assert.match(plain(renderSyncOutput([])), /Everything is up to date/);
+  expect(stale).not.toMatch(/Everything is up to date/);
+  expect(plain(renderSyncOutput([]))).toMatch(/Everything is up to date/);
 });
 
 test("sync keeps BarnDog's own entries out of the summary", () => {
@@ -347,17 +341,17 @@ test("sync keeps BarnDog's own entries out of the summary", () => {
     },
   ];
   const quiet = plain(renderSyncOutput(events));
-  assert.match(quiet, /Sync complete · 1 unchanged/);
-  assert.doesNotMatch(quiet, /knowledge index|workspace sync/);
+  expect(quiet).toMatch(/Sync complete · 1 unchanged/);
+  expect(quiet).not.toMatch(/knowledge index|workspace sync/);
   const verbose = plain(renderSyncOutput(events, { verbose: true }));
-  assert.match(verbose, /Sync complete · 1 unchanged/);
-  assert.match(verbose, /knowledge index/);
-  assert.match(verbose, /workspace sync/);
+  expect(verbose).toMatch(/Sync complete · 1 unchanged/);
+  expect(verbose).toMatch(/knowledge index/);
+  expect(verbose).toMatch(/workspace sync/);
   const installed = plain(
     renderSyncOutput([{ ...events[1]!, action: "installed" as const }]),
   );
-  assert.doesNotMatch(installed, /workspace sync|1 installed/);
-  assert.match(installed, /Restart your coding tools/);
+  expect(installed).not.toMatch(/workspace sync|1 installed/);
+  expect(installed).toMatch(/Restart your coding tools/);
 });
 
 test("review output uses names and hides noise about new files", () => {
@@ -365,9 +359,9 @@ test("review output uses names and hides noise about new files", () => {
     renderCollaboration("diff", [
       { kind: "added", path: "a", patch: "", oldExecutable, newExecutable },
     ]).join("\n");
-  assert.doesNotMatch(diff(null, false), /executable/);
-  assert.match(diff(null, true), /executable/);
-  assert.match(diff(false, true), /executable: false → true/);
+  expect(diff(null, false)).not.toMatch(/executable/);
+  expect(diff(null, true)).toMatch(/executable/);
+  expect(diff(false, true)).toMatch(/executable: false → true/);
   const [row] = renderCollaboration("versions", [
     {
       number: 2,
@@ -377,8 +371,8 @@ test("review output uses names and hides noise about new files", () => {
       publisherName: "Alice Doe",
     },
   ]);
-  assert.match(row!, /published by Alice Doe/);
-  assert.doesNotMatch(row!, /uuid-1/);
+  expect(row!).toMatch(/published by Alice Doe/);
+  expect(row!).not.toMatch(/uuid-1/);
 });
 
 test("MCP details read as fields and keep variable names exact", () => {
@@ -397,22 +391,18 @@ test("MCP details read as fields and keep variable names exact", () => {
       version: { number: 3, definition },
     }),
   );
-  assert.match(text, /v3/);
-  assert.match(text, /node server\.js/);
-  assert.match(text, /E2E_MCP_TOKEN from \$E2E_MCP_TOKEN/);
-  assert.doesNotMatch(text, /\[object|E2e mcp/);
-  assert.match(plain(renderValue({ E2E_MCP_TOKEN: "x" })), /E2E_MCP_TOKEN/);
+  expect(text).toMatch(/v3/);
+  expect(text).toMatch(/node server\.js/);
+  expect(text).toMatch(/E2E_MCP_TOKEN from \$E2E_MCP_TOKEN/);
+  expect(text).not.toMatch(/\[object|E2e mcp/);
+  expect(plain(renderValue({ E2E_MCP_TOKEN: "x" }))).toMatch(/E2E_MCP_TOKEN/);
 });
 
 test("a text file's closing newline isn't part of the selected lines", () => {
-  assert.equal(selectedText("one\ntwo\n", 2), "one\ntwo");
-  assert.equal(selectedText("one\ntwo", 2), "one\ntwo");
-  assert.equal(
-    selectedText("one\n", 2),
-    "one\n",
-    "range ends on an empty line",
-  );
-  assert.equal(selectedText("new\n"), "new");
+  expect(selectedText("one\ntwo\n", 2)).toBe("one\ntwo");
+  expect(selectedText("one\ntwo", 2)).toBe("one\ntwo");
+  expect(selectedText("one\n", 2), "range ends on an empty line").toBe("one\n");
+  expect(selectedText("new\n")).toBe("new");
 });
 
 test("assets install accepts override decisions", async () => {
@@ -427,7 +417,7 @@ test("assets install accepts override decisions", async () => {
     ["skills", "install", "x", "--origin", "org", "--overrides", "preserve"],
     { from: "user" },
   );
-  assert.equal(seen.overrides, "preserve");
+  expect(seen.overrides).toBe("preserve");
 });
 
 test("an unavailable command says so before asking for its flags", async (t) => {
@@ -435,10 +425,9 @@ test("an unavailable command says so before asking for its flags", async (t) => 
   const { instance } = program({
     guard: (path, options) => assertCommandAvailable(path, options, home),
   });
-  await assert.rejects(
+  await expect(
     instance.parseAsync(["mcp", "create", "x"], { from: "user" }),
-    /needs a BarnDog Cloud Workspace/,
-  );
+  ).rejects.toThrow(/needs a BarnDog Cloud Workspace/);
 });
 
 test("Codex entries omit an empty header table", () => {
@@ -454,13 +443,13 @@ test("Codex entries omit an empty header table", () => {
     definition,
     "/home",
   );
-  assert.equal("env_http_headers" in entry.value, false);
+  expect("env_http_headers" in entry.value).toBe(false);
 });
 
 test("a missing path is reported as missing, not as something to clone", () => {
-  assert.throws(() => assertSourceExists("/missing/path"), /Can't find/);
-  assert.doesNotThrow(() => assertSourceExists("github.com/acme/skills"));
-  assert.doesNotThrow(() => assertSourceExists("https://x.test/a.git"));
+  expect(() => assertSourceExists("/missing/path")).toThrow(/Can't find/);
+  expect(() => assertSourceExists("github.com/acme/skills")).not.toThrow();
+  expect(() => assertSourceExists("https://x.test/a.git")).not.toThrow();
 });
 
 test("cancelling first-time local setup leaves no folder behind", async (t) => {
@@ -477,15 +466,13 @@ test("cancelling first-time local setup leaves no folder behind", async (t) => {
     confirmApply: async () => false,
     choose: async () => ["claude"],
   });
-  assert.equal(existsSync(join(home, ".barndog/workspace")), false);
-  assert.equal(existsSync(join(home, ".barndog/sync.lock")), false);
+  expect(existsSync(join(home, ".barndog/workspace"))).toBe(false);
+  expect(existsSync(join(home, ".barndog/sync.lock"))).toBe(false);
 });
 
 test("a stopped process releases the environment lock", async (t) => {
   const home = join(await temp(t), "home");
-  const transaction = fileURLToPath(
-    new URL("../features/environment/transaction.js", import.meta.url),
-  );
+  const transaction = built("features/environment/transaction.js");
   const child = spawn(
     process.execPath,
     [
@@ -499,9 +486,9 @@ test("a stopped process releases the environment lock", async (t) => {
   const lock = join(home, ".barndog/sync.lock");
   for (let i = 0; i < 200 && !existsSync(join(lock, "pid")); i++)
     await sleep(25);
-  assert.equal(existsSync(join(lock, "pid")), true);
+  expect(existsSync(join(lock, "pid"))).toBe(true);
   const exited = new Promise((resolve) => child.once("exit", resolve));
   child.kill("SIGTERM");
   await exited;
-  assert.equal(existsSync(lock), false);
+  expect(existsSync(lock)).toBe(false);
 });

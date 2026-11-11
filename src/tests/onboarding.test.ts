@@ -1,5 +1,4 @@
-import { test } from "node:test";
-import assert from "node:assert/strict";
+import { assert, expect, test, type TestContext } from "vitest";
 import {
   chmod,
   mkdir,
@@ -12,6 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
+import { built } from "./built.js";
 import { detectHarnesses } from "../harnesses/detect.js";
 import { initialize } from "../features/onboarding/setup.js";
 import { runSetup } from "../ui/onboarding.js";
@@ -21,11 +21,11 @@ import {
   settingsPath,
 } from "../config/settings.js";
 
-async function setup(t: { after: (fn: () => Promise<void>) => void }) {
+async function setup(t: TestContext) {
   const home = await realpath(
     await mkdtemp(join(tmpdir(), "barndog-onboarding-")),
   );
-  t.after(() => rm(home, { recursive: true, force: true }));
+  t.onTestFinished(() => rm(home, { recursive: true, force: true }));
   return home;
 }
 
@@ -47,13 +47,11 @@ test("detection uses executable PATH entries and macOS app installations, not sk
     platform: "darwin",
     appDirectories: [apps],
   });
-  assert.equal(found.find((item) => item.id === "claude")!.evidence, null);
-  assert.equal(
-    found.find((item) => item.id === "codex")!.evidence,
+  expect(found.find((item) => item.id === "claude")!.evidence).toBe(null);
+  expect(found.find((item) => item.id === "codex")!.evidence).toBe(
     join(bin, "codex"),
   );
-  assert.equal(
-    found.find((item) => item.id === "cursor")!.evidence,
+  expect(found.find((item) => item.id === "cursor")!.evidence).toBe(
     join(apps, "Cursor.app"),
   );
 });
@@ -65,12 +63,12 @@ test("first onboarding requires explicit selection and saves machine settings; r
     home,
     detected,
     choose: async (choices) => {
-      assert.ok(choices.every((choice) => !choice.checked));
-      assert.ok(choices.every((choice) => choice.evidence === null));
+      expect(choices.every((choice) => !choice.checked)).toBeTruthy();
+      expect(choices.every((choice) => choice.evidence === null)).toBeTruthy();
       return ["codex"];
     },
   });
-  assert.deepEqual(await readSettings(home), {
+  expect(await readSettings(home)).toStrictEqual({
     version: 1,
     harnesses: ["codex"],
     skills: [],
@@ -79,18 +77,19 @@ test("first onboarding requires explicit selection and saves machine settings; r
     home,
     detected,
     choose: async (choices) => {
-      assert.equal(
-        choices.find((choice) => choice.value === "codex")!.checked,
+      expect(choices.find((choice) => choice.value === "codex")!.checked).toBe(
         true,
       );
-      assert.equal(
-        choices.find((choice) => choice.value === "claude")!.checked,
+      expect(choices.find((choice) => choice.value === "claude")!.checked).toBe(
         false,
       );
       return ["claude", "codex"];
     },
   });
-  assert.deepEqual((await readSettings(home))!.harnesses, ["claude", "codex"]);
+  expect((await readSettings(home))!.harnesses).toStrictEqual([
+    "claude",
+    "codex",
+  ]);
 });
 
 test("cancelling onboarding preserves previous settings or leaves first-time setup absent", async (t) => {
@@ -99,18 +98,22 @@ test("cancelling onboarding preserves previous settings or leaves first-time set
   const choose = async (): Promise<never> => {
     throw new Error("cancelled");
   };
-  await assert.rejects(initialize({ home, detected, choose }), /cancelled/);
-  assert.equal(await readSettings(home), null);
+  await expect(initialize({ home, detected, choose })).rejects.toThrow(
+    /cancelled/,
+  );
+  expect(await readSettings(home)).toBe(null);
   await saveSettings({ version: 1, harnesses: ["cursor"], skills: [] }, home);
   const original = await readFile(settingsPath(home), "utf8");
-  await assert.rejects(initialize({ home, detected, choose }), /cancelled/);
-  assert.equal(await readFile(settingsPath(home), "utf8"), original);
+  await expect(initialize({ home, detected, choose })).rejects.toThrow(
+    /cancelled/,
+  );
+  expect(await readFile(settingsPath(home), "utf8")).toBe(original);
 });
 
 test("empty selection persists and invalid settings never default to all harnesses", async (t) => {
   const home = await setup(t);
   await saveSettings({ version: 1, harnesses: [], skills: [] }, home);
-  assert.deepEqual(await readSettings(home), {
+  expect(await readSettings(home)).toStrictEqual({
     version: 1,
     harnesses: [],
     skills: [],
@@ -121,23 +124,23 @@ test("empty selection persists and invalid settings never default to all harness
     "skills: []\n",
   ]) {
     await writeFile(settingsPath(home), content);
-    await assert.rejects(readSettings(home), /Invalid user settings/);
+    await expect(readSettings(home)).rejects.toThrow(/Invalid user settings/);
   }
 });
 
 test("CLI help is noninteractive; explicit onboarding refuses piped input without hanging", () => {
-  const executable = new URL("../cli.js", import.meta.url);
-  const help = execFileSync(process.execPath, [executable.pathname, "--help"], {
+  const executable = built("cli.js");
+  const help = execFileSync(process.execPath, [executable, "--help"], {
     encoding: "utf8",
   });
-  assert.match(help, /init/);
+  expect(help).toMatch(/init/);
   for (const args of [["init"]]) {
-    const result = spawnSync(process.execPath, [executable.pathname, ...args], {
+    const result = spawnSync(process.execPath, [executable, ...args], {
       encoding: "utf8",
       timeout: 5000,
     });
-    assert.equal(result.status, 1);
-    assert.match(result.stderr, /interactive terminal/);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toMatch(/interactive terminal/);
   }
 });
 
@@ -157,9 +160,9 @@ test("bare invocation reports existing configuration without prompting or rewrit
       throw new Error("Must not confirm");
     },
   });
-  assert.match(messages.join("\n"), /Configuration already exists/);
-  assert.match(messages.join("\n"), /barndog init/);
-  assert.equal(await readFile(settingsPath(home), "utf8"), original);
+  expect(messages.join("\n")).toMatch(/Configuration already exists/);
+  expect(messages.join("\n")).toMatch(/barndog init/);
+  expect(await readFile(settingsPath(home), "utf8")).toBe(original);
 });
 
 test("declining or cancelling restart leaves the configuration untouched", async (t) => {
@@ -177,17 +180,16 @@ test("declining or cancelling restart leaves the configuration untouched", async
     },
   };
   await runSetup({ ...options, confirmRestart: async () => false });
-  assert.match(messages.join("\n"), /Configuration was not changed/);
-  await assert.rejects(
+  expect(messages.join("\n")).toMatch(/Configuration was not changed/);
+  await expect(
     runSetup({
       ...options,
       confirmRestart: async () => {
         throw new Error("cancelled");
       },
     }),
-    /cancelled/,
-  );
-  assert.equal(await readFile(settingsPath(home), "utf8"), original);
+  ).rejects.toThrow(/cancelled/);
+  expect(await readFile(settingsPath(home), "utf8")).toBe(original);
 });
 
 test("confirmed restart reopens harness selection while preserving saved skills", async (t) => {
@@ -214,25 +216,23 @@ test("confirmed restart reopens harness selection while preserving saved skills"
     },
     detected: [{ id: "codex", name: "Codex", evidence: "/bin/codex" }],
     choose: async (choices) => {
-      assert.equal(confirmed, true);
-      assert.equal(choices[0]!.checked, true);
+      expect(confirmed).toBe(true);
+      expect(choices[0]!.checked).toBe(true);
       return ["claude"];
     },
   });
   const saved = await readSettings(home);
-  assert.equal(saved?.version, 2);
-  assert.deepEqual(saved?.harnesses, ["claude"]);
-  assert.deepEqual(saved?.skills, [{ ...skills[0]!, kind: "local" }]);
-  assert.equal(
-    saved?.version === 2 && saved.localWorkspace?.path,
+  expect(saved?.version).toBe(2);
+  expect(saved?.harnesses).toStrictEqual(["claude"]);
+  expect(saved?.skills).toStrictEqual([{ ...skills[0]!, kind: "local" }]);
+  expect(saved?.version === 2 && saved.localWorkspace?.path).toBe(
     join(home, ".barndog/workspace"),
   );
 });
 
 test("first setup skips restart confirmation and still requires an interactive terminal", async (t) => {
   const home = await setup(t);
-  await assert.rejects(
-    runSetup({ home, interactive: false }),
+  await expect(runSetup({ home, interactive: false })).rejects.toThrow(
     /interactive terminal/,
   );
   await runSetup({
@@ -249,9 +249,9 @@ test("first setup skips restart confirmation and still requires an interactive t
     choose: async () => ["codex"],
   });
   const saved = await readSettings(home);
-  assert.deepEqual(saved?.harnesses, ["codex"]);
-  assert.deepEqual(saved?.skills, []);
-  assert.ok(saved?.version === 2 && saved.localWorkspace);
+  expect(saved?.harnesses).toStrictEqual(["codex"]);
+  expect(saved?.skills).toStrictEqual([]);
+  assert(saved?.version === 2 && saved.localWorkspace);
 });
 
 test("reinitializing harness selection preserves skills in the home configuration", async (t) => {
@@ -264,9 +264,9 @@ test("reinitializing harness selection preserves skills in the home configuratio
     },
   ];
   await saveSettings({ version: 1, harnesses: ["codex"], skills }, home);
-  assert.equal(settingsPath(home), join(home, ".barndog/config.yaml"));
+  expect(settingsPath(home)).toBe(join(home, ".barndog/config.yaml"));
   await initialize({ home, detected: [], choose: async () => ["claude"] });
-  assert.deepEqual(await readSettings(home), {
+  expect(await readSettings(home)).toStrictEqual({
     version: 1,
     harnesses: ["claude"],
     skills,

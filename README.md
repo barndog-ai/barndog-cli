@@ -105,10 +105,10 @@ BarnDog is careful with your existing setup:
 Issues and pull requests are welcome. To work on the CLI:
 
 ```sh
-npm install
-npm run build
+pnpm install
+pnpm build
 npm link        # use your local build as `barndog`
-npm test
+pnpm test
 ```
 
 [AGENTS.md](AGENTS.md) describes how the code is organized and how each part is expected to behave. It's written for coding agents, and it's the best technical reference for people too.

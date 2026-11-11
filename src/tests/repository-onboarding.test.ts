@@ -1,5 +1,4 @@
-import { test } from "node:test";
-import assert from "node:assert/strict";
+import { expect, test } from "vitest";
 import { createServer } from "node:http";
 import { mkdtemp, mkdir, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -38,28 +37,24 @@ const context = {
 };
 
 test("repository remote identities preserve host/path and discard transport/user differences", () => {
-  assert.equal(
-    normalizeRepositoryRemote("git@github.com:Acme/Demo.git"),
+  expect(normalizeRepositoryRemote("git@github.com:Acme/Demo.git")).toBe(
     "github.com/acme/demo",
   );
-  assert.equal(
-    normalizeRepositoryRemote("https://github.com/acme/demo.git"),
+  expect(normalizeRepositoryRemote("https://github.com/acme/demo.git")).toBe(
     "github.com/acme/demo",
   );
-  assert.equal(
+  expect(
     normalizeRepositoryRemote("ssh://git@git.acme.test/Team/Repo.git"),
-    "git.acme.test/Team/Repo",
-  );
-  assert.equal(
+  ).toBe("git.acme.test/Team/Repo");
+  expect(
     normalizeRepositoryRemote("https://secret:password@github.com/acme/repo"),
-    null,
-  );
-  assert.equal(normalizeRepositoryRemote("/local/repo"), null);
+  ).toBe(null);
+  expect(normalizeRepositoryRemote("/local/repo")).toBe(null);
 });
 
 test("connected onboarding loads actual membership without using repository suggestions and preserves state on cancellation", async (t) => {
   const home = await mkdtemp(join(tmpdir(), "barndog-init-context-"));
-  t.after(() => rm(home, { recursive: true, force: true }));
+  t.onTestFinished(() => rm(home, { recursive: true, force: true }));
   const cwd = join(home, "project");
   await mkdir(cwd);
   execFileSync("git", ["init", cwd], { stdio: "ignore" });
@@ -83,7 +78,7 @@ test("connected onboarding loads actual membership without using repository sugg
     canInvite: false,
   };
   const server = createServer((req, res) => {
-    assert.equal(req.headers.authorization, `Bearer ${"a".repeat(43)}`);
+    expect(req.headers.authorization).toBe(`Bearer ${"a".repeat(43)}`);
     const data: Record<string, unknown> = {
       "/v1/context": context,
       [`/v1/teams/${team}/members`]: [
@@ -148,7 +143,9 @@ test("connected onboarding loads actual membership without using repository sugg
     res.end(JSON.stringify(data[req.url!]));
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  t.after(() => new Promise<void>((resolve) => server.close(() => resolve())));
+  t.onTestFinished(
+    () => new Promise<void>((resolve) => server.close(() => resolve())),
+  );
   const address = server.address() as { port: number };
   const url = `http://127.0.0.1:${address.port}`;
   await updateCredentials(home, (credentials) => {
@@ -180,8 +177,8 @@ test("connected onboarding loads actual membership without using repository sugg
     choose: async () => [],
     detected: [],
     chooseEnvironment: async (choices) => {
-      assert.deepEqual(choices.memberTeamIds, [team]);
-      assert.deepEqual(choices.previous.subscriptions, []);
+      expect(choices.memberTeamIds).toStrictEqual([team]);
+      expect(choices.previous.subscriptions).toStrictEqual([]);
       return {
         ...choices.previous,
         subscriptions: [
@@ -196,17 +193,16 @@ test("connected onboarding loads actual membership without using repository sugg
     },
   });
   const saved = await readSettings(home);
-  assert.equal(saved?.version, 2);
-  assert.deepEqual((saved as SettingsV2).environment?.excludedAssetIds, [
+  expect(saved?.version).toBe(2);
+  expect((saved as SettingsV2).environment?.excludedAssetIds).toStrictEqual([
     asset,
   ]);
-  assert.equal((saved as SettingsV2).knowledge, false);
-  assert.equal(
-    (saved as SettingsV2).environment?.subscriptions[0]?.mode,
+  expect((saved as SettingsV2).knowledge).toBe(false);
+  expect((saved as SettingsV2).environment?.subscriptions[0]?.mode).toBe(
     "optional",
   );
   const before = await readFile(settingsPath(home), "utf8");
-  await assert.rejects(
+  await expect(
     initialize({
       home,
       cwd,
@@ -217,18 +213,19 @@ test("connected onboarding loads actual membership without using repository sugg
         throw new Error("cancelled");
       },
     }),
-    /cancelled/,
-  );
-  assert.equal(await readFile(settingsPath(home), "utf8"), before);
+  ).rejects.toThrow(/cancelled/);
+  expect(await readFile(settingsPath(home), "utf8")).toBe(before);
   const unrelated = await localRepository(home);
-  assert.equal(unrelated.root, null);
+  expect(unrelated.root).toBe(null);
   ambiguous = true;
   const ambiguousContext = await repositoryContext(home, cwd);
-  assert.equal(ambiguousContext.ambiguous, true);
-  assert.equal(ambiguousContext.repository, null);
-  assert.deepEqual(ambiguousContext.policyScopes, [{ type: "org", id: org }]);
+  expect(ambiguousContext.ambiguous).toBe(true);
+  expect(ambiguousContext.repository).toBe(null);
+  expect(ambiguousContext.policyScopes).toStrictEqual([
+    { type: "org", id: org },
+  ]);
   // Outside a working copy, status defers to the machine overview.
-  assert.deepEqual(await collaborate("status", {}, home, home), {
+  expect(await collaborate("status", {}, home, home)).toStrictEqual({
     mode: "environment",
   });
 });
@@ -247,12 +244,12 @@ test("inspection command routing is separate from working-copy workflows", async
     ["repo", "status"],
   ])
     await program.parseAsync(args, { from: "user" });
-  assert.deepEqual(calls, ["open", "repo-status"]);
+  expect(calls).toStrictEqual(["open", "repo-status"]);
 });
 
 test("local-only environment inspection and synchronization preview need no server", async (t) => {
   const home = await mkdtemp(join(tmpdir(), "barndog-local-inspect-"));
-  t.after(() => rm(home, { recursive: true, force: true }));
+  t.onTestFinished(() => rm(home, { recursive: true, force: true }));
   await saveSettings(
     { version: 1, harnesses: ["claude", "codex"], skills: [] },
     home,
@@ -262,7 +259,7 @@ test("local-only environment inspection and synchronization preview need no serv
     mode: string;
     events: unknown[];
   };
-  assert.equal(diff.mode, "environment-preview");
-  assert.deepEqual(diff.events, []);
-  assert.equal(await readFile(settingsPath(home), "utf8"), before);
+  expect(diff.mode).toBe("environment-preview");
+  expect(diff.events).toStrictEqual([]);
+  expect(await readFile(settingsPath(home), "utf8")).toBe(before);
 });

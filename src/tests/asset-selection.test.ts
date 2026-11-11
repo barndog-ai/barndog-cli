@@ -1,5 +1,4 @@
-import { test } from "node:test";
-import assert from "node:assert/strict";
+import { expect, test } from "vitest";
 import {
   applySelectionAction,
   resolveAssets,
@@ -86,7 +85,7 @@ function apply(
   snapshot = catalog(),
 ): SelectionState {
   const result = applySelectionAction(snapshot, input, action, resolution);
-  assert.equal(result.status, "applied");
+  expect(result.status).toBe("applied");
   if (result.status !== "applied") throw new Error("Expected action to apply");
   return result.state;
 }
@@ -109,19 +108,18 @@ for (const kind of ["skill", "mcp", "hook"] as const) {
         catalog(kind),
         state({ subscriptions: [subscription(org, mode)] }),
       );
-      assert.deepEqual(
-        result.assets.map((entry) => entry.asset.id),
+      expect(result.assets.map((entry) => entry.asset.id)).toStrictEqual(
         expected,
       );
-      assert.ok(
+      expect(
         result.assets.every(
           (entry) => entry.enabled && entry.asset.kind === kind,
         ),
-      );
+      ).toBeTruthy();
     });
   }
   test(`${kind}: empty state never installs recommendations or owning-team assets`, () => {
-    assert.deepEqual(resolveAssets(catalog(kind), state()), {
+    expect(resolveAssets(catalog(kind), state())).toStrictEqual({
       assets: [],
       diagnostics: [],
     });
@@ -134,29 +132,29 @@ for (const kind of ["skill", "mcp", "hook"] as const) {
         individualAssetIds: [a, d],
       }),
     );
-    assert.deepEqual(
-      result.assets.map((entry) => entry.asset.id),
-      [a, c, d],
-    );
-    assert.equal(result.assets[0]!.contributions.length, 3);
-    assert.equal(result.assets[0]!.asset.name, result.assets[1]!.asset.name);
-    assert.equal(result.assets[2]!.asset.origin.type, "dev");
+    expect(result.assets.map((entry) => entry.asset.id)).toStrictEqual([
+      a,
+      c,
+      d,
+    ]);
+    expect(result.assets[0]!.contributions.length).toBe(3);
+    expect(result.assets[0]!.asset.name).toBe(result.assets[1]!.asset.name);
+    expect(result.assets[2]!.asset.origin.type).toBe("dev");
   });
   test(`${kind}: disabled subscriptions keep installation intent and another source can enable`, () => {
     const input = state({
       subscriptions: [subscription(org, "all", false), subscription(platform)],
     });
-    assert.deepEqual(selected(input, catalog(kind)), [
+    expect(selected(input, catalog(kind))).toStrictEqual([
       [a, true],
       [b, false],
     ]);
-    assert.deepEqual(
+    expect(
       selected({ ...input, individualAssetIds: [b] }, catalog(kind)),
-      [
-        [a, true],
-        [b, true],
-      ],
-    );
+    ).toStrictEqual([
+      [a, true],
+      [b, true],
+    ]);
   });
   test(`${kind}: individual disable wins over all sources and enabling clears only that override`, () => {
     const input = state({
@@ -164,7 +162,7 @@ for (const kind of ["skill", "mcp", "hook"] as const) {
       individualAssetIds: [a],
       disabledAssetIds: [a],
     });
-    assert.deepEqual(selected(input, catalog(kind)), [
+    expect(selected(input, catalog(kind))).toStrictEqual([
       [a, false],
       [b, true],
     ]);
@@ -174,7 +172,7 @@ for (const kind of ["skill", "mcp", "hook"] as const) {
       undefined,
       catalog(kind),
     );
-    assert.deepEqual(selected(enabled, catalog(kind)), [
+    expect(selected(enabled, catalog(kind))).toStrictEqual([
       [a, true],
       [b, true],
     ]);
@@ -191,8 +189,8 @@ for (const kind of ["skill", "mcp", "hook"] as const) {
       undefined,
       catalog(kind),
     );
-    assert.deepEqual(removed.individualAssetIds, []);
-    assert.deepEqual(selected(removed, catalog(kind)), [
+    expect(removed.individualAssetIds).toStrictEqual([]);
+    expect(selected(removed, catalog(kind))).toStrictEqual([
       [b, true],
       [c, true],
     ]);
@@ -202,10 +200,10 @@ for (const kind of ["skill", "mcp", "hook"] as const) {
       undefined,
       catalog(kind),
     );
-    assert.deepEqual(installed.excludedAssetIds, []);
-    assert.deepEqual(installed.disabledAssetIds, []);
-    assert.equal(selected(installed, catalog(kind))[0]![1], true);
-    assert.deepEqual(installed.individualAssetIds, [a]);
+    expect(installed.excludedAssetIds).toStrictEqual([]);
+    expect(installed.disabledAssetIds).toStrictEqual([]);
+    expect(selected(installed, catalog(kind))[0]![1]).toBe(true);
+    expect(installed.individualAssetIds).toStrictEqual([a]);
   });
 }
 
@@ -219,13 +217,12 @@ test("one mixed scope subscription selects skills, MCPs, and hooks", () => {
       },
     ],
   };
-  assert.deepEqual(
+  expect(
     resolveAssets(
       snapshot,
       state({ subscriptions: [subscription(org)] }),
     ).assets.map((entry) => entry.asset.kind),
-    ["skill", "mcp", "hook"],
-  );
+  ).toStrictEqual(["skill", "mcp", "hook"]);
 });
 
 test("scope install adds, changes mode in place, and enables a previously disabled subscription", () => {
@@ -245,11 +242,10 @@ test("scope install adds, changes mode in place, and enables a previously disabl
     enabled: false,
   });
   input = apply(input, { type: "install-scope", scope: org, mode: "all" });
-  assert.equal(input.subscriptions.length, 2);
-  assert.deepEqual(
+  expect(input.subscriptions.length).toBe(2);
+  expect(
     input.subscriptions.find((entry) => entry.scope.type === "org"),
-    subscription(org),
-  );
+  ).toStrictEqual(subscription(org));
 });
 
 test("team switch replaces all team subscriptions while preserving other selections and preferences", () => {
@@ -269,18 +265,17 @@ test("team switch replaces all team subscriptions while preserving other selecti
     scope: platform,
     mode: "optional",
   });
-  assert.deepEqual(
+  expect(
     next.subscriptions.filter((entry) => entry.scope.type === "team"),
-    [subscription(platform, "optional")],
-  );
-  assert.equal(next.subscriptions.length, 3);
-  assert.deepEqual(next.individualAssetIds, [d]);
-  assert.deepEqual(next.excludedAssetIds, [b]);
-  assert.deepEqual(next.disabledAssetIds, [c]);
+  ).toStrictEqual([subscription(platform, "optional")]);
+  expect(next.subscriptions.length).toBe(3);
+  expect(next.individualAssetIds).toStrictEqual([d]);
+  expect(next.excludedAssetIds).toStrictEqual([b]);
+  expect(next.disabledAssetIds).toStrictEqual([c]);
   const withoutTeams = apply(next, { type: "remove-scope", scope: platform });
-  assert.ok(
+  expect(
     withoutTeams.subscriptions.every((entry) => entry.scope.type !== "team"),
-  );
+  ).toBeTruthy();
 });
 
 test("subscription removal drops only its contribution; independent and other scope sources survive", () => {
@@ -288,14 +283,13 @@ test("subscription removal drops only its contribution; independent and other sc
     subscriptions: [subscription(org), subscription(frontend)],
     individualAssetIds: [b],
   });
-  assert.deepEqual(
+  expect(
     selected(apply(input, { type: "remove-scope", scope: org })),
-    [
-      [a, true],
-      [b, true],
-      [c, true],
-    ],
-  );
+  ).toStrictEqual([
+    [a, true],
+    [b, true],
+    [c, true],
+  ]);
 });
 
 test("enabling does not install an asset, clear exclusions, or activate a disabled subscription", () => {
@@ -307,8 +301,8 @@ test("enabling does not install an asset, clear exclusions, or activate a disabl
   let next = input;
   for (const assetId of [a, b, d])
     next = apply(next, { type: "set-asset-enabled", assetId, enabled: true });
-  assert.deepEqual(selected(next), [[a, false]]);
-  assert.deepEqual(next.excludedAssetIds, [b]);
+  expect(selected(next)).toStrictEqual([[a, false]]);
+  expect(next.excludedAssetIds).toStrictEqual([b]);
 });
 
 test("ordinary set re-enabling preserves exclusions and individual disable overrides without a decision", () => {
@@ -322,8 +316,8 @@ test("ordinary set re-enabling preserves exclusions and individual disable overr
     scope: org,
     enabled: true,
   });
-  assert.deepEqual(selected(next), [[a, false]]);
-  assert.deepEqual(next.excludedAssetIds, [b]);
+  expect(selected(next)).toStrictEqual([[a, false]]);
+  expect(next.excludedAssetIds).toStrictEqual([b]);
 });
 
 for (const action of [
@@ -338,22 +332,21 @@ for (const action of [
     });
     const before = structuredClone(input);
     const result = applySelectionAction(catalog(), input, action);
-    assert.equal(result.status, "decision-required");
+    expect(result.status).toBe("decision-required");
     if (result.status !== "decision-required") return;
-    assert.equal(result.conflicts.length, 2);
-    assert.deepEqual(result.conflicts[0], {
+    expect(result.conflicts.length).toBe(2);
+    expect(result.conflicts[0]).toStrictEqual({
       asset: asset(a),
       excluded: true,
       individuallyDisabled: true,
     });
-    assert.deepEqual(
+    expect(
       applySelectionAction(catalog(), input, action, {
         type: "per-asset",
         decisions: [{ assetId: a, choice: "clear" }],
       }),
-      result,
-    );
-    assert.deepEqual(input, before);
+    ).toStrictEqual(result);
+    expect(input).toStrictEqual(before);
   });
 }
 
@@ -368,8 +361,8 @@ test("preserve-all installs and enables scope while retaining all individual cho
     { type: "install-scope", scope: org, mode: "all" },
     { type: "preserve-all" },
   );
-  assert.deepEqual(selected(next), [[b, false]]);
-  assert.equal(next.subscriptions[0]!.enabled, true);
+  expect(selected(next)).toStrictEqual([[b, false]]);
+  expect(next.subscriptions[0]!.enabled).toBe(true);
 });
 
 test("clear-all only clears matching overrides, has global UUID effect, and creates no independent selection", () => {
@@ -383,14 +376,13 @@ test("clear-all only clears matching overrides, has global UUID effect, and crea
     { type: "install-scope", scope: org, mode: "recommended" },
     { type: "clear-all" },
   );
-  assert.deepEqual(next.excludedAssetIds, [b]);
-  assert.deepEqual(next.disabledAssetIds, [c, d]);
-  assert.deepEqual(next.individualAssetIds, []);
-  assert.equal(
-    resolveAssets(catalog(), next).assets[0]!.contributions.length,
+  expect(next.excludedAssetIds).toStrictEqual([b]);
+  expect(next.disabledAssetIds).toStrictEqual([c, d]);
+  expect(next.individualAssetIds).toStrictEqual([]);
+  expect(resolveAssets(catalog(), next).assets[0]!.contributions.length).toBe(
     2,
   );
-  assert.deepEqual(selected(next), [
+  expect(selected(next)).toStrictEqual([
     [a, true],
     [c, false],
   ]);
@@ -413,9 +405,9 @@ test("per-asset decisions mix preserve and clear; unrelated decisions cannot cle
       ],
     },
   );
-  assert.deepEqual(next.excludedAssetIds, [b, d]);
-  assert.deepEqual(next.disabledAssetIds, [b, d]);
-  assert.deepEqual(selected(next), [[a, true]]);
+  expect(next.excludedAssetIds).toStrictEqual([b, d]);
+  expect(next.disabledAssetIds).toStrictEqual([b, d]);
+  expect(selected(next)).toStrictEqual([[a, true]]);
 });
 
 test("team switch conflict resolution applies atomically and preserves individual team assets", () => {
@@ -429,8 +421,8 @@ test("team switch conflict resolution applies atomically and preserves individua
     { type: "switch-team", scope: frontend, mode: "all" },
     { type: "clear-all" },
   );
-  assert.deepEqual(next.subscriptions, [subscription(frontend)]);
-  assert.deepEqual(selected(next), [
+  expect(next.subscriptions).toStrictEqual([subscription(frontend)]);
+  expect(selected(next)).toStrictEqual([
     [a, true],
     [b, true],
     [c, true],
@@ -461,9 +453,9 @@ test("conflicts are recalculated from the current catalogue and require newly af
     type: "per-asset",
     decisions: [{ assetId: a, choice: "clear" }],
   });
-  assert.equal(result.status, "decision-required");
+  expect(result.status).toBe("decision-required");
   if (result.status === "decision-required")
-    assert.equal(result.conflicts.length, 2);
+    expect(result.conflicts.length).toBe(2);
 });
 
 test("sync follows additions, removals, mode changes, renames, origin moves, and published updates", () => {
@@ -493,27 +485,26 @@ test("sync follows additions, removals, mode changes, renames, origin moves, and
     ],
   };
   const result = resolveAssets(changed, input);
-  assert.deepEqual(selected(input, changed), [
+  expect(selected(input, changed)).toStrictEqual([
     [a, false],
     [b, true],
     [d, true],
   ]);
-  assert.ok(
+  expect(
     result.assets.every(
       (entry) =>
         entry.asset.name === "renamed" &&
         entry.asset.publishedVersion === "v2" &&
         entry.asset.origin.id === platform.id,
     ),
-  );
-  assert.deepEqual(
+  ).toBeTruthy();
+  expect(
     selected(input, {
       ...changed,
       distributions: [{ scope: org, assets: [] }],
     }),
-    [[d, true]],
-  );
-  assert.deepEqual(selected(input), [
+  ).toStrictEqual([[d, true]]);
+  expect(selected(input)).toStrictEqual([
     [a, false],
     [d, true],
   ]);
@@ -526,7 +517,7 @@ test("disabled sets follow catalogue changes without activating new matches", ()
     ...snapshot,
     distributions: [{ scope: org, assets: [{ assetId: c, mode: "optional" }] }],
   };
-  assert.deepEqual(selected(input, changed), [[c, false]]);
+  expect(selected(input, changed)).toStrictEqual([[c, false]]);
 });
 
 test("missing references report diagnostics, leave choices intact, and recover on later snapshots", () => {
@@ -544,7 +535,7 @@ test("missing references report diagnostics, leave choices intact, and recover o
     },
     input,
   );
-  assert.deepEqual(result, {
+  expect(result).toStrictEqual({
     assets: [],
     diagnostics: [
       { type: "missing-scope", scope: repo },
@@ -552,8 +543,8 @@ test("missing references report diagnostics, leave choices intact, and recover o
       { type: "missing-asset", assetId: d },
     ],
   });
-  assert.deepEqual(input, before);
-  assert.equal(resolveAssets(catalog(), input).assets.length, 4);
+  expect(input).toStrictEqual(before);
+  expect(resolveAssets(catalog(), input).assets.length).toBe(4);
 });
 
 test("UUID identity is case insensitive across catalogue, state, and explicit actions", () => {
@@ -568,111 +559,90 @@ test("UUID identity is case insensitive across catalogue, state, and explicit ac
     undefined,
     snapshot,
   );
-  assert.equal(
-    resolveAssets(snapshot, next).assets[0]!.asset.id,
+  expect(resolveAssets(snapshot, next).assets[0]!.asset.id).toBe(
     upperId.toLowerCase(),
   );
 });
 
 test("contradictory identities, distribution modes, and duplicate subscriptions fail explicitly", () => {
   const snapshot = catalog();
-  assert.throws(
-    () =>
-      resolveAssets(
-        {
-          ...snapshot,
-          assets: [...snapshot.assets, { ...asset(a), name: "different" }],
-        },
-        state(),
-      ),
-    /Duplicate catalogue asset ID/,
-  );
-  assert.throws(
-    () =>
-      resolveAssets(
-        {
-          ...snapshot,
-          distributions: [
-            ...snapshot.distributions,
-            snapshot.distributions[0]!,
-          ],
-        },
-        state(),
-      ),
-    /Duplicate distribution scope/,
-  );
-  assert.throws(
-    () =>
-      resolveAssets(
-        {
-          ...snapshot,
-          distributions: [
-            {
-              scope: org,
-              assets: [
-                { assetId: a, mode: "recommended" },
-                { assetId: a, mode: "optional" },
-              ],
-            },
-          ],
-        },
-        state(),
-      ),
-    /Conflicting recommendation modes/,
-  );
-  assert.throws(
-    () =>
-      resolveAssets(
-        snapshot,
-        state({
-          subscriptions: [subscription(org), subscription(org, "optional")],
-        }),
-      ),
-    /Only one subscription/,
-  );
-  assert.throws(
-    () =>
-      resolveAssets(snapshot, state({ individualAssetIds: ["not-a-uuid"] })),
-    /Expected UUIDv4/,
-  );
+  expect(() =>
+    resolveAssets(
+      {
+        ...snapshot,
+        assets: [...snapshot.assets, { ...asset(a), name: "different" }],
+      },
+      state(),
+    ),
+  ).toThrow(/Duplicate catalogue asset ID/);
+  expect(() =>
+    resolveAssets(
+      {
+        ...snapshot,
+        distributions: [...snapshot.distributions, snapshot.distributions[0]!],
+      },
+      state(),
+    ),
+  ).toThrow(/Duplicate distribution scope/);
+  expect(() =>
+    resolveAssets(
+      {
+        ...snapshot,
+        distributions: [
+          {
+            scope: org,
+            assets: [
+              { assetId: a, mode: "recommended" },
+              { assetId: a, mode: "optional" },
+            ],
+          },
+        ],
+      },
+      state(),
+    ),
+  ).toThrow(/Conflicting recommendation modes/);
+  expect(() =>
+    resolveAssets(
+      snapshot,
+      state({
+        subscriptions: [subscription(org), subscription(org, "optional")],
+      }),
+    ),
+  ).toThrow(/Only one subscription/);
+  expect(() =>
+    resolveAssets(snapshot, state({ individualAssetIds: ["not-a-uuid"] })),
+  ).toThrow(/Expected UUIDv4/);
 });
 
 test("invalid explicit operations fail without modifying input", () => {
   const input = state({ excludedAssetIds: [a] });
-  assert.throws(
-    () => apply(input, { type: "install-asset", assetId: uuid(999) }),
-    /Unknown asset/,
-  );
-  assert.throws(
-    () =>
-      apply(input, {
-        type: "install-scope",
-        scope: { type: "team", id: uuid(999) },
-        mode: "all",
-      }),
-    /Unknown scope/,
-  );
-  assert.throws(
-    () =>
-      apply(input, { type: "set-scope-enabled", scope: org, enabled: true }),
-    /not selected/,
-  );
-  assert.throws(
-    () =>
-      apply(
-        input,
-        { type: "install-scope", scope: org, mode: "all" },
-        {
-          type: "per-asset",
-          decisions: [
-            { assetId: a, choice: "clear" },
-            { assetId: a, choice: "preserve" },
-          ],
-        },
-      ),
-    /Duplicate override decision/,
-  );
-  assert.deepEqual(input, state({ excludedAssetIds: [a] }));
+  expect(() =>
+    apply(input, { type: "install-asset", assetId: uuid(999) }),
+  ).toThrow(/Unknown asset/);
+  expect(() =>
+    apply(input, {
+      type: "install-scope",
+      scope: { type: "team", id: uuid(999) },
+      mode: "all",
+    }),
+  ).toThrow(/Unknown scope/);
+  expect(() =>
+    apply(input, { type: "set-scope-enabled", scope: org, enabled: true }),
+  ).toThrow(/not selected/);
+  expect(() =>
+    apply(
+      input,
+      { type: "install-scope", scope: org, mode: "all" },
+      {
+        type: "per-asset",
+        decisions: [
+          { assetId: a, choice: "clear" },
+          { assetId: a, choice: "preserve" },
+        ],
+      },
+    ),
+  ).toThrow(/Duplicate override decision/);
+  expect(input).toStrictEqual(state({ excludedAssetIds: [a] }));
 });
 
 function freeze<T>(value: T): T {
@@ -706,12 +676,11 @@ test("recommendation changes move subscriptions in both directions without chang
     ],
   };
   const result = resolveAssets(snapshot, input);
-  assert.deepEqual(
-    result.assets.map((entry) => entry.asset.id),
-    [a, b],
-  );
-  assert.deepEqual(result.assets[0]!.contributions, [{ type: "individual" }]);
-  assert.deepEqual(input.disabledAssetIds, [c]);
+  expect(result.assets.map((entry) => entry.asset.id)).toStrictEqual([a, b]);
+  expect(result.assets[0]!.contributions).toStrictEqual([
+    { type: "individual" },
+  ]);
+  expect(input.disabledAssetIds).toStrictEqual([c]);
 });
 
 test("identical distribution entries install once and missing asset diagnostics deduplicate across sources", () => {
@@ -736,9 +705,11 @@ test("identical distribution entries install once and missing asset diagnostics 
       individualAssetIds: [b],
     }),
   );
-  assert.equal(result.assets.length, 1);
-  assert.equal(result.assets[0]!.contributions.length, 1);
-  assert.deepEqual(result.diagnostics, [{ type: "missing-asset", assetId: b }]);
+  expect(result.assets.length).toBe(1);
+  expect(result.assets[0]!.contributions.length).toBe(1);
+  expect(result.diagnostics).toStrictEqual([
+    { type: "missing-asset", assetId: b },
+  ]);
 });
 
 test("missing metadata cannot silently clear an override during scope installation", () => {
@@ -748,16 +719,14 @@ test("missing metadata cannot silently clear an override during scope installati
       { scope: org, assets: [{ assetId: a, mode: "recommended" }] },
     ],
   };
-  assert.throws(
-    () =>
-      applySelectionAction(
-        snapshot,
-        state({ excludedAssetIds: [a] }),
-        { type: "install-scope", scope: org, mode: "all" },
-        { type: "clear-all" },
-      ),
-    /missing asset/,
-  );
+  expect(() =>
+    applySelectionAction(
+      snapshot,
+      state({ excludedAssetIds: [a] }),
+      { type: "install-scope", scope: org, mode: "all" },
+      { type: "clear-all" },
+    ),
+  ).toThrow(/missing asset/);
 });
 
 for (const action of [
@@ -778,7 +747,7 @@ for (const action of [
       excludedAssetIds: [b],
     });
     const next = apply(input, action, { type: "preserve-all" });
-    assert.deepEqual(apply(next, action, { type: "preserve-all" }), next);
+    expect(apply(next, action, { type: "preserve-all" })).toStrictEqual(next);
   });
 }
 
@@ -787,16 +756,15 @@ test("frozen inputs are supported; results and actions are deterministic and wor
   const first = freeze(state({ subscriptions: [subscription(org)] }));
   const second = freeze(state({ individualAssetIds: [d] }));
   const result = resolveAssets(snapshot, first);
-  assert.deepEqual(resolveAssets(snapshot, first), result);
+  expect(resolveAssets(snapshot, first)).toStrictEqual(result);
   const action = freeze({ type: "remove-asset", assetId: a } as const);
   const next = apply(first, action, undefined, snapshot);
-  assert.deepEqual(apply(next, action, undefined, snapshot), next);
-  assert.deepEqual(
+  expect(apply(next, action, undefined, snapshot)).toStrictEqual(next);
+  expect(
     resolveAssets(snapshot, second).assets.map((entry) => entry.asset.id),
-    [d],
-  );
-  assert.deepEqual(resolveAssets(snapshot, first), result);
-  assert.deepEqual(JSON.parse(JSON.stringify(next)), next);
+  ).toStrictEqual([d]);
+  expect(resolveAssets(snapshot, first)).toStrictEqual(result);
+  expect(JSON.parse(JSON.stringify(next))).toStrictEqual(next);
 });
 
 test("catalogue and selection permutations produce identical results and action states", () => {
@@ -822,17 +790,14 @@ test("catalogue and selection permutations produce identical results and action 
     individualAssetIds: [a, d],
     disabledAssetIds: [a, c],
   };
-  assert.deepEqual(
-    resolveAssets(snapshot, input),
+  expect(resolveAssets(snapshot, input)).toStrictEqual(
     resolveAssets(reversed, shuffled),
   );
   const action = { type: "install-scope", scope: org, mode: "all" } as const;
-  assert.deepEqual(
-    applySelectionAction(snapshot, input, action),
+  expect(applySelectionAction(snapshot, input, action)).toStrictEqual(
     applySelectionAction(reversed, shuffled, action),
   );
-  assert.deepEqual(
-    apply(input, action, { type: "preserve-all" }),
+  expect(apply(input, action, { type: "preserve-all" })).toStrictEqual(
     apply(shuffled, action, { type: "preserve-all" }, reversed),
   );
 });

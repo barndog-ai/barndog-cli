@@ -5,27 +5,29 @@ Working notes for agents and contributors. `README.md` is for people deciding wh
 ## Commands
 
 ```sh
-npm install
-npm run build          # tsc, then scripts/finish-build.mjs
+pnpm install
+pnpm build             # tsc -p tsconfig.build.json, then scripts/finish-build.mjs
 npm link               # puts the development `barndog` on PATH
-npm run barndog -- sync
-npm run format         # ESLint spacing fixes, then Prettier
-npm run lint
-npm run format:check
-npm test               # builds, then runs dist/tests/*.test.js
+pnpm barndog sync
+pnpm format            # ESLint spacing fixes, then Prettier
+pnpm lint
+pnpm format:check
+pnpm typecheck         # tsc over src/, tests included, without emitting
+pnpm test              # Vitest; builds dist/ first for tests that start the CLI
+pnpm test:watch        # Vitest in watch mode
 ```
 
-Before finishing a code change, run `npm run lint`, `npm run format:check`, and `npm test`. Unit tests use temporary home directories and need no server. End-to-end tests that drive the built CLI against a real BarnDog server, PostgreSQL, and Git run in the BarnDog server repository against a published release, so keep the public surface (commands, options, `--json` output, and the files under `~/.barndog/`) stable or change it deliberately.
+This repository uses pnpm (pinned in `packageManager`); don't commit a `package-lock.json`. Before finishing a code change, run `pnpm lint`, `pnpm format:check`, `pnpm typecheck`, and `pnpm test`. Unit tests use temporary home directories and need no server. End-to-end tests that drive the built CLI against a real BarnDog server, PostgreSQL, and Git run in the BarnDog server repository against a published release, so keep the public surface (commands, options, `--json` output, and the files under `~/.barndog/`) stable or change it deliberately.
 
 The command reference at [barndog.dev/docs/cli](https://barndog.dev/docs/cli) is checked against `createProgram()`: every runnable command needs documentation, and every long option must be mentioned in its command's section. Adding, renaming, or removing a command or option needs a matching docs update.
 
-`BARNDOG_DEFAULT_SERVER`, set in `.env` (see `.env.example`) or the shell when running `npm run build`, replaces the server the setup prompt offers (`src/config/build.ts`, default `https://barndog.dev`). `scripts/finish-build.mjs` writes it into `dist/config/build.js` and restores the executable bit on `dist/cli.js`.
+`BARNDOG_DEFAULT_SERVER`, set in `.env` (see `.env.example`) or the shell when running `pnpm build`, replaces the server the setup prompt offers (`src/config/build.ts`, default `https://barndog.dev`). `scripts/finish-build.mjs` writes it into `dist/config/build.js` and restores the executable bit on `dist/cli.js`.
 
 ## Code style
 
 - Use double quotes, semicolons, and two spaces for indentation (no tabs).
 - Prettier handles formatting; ESLint enforces blank lines after import blocks, between class methods, and around standalone declarations. Keep related imports and class fields grouped.
-- Use `npm run lint:fix` for automatic lint fixes. Generated output, dependencies, machine-local state, and canonical skill fixtures are excluded from formatting.
+- Use `pnpm lint:fix` for automatic lint fixes. Generated output, dependencies, machine-local state, and canonical skill fixtures are excluded from formatting.
 
 ## Terminal output
 
@@ -60,7 +62,7 @@ src/
 - Put reusable operations under `src/features/`, grouped by feature. Return structured results; do not import Commander, Inquirer, terminal styling, or UI modules into feature operations.
 - Keep native tool definitions and detection under `src/harnesses/`; reuse the registered adapters for discovery and installation destinations.
 - Keep configuration and installation-state persistence under `src/config/` and terminal prompts and formatting under `src/ui/`.
-- Tests live in `src/tests/`. Test command parsing separately from workflows and filesystem behavior. Do not introduce placeholder modules for features that are not being implemented.
+- Tests live in `src/tests/` and run on Vitest with `expect`; use Vitest's `assert` only where a check must narrow a type. A test that starts a Node process runs the built JavaScript through `built()` in `src/tests/built.ts`. Test command parsing separately from workflows and filesystem behavior. Do not introduce placeholder modules for features that are not being implemented.
 - The [asset selection engine](src/features/asset-selection/README.md) calculates workspace subscriptions, individual selections, exclusions, and activation for Skills, MCP configurations, and Hooks. It is a pure library; commands, settings, and native installation use it.
 - The CLI talks to a BarnDog server through the typed client and shared package helpers in [`@barndog-ai/api-contract`](https://www.npmjs.com/package/@barndog-ai/api-contract). That package is generated from the server; never copy its types into this repository.
 

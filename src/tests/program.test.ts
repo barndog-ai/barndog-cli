@@ -1,8 +1,8 @@
-import { test } from "node:test";
-import assert from "node:assert/strict";
+import { expect, test } from "vitest";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { spawnSync } from "node:child_process";
+import { built } from "./built.js";
 import { stripVTControlCharacters } from "node:util";
 import { CommanderError } from "commander";
 import { createProgram } from "../program.js";
@@ -31,11 +31,10 @@ function setup() {
 
 test("bare command prints grouped help without running setup; init requests confirmed re-entry", async () => {
   const bare = setup();
-  await assert.rejects(
-    bare.program.parseAsync([], { from: "user" }),
+  await expect(bare.program.parseAsync([], { from: "user" })).rejects.toSatisfy(
     (error) => error instanceof CommanderError && error.exitCode === 0,
   );
-  assert.deepEqual(bare.setups, []);
+  expect(bare.setups).toStrictEqual([]);
   const help = bare.output.join("\n");
   for (const heading of [
     "Get started:",
@@ -43,12 +42,14 @@ test("bare command prints grouped help without running setup; init requests conf
     "Working copy & review",
     "Workspace:",
   ])
-    assert.ok(help.includes(heading), heading);
-  assert.ok(help.indexOf("Assets:") < help.indexOf("Working copy & review"));
+    expect(help, heading).toContain(heading);
+  expect(
+    help.indexOf("Assets:") < help.indexOf("Working copy & review"),
+  ).toBeTruthy();
   const init = setup();
   await init.program.parseAsync(["init"], { from: "user" });
-  assert.deepEqual(init.setups, [true]);
-  assert.deepEqual(init.syncs, []);
+  expect(init.setups).toStrictEqual([true]);
+  expect(init.syncs).toStrictEqual([]);
 });
 
 for (const args of [
@@ -60,24 +61,25 @@ for (const args of [
 ]) {
   test(`generated help for ${args.join(" ")} exits successfully without executing commands`, async () => {
     const f = setup();
-    await assert.rejects(
+    await expect(
       f.program.parseAsync(args, { from: "user" }),
+    ).rejects.toSatisfy(
       (error) => error instanceof CommanderError && error.exitCode === 0,
     );
-    assert.match(f.output.join("\n"), /Usage: barndog/);
-    if (args.includes("sync")) assert.match(f.output.join("\n"), /--config/);
-    assert.deepEqual(f.setups, []);
-    assert.deepEqual(f.syncs, []);
-    assert.deepEqual(f.errors, []);
+    expect(f.output.join("\n")).toMatch(/Usage: barndog/);
+    if (args.includes("sync")) expect(f.output.join("\n")).toMatch(/--config/);
+    expect(f.setups).toStrictEqual([]);
+    expect(f.syncs).toStrictEqual([]);
+    expect(f.errors).toStrictEqual([]);
   });
 }
 
 test("sync without flags leaves default home-config resolution to the feature", async () => {
   const f = setup();
   await f.program.parseAsync(["sync"], { from: "user" });
-  assert.deepEqual(f.syncs, [undefined]);
-  assert.deepEqual(f.setups, []);
-  assert.match(f.output.join("\n"), /Sync complete/);
+  expect(f.syncs).toStrictEqual([undefined]);
+  expect(f.setups).toStrictEqual([]);
+  expect(f.output.join("\n")).toMatch(/Sync complete/);
 });
 
 for (const args of [
@@ -87,7 +89,7 @@ for (const args of [
   test(`configuration flag parses correctly: ${args.join(" ")}`, async () => {
     const f = setup();
     await f.program.parseAsync(args, { from: "user" });
-    assert.deepEqual(f.syncs, [resolve("example.yaml")]);
+    expect(f.syncs).toStrictEqual([resolve("example.yaml")]);
   });
 }
 
@@ -101,13 +103,14 @@ for (const args of [
 ]) {
   test(`invalid arguments are rejected before any action: ${args.join(" ")}`, async () => {
     const f = setup();
-    await assert.rejects(
+    await expect(
       f.program.parseAsync(args, { from: "user" }),
+    ).rejects.toSatisfy(
       (error) => error instanceof CommanderError && error.exitCode !== 0,
     );
-    assert.ok(f.errors.length > 0);
-    assert.deepEqual(f.setups, []);
-    assert.deepEqual(f.syncs, []);
+    expect(f.errors).not.toHaveLength(0);
+    expect(f.setups).toStrictEqual([]);
+    expect(f.syncs).toStrictEqual([]);
   });
 }
 
@@ -120,31 +123,30 @@ test("async feature failures propagate without a success message; UI supplies fo
       throw failure;
     },
   });
-  await assert.rejects(
+  await expect(
     program.parseAsync(["sync"], { from: "user" }),
-    (error) => error === failure,
-  );
-  assert.deepEqual(output, []);
-  assert.match(renderError(failure), /barndog init/);
+  ).rejects.toSatisfy((error) => error === failure);
+  expect(output).toStrictEqual([]);
+  expect(renderError(failure)).toMatch(/barndog init/);
 });
 
 test("CLI returns correct exit codes for help and parsing errors", () => {
-  const executable = new URL("../cli.js", import.meta.url).pathname;
+  const executable = built("cli.js");
   const help = spawnSync(process.execPath, [executable, "sync", "--help"], {
     encoding: "utf8",
     timeout: 5000,
   });
-  assert.equal(help.status, 0);
-  assert.match(help.stdout, /--config/);
-  assert.equal(help.stderr, "");
+  expect(help.status).toBe(0);
+  expect(help.stdout).toMatch(/--config/);
+  expect(help.stderr).toBe("");
   const invalid = spawnSync(
     process.execPath,
     [executable, "sync", "--config"],
     { encoding: "utf8", timeout: 5000 },
   );
-  assert.equal(invalid.status, 1);
-  assert.match(invalid.stderr, /argument missing/);
-  assert.doesNotMatch(invalid.stdout, /Sync complete/);
+  expect(invalid.status).toBe(1);
+  expect(invalid.stderr).toMatch(/argument missing/);
+  expect(invalid.stdout).not.toMatch(/Sync complete/);
 });
 
 test("init forwards an explicit server through the confirmed setup workflow", async () => {
@@ -158,7 +160,7 @@ test("init forwards an explicit server through the confirmed setup workflow", as
   await program.parseAsync(["init", "--server", "http://127.0.0.1:3000"], {
     from: "user",
   });
-  assert.deepEqual(calls, [
+  expect(calls).toStrictEqual([
     [true, "http://127.0.0.1:3000", { local: undefined, browser: true }],
   ]);
 });
@@ -188,13 +190,13 @@ test("asset search never synchronizes and install forwards name and origin", asy
     interactive: false,
   });
   await program.parseAsync(["skills", "search"], { from: "user" });
-  assert.equal(searched, true);
-  assert.deepEqual(calls, []);
+  expect(searched).toBe(true);
+  expect(calls).toStrictEqual([]);
   await program.parseAsync(
     ["skills", "install", "example", "--origin", "team:engineering"],
     { from: "user" },
   );
-  assert.deepEqual(calls, [
+  expect(calls).toStrictEqual([
     ["install", { origin: "team:engineering", name: "example", kind: "skill" }],
   ]);
 });
@@ -213,8 +215,7 @@ test("missing asset names fail with a usage hint instead of prompting off a term
     ["hooks", "remove"],
     ["sets", "install"],
   ])
-    await assert.rejects(
-      program.parseAsync(args, { from: "user" }),
+    await expect(program.parseAsync(args, { from: "user" })).rejects.toSatisfy(
       (error) => error instanceof CliError && /barndog/.test(error.hint ?? ""),
     );
 });
@@ -241,7 +242,7 @@ test("login, logout and auth status route to their handlers; whoami matches auth
     ["whoami"],
   ])
     await program.parseAsync(args, { from: "user" });
-  assert.deepEqual(calls, [
+  expect(calls).toStrictEqual([
     ["login", { browser: true, force: true }],
     ["logout"],
     ["status"],
@@ -252,8 +253,8 @@ test("login, logout and auth status route to their handlers; whoami matches auth
 
 test("errors render a message and a fix command", () => {
   const text = renderError(new CliError("Something broke.", "barndog doctor"));
-  assert.match(text, /Something broke\./);
-  assert.match(text, /Fix:.*barndog doctor/);
+  expect(text).toMatch(/Something broke\./);
+  expect(text).toMatch(/Fix:.*barndog doctor/);
 });
 
 test("collaboration commands pass parsed arguments without performing workflow IO", async () => {
@@ -277,7 +278,7 @@ test("collaboration commands pass parsed arguments without performing workflow I
     ],
     { from: "user" },
   );
-  assert.deepEqual(calls.pop(), [
+  expect(calls.pop()).toStrictEqual([
     "pull-skill",
     { name: "review", origin: "team/frontend", directory: "editable" },
   ]);
@@ -285,19 +286,19 @@ test("collaboration commands pass parsed arguments without performing workflow I
     ["push", "--publish", "--new", "--title", "Improve instructions"],
     { from: "user" },
   );
-  assert.deepEqual(calls.pop(), [
+  expect(calls.pop()).toStrictEqual([
     "push",
     { publish: true, new: true, title: "Improve instructions" },
   ]);
   await program.parseAsync(["changes", "approve", "id", "--revision", "3"], {
     from: "user",
   });
-  assert.deepEqual(calls.pop(), ["approve", { id: "id", revision: 3 }]);
+  expect(calls.pop()).toStrictEqual(["approve", { id: "id", revision: 3 }]);
   await program.parseAsync(
     ["skills", "changes", "approve", "id", "--revision", "4"],
     { from: "user" },
   );
-  assert.deepEqual(calls.pop(), ["approve", { id: "id", revision: 4 }]);
+  expect(calls.pop()).toStrictEqual(["approve", { id: "id", revision: 4 }]);
 });
 
 test("review commands require an explicit positive revision before workflow IO", async () => {
@@ -314,12 +315,11 @@ test("review commands require an explicit positive revision before workflow IO",
         calls++;
       },
     });
-    await assert.rejects(
-      program.parseAsync(args, { from: "user" }),
+    await expect(program.parseAsync(args, { from: "user" })).rejects.toThrow(
       CommanderError,
     );
   }
-  assert.equal(calls, 0);
+  expect(calls).toBe(0);
 });
 
 test("init forwards local and browser-free setup options and rejects conflicting modes", async () => {
@@ -334,19 +334,20 @@ test("init forwards local and browser-free setup options and rejects conflicting
   await program.parseAsync(["init", "--local", "--no-browser"], {
     from: "user",
   });
-  assert.deepEqual(calls, [[true, undefined, { local: true, browser: false }]]);
-  await assert.rejects(
+  expect(calls).toStrictEqual([
+    [true, undefined, { local: true, browser: false }],
+  ]);
+  await expect(
     program.parseAsync(["init", "--local", "--server", "https://example.com"], {
       from: "user",
     }),
-    CommanderError,
-  );
-  assert.equal(calls.length, 1);
+  ).rejects.toThrow(CommanderError);
+  expect(calls.length).toBe(1);
 });
 
 test("a failed Hook test sets the exit code with or without --json", async (t) => {
   const previous = process.exitCode;
-  t.after(() => {
+  t.onTestFinished(() => {
     process.exitCode = previous;
   });
   const run = async (...extra: string[]) => {
@@ -380,11 +381,11 @@ test("a failed Hook test sets the exit code with or without --json", async (t) =
     return { code: process.exitCode, text: lines.join("\n") };
   };
   const plain = await run();
-  assert.equal(plain.code, 7);
-  assert.match(plain.text, /exited 7/);
+  expect(plain.code).toBe(7);
+  expect(plain.text).toMatch(/exited 7/);
   const asJson = await run("--json");
-  assert.equal(asJson.code, 7);
-  assert.equal(JSON.parse(asJson.text).exitCode, 7);
+  expect(asJson.code).toBe(7);
+  expect(JSON.parse(asJson.text).exitCode).toBe(7);
 });
 
 test("offline status reports what is installed without claiming it is current", async () => {
@@ -415,9 +416,9 @@ test("offline status reports what is installed without claiming it is current", 
     }),
   }).parseAsync(["status"], { from: "user" });
   const text = lines.join("\n");
-  assert.match(text, /Showing local state only: fetch failed/);
-  assert.match(text, /1 asset installed\. Couldn't check for updates/);
-  assert.doesNotMatch(text, /up to date/);
+  expect(text).toMatch(/Showing local state only: fetch failed/);
+  expect(text).toMatch(/1 asset installed\. Couldn't check for updates/);
+  expect(text).not.toMatch(/up to date/);
 });
 
 test("--version prints the package version and build details", async () => {
@@ -426,17 +427,18 @@ test("--version prints the package version and build details", async () => {
     write: (line) => lines.push(line),
     writeError: () => {},
   });
-  await assert.rejects(
+  await expect(
     program.parseAsync(["--version"], { from: "user" }),
+  ).rejects.toSatisfy(
     (error: { code?: string; exitCode?: number }) =>
       error.code === "commander.version" && error.exitCode === 0,
   );
   const { version } = JSON.parse(
     await readFile(new URL("../../package.json", import.meta.url), "utf8"),
   ) as { version: string };
-  assert.match(lines.join("\n"), new RegExp(`^barndog ${version}\\n`));
-  assert.match(lines.join("\n"), /Node\.js v\d+.* on \w+ \w+/);
-  assert.match(lines.join("\n"), /Default server https?:\/\//);
+  expect(lines.join("\n")).toMatch(new RegExp(`^barndog ${version}\\n`));
+  expect(lines.join("\n")).toMatch(/Node\.js v\d+.* on \w+ \w+/);
+  expect(lines.join("\n")).toMatch(/Default server https?:\/\//);
 });
 
 test("lookup commands infer --origin when one scope has the name", async () => {
@@ -467,7 +469,7 @@ test("lookup commands infer --origin when one scope has the name", async () => {
   await program.parseAsync(["hooks", "compatibility", "guard"], {
     from: "user",
   });
-  assert.deepEqual(calls.pop(), [
+  expect(calls.pop()).toStrictEqual([
     "hooks-compatibility",
     { name: "guard", origin: "local" },
   ]);
@@ -475,33 +477,36 @@ test("lookup commands infer --origin when one scope has the name", async () => {
     ["hooks", "compatibility", "lint", "--origin", "team/web"],
     { from: "user" },
   );
-  assert.deepEqual(calls.pop(), [
+  expect(calls.pop()).toStrictEqual([
     "hooks-compatibility",
     { origin: "team/web", name: "lint" },
   ]);
-  await assert.rejects(
+  await expect(
     program.parseAsync(["hooks", "compatibility", "lint"], { from: "user" }),
+  ).rejects.toSatisfy(
     (error) =>
       error instanceof CliError &&
       /several scopes: org, team\/web/.test(error.message) &&
       error.hint === "barndog hooks compatibility lint --origin org",
   );
-  await assert.rejects(
+  await expect(
     program.parseAsync(["hooks", "compatibility", "missing"], {
       from: "user",
     }),
+  ).rejects.toSatisfy(
     (error) =>
       error instanceof CliError &&
       error.hint === "barndog hooks search missing",
   );
   for (const command of ["compatibility", "adapt"])
-    await assert.rejects(
+    await expect(
       program.parseAsync(["hooks", command], { from: "user" }),
+    ).rejects.toSatisfy(
       (error) =>
         error instanceof CliError &&
         error.hint === `barndog hooks ${command} <name>`,
     );
-  assert.equal(calls.length, 0);
+  expect(calls.length).toBe(0);
 });
 
 test("Hook compatibility shows support and readiness with a short version", async () => {
@@ -539,13 +544,13 @@ test("Hook compatibility shows support and readiness with a short version", asyn
     return stripVTControlCharacters(lines.join("\n"));
   };
   const text = await run(3);
-  assert.match(text, /Version\s+3/);
-  assert.match(text, /Tool\s+Support\s+Ready on this machine/);
-  assert.match(text, /claude\s+supported\s+✔/);
-  assert.match(text, /codex\s+partial\s+✖ Missing runtime: jq/);
-  assert.match(text, /barndog hooks adapt guard --for cursor/);
-  assert.doesNotMatch(text, /Declared|Tested|No implementation/);
+  expect(text).toMatch(/Version\s+3/);
+  expect(text).toMatch(/Tool\s+Support\s+Ready on this machine/);
+  expect(text).toMatch(/claude\s+supported\s+✔/);
+  expect(text).toMatch(/codex\s+partial\s+✖ Missing runtime: jq/);
+  expect(text).toMatch(/barndog hooks adapt guard --for cursor/);
+  expect(text).not.toMatch(/Declared|Tested|No implementation/);
   const local = await run("ac93c0ce639c89b0f4871900b90039c17fd7ffe3");
-  assert.match(local, /Version\s+ac93c0c\n/);
-  assert.doesNotMatch(local, /ac93c0ce/);
+  expect(local).toMatch(/Version\s+ac93c0c\n/);
+  expect(local).not.toMatch(/ac93c0ce/);
 });

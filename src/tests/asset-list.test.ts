@@ -1,5 +1,4 @@
-import { test } from "node:test";
-import assert from "node:assert/strict";
+import { expect, test } from "vitest";
 import { assetPage } from "../ui/asset-list.js";
 import { renderCatalog } from "../ui/assets.js";
 import { table } from "../ui/format.js";
@@ -20,25 +19,25 @@ const rows = Array.from({ length: 65 }, (_, n) => ({
 test("asset browsing bounds output, sorts before paging, and combines origin and keyword filters", () => {
   const options = { page: 2, limit: 20 };
   const result = assetPage([...rows].reverse(), options);
-  assert.equal(result.total, 65);
-  assert.deepEqual(result.rows, rows.slice(20, 40));
+  expect(result.total).toBe(65);
+  expect(result.rows).toStrictEqual(rows.slice(20, 40));
   const filtered = assetPage(rows, {
     ...options,
     page: 1,
     origin: "team/engineering",
     search: "react review",
   });
-  assert.equal(filtered.total, 32);
-  assert.ok(filtered.rows.every((r) => r.origin.type === "team"));
+  expect(filtered.total).toBe(32);
+  expect(filtered.rows.every((r) => r.origin.type === "team")).toBeTruthy();
   const rendered = renderCatalog(
     rows,
     options,
     "barndog skills search",
     new Set(),
   ).join("\n");
-  assert.match(rendered, /Showing 21–40 of 65/);
-  assert.match(rendered, /barndog skills search --page 3/);
-  assert.doesNotMatch(rendered, /skill-40/);
+  expect(rendered).toMatch(/Showing 21–40 of 65/);
+  expect(rendered).toMatch(/barndog skills search --page 3/);
+  expect(rendered).not.toMatch(/skill-40/);
 });
 
 test("a truncated cell keeps its styling", () => {
@@ -46,7 +45,7 @@ test("a truncated cell keeps its styling", () => {
     indent: 0,
     width: 8,
   });
-  assert.equal(line, "\u001b[2mlong de…\u001b[22m");
+  expect(line).toBe("\u001b[2mlong de…\u001b[22m");
   const [boundary] = table(
     [["\u001b[1mabcdefg\u001b[22m\u001b[2mhijkl\u001b[22m"]],
     {
@@ -54,7 +53,7 @@ test("a truncated cell keeps its styling", () => {
       width: 8,
     },
   );
-  assert.equal(boundary, "\u001b[1mabcdefg\u001b[22m\u001b[2m…\u001b[22m");
+  expect(boundary).toBe("\u001b[1mabcdefg\u001b[22m\u001b[2m…\u001b[22m");
 });
 
 test("the version column only appears when something has a version number", () => {
@@ -66,12 +65,12 @@ test("the version column only appears when something has a version number", () =
     version: { ...rows[0]!.version, label: "1e708e1" },
   };
   const local = render([hashed]);
-  assert.doesNotMatch(local, /Ver|1e708e1/);
-  assert.match(local, /General conventions/);
+  expect(local).not.toMatch(/Ver|1e708e1/);
+  expect(local).toMatch(/General conventions/);
   const mixed = render([hashed, rows[1]!]);
-  assert.match(mixed, /Ver/);
-  assert.match(mixed, /v2/);
-  assert.doesNotMatch(mixed, /1e708e1/);
+  expect(mixed).toMatch(/Ver/);
+  expect(mixed).toMatch(/v2/);
+  expect(mixed).not.toMatch(/1e708e1/);
 });
 
 test("list output escapes terminal control sequences and reports empty pages clearly", () => {
@@ -81,16 +80,15 @@ test("list output escapes terminal control sequences and reports empty pages cle
     "barndog skills search",
     new Set(),
   ).join("\n");
-  assert.ok(text.includes("evil\\u001b[31m"));
-  assert.match(
+  expect(text).toContain("evil\\u001b[31m");
+  expect(
     renderCatalog(
       rows,
       { page: 9, limit: 20 },
       "barndog skills search",
       new Set(),
     )[0]!,
-    /Page 9 is empty/,
-  );
+  ).toMatch(/Page 9 is empty/);
 });
 
 test("list shows installed, then disabled, then available, and filters each", async () => {
@@ -150,24 +148,24 @@ test("list shows installed, then disabled, then available, and filters each", as
       JSON.parse((await run([...args, "--json"])).text) as { name: string }[]
     ).map((item) => item.name);
 
-  assert.deepEqual(await names(), ["on", "soon", "off", "alpha", "zeta"]);
-  assert.deepEqual(await names("--installed"), ["on", "soon"]);
-  assert.deepEqual(await names("--disabled"), ["off"]);
-  assert.deepEqual(await names("--available"), ["alpha", "zeta"]);
-  assert.deepEqual(await names("--disabled", "--available"), [
+  expect(await names()).toStrictEqual(["on", "soon", "off", "alpha", "zeta"]);
+  expect(await names("--installed")).toStrictEqual(["on", "soon"]);
+  expect(await names("--disabled")).toStrictEqual(["off"]);
+  expect(await names("--available")).toStrictEqual(["alpha", "zeta"]);
+  expect(await names("--disabled", "--available")).toStrictEqual([
     "off",
     "alpha",
     "zeta",
   ]);
-  assert.equal((await run(["--disabled"])).loaded, 0);
+  expect((await run(["--disabled"])).loaded).toBe(0);
 
   const table = (await run([])).text;
-  assert.match(table, /alpha .*available/);
+  expect(table).toMatch(/alpha .*available/);
   const paged = (await run(["--limit", "2"])).text;
-  assert.match(paged, /Showing 1–2 of 5/);
-  assert.match(paged, /barndog skills list --page 2/);
-  assert.doesNotMatch(paged, /alpha/);
-  assert.match((await run(["--page", "9"])).text, /Page 9 is empty/);
+  expect(paged).toMatch(/Showing 1–2 of 5/);
+  expect(paged).toMatch(/barndog skills list --page 2/);
+  expect(paged).not.toMatch(/alpha/);
+  expect((await run(["--page", "9"])).text).toMatch(/Page 9 is empty/);
 
   const nothing = createProgram({
     write: (line) => emptyLines.push(line),
@@ -183,16 +181,16 @@ test("list shows installed, then disabled, then available, and filters each", as
   });
   const emptyLines: string[] = [];
   await nothing.parseAsync(["mcp", "list"], { from: "user" });
-  assert.match(emptyLines.join("\n"), /No MCP servers yet\./);
-  assert.match(emptyLines.join("\n"), /barndog mcp add/);
+  expect(emptyLines.join("\n")).toMatch(/No MCP servers yet\./);
+  expect(emptyLines.join("\n")).toMatch(/barndog mcp add/);
 
   const failing = async () => {
     throw new Error("server down");
   };
   const partial = await run([], failing);
-  assert.match(partial.text, /Couldn't load available Skills: server down/);
-  assert.match(partial.text, /on .*installed/);
-  await assert.rejects(run(["--available"], failing), /server down/);
+  expect(partial.text).toMatch(/Couldn't load available Skills: server down/);
+  expect(partial.text).toMatch(/on .*installed/);
+  await expect(run(["--available"], failing)).rejects.toThrow(/server down/);
 });
 
 test("search flags parse for every asset type and invalid pages fail before loading", async () => {
@@ -227,17 +225,16 @@ test("search flags parse for every asset type and invalid pages fail before load
       ],
       { from: "user" },
     );
-  assert.equal(loaded, 3);
+  expect(loaded).toBe(3);
   for (const args of [
     ["--limit", "101"],
     ["--page", "0"],
     ["--limit", "1.5"],
   ])
-    await assert.rejects(
+    await expect(
       program.parseAsync(["skills", "search", ...args], { from: "user" }),
-      CommanderError,
-    );
-  assert.equal(loaded, 3);
+    ).rejects.toThrow(CommanderError);
+  expect(loaded).toBe(3);
 });
 
 test("search returns the same matches as JSON and as a table", async () => {
@@ -265,10 +262,9 @@ test("search returns the same matches as JSON and as a table", async () => {
     return lines.join("\n");
   };
   const table = await run();
-  assert.match(table, /review/);
-  assert.doesNotMatch(table, /testing/);
-  assert.deepEqual(
+  expect(table).toMatch(/review/);
+  expect(table).not.toMatch(/testing/);
+  expect(
     (JSON.parse(await run("--json")) as { name: string }[]).map((r) => r.name),
-    ["review"],
-  );
+  ).toStrictEqual(["review"]);
 });

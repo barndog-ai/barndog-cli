@@ -1,5 +1,5 @@
 node_modules/
 dist/
 .barndog/
-package-lock.json
+pnpm-lock.yaml
 fixtures/
