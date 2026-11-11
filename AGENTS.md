@@ -17,7 +17,7 @@ pnpm test              # Vitest; builds dist/ first for tests that start the CLI
 pnpm test:watch        # Vitest in watch mode
 ```
 
-This repository uses pnpm (pinned in `packageManager`); don't commit a `package-lock.json`. Before finishing a code change, run `pnpm lint`, `pnpm format:check`, `pnpm typecheck`, and `pnpm test`. Unit tests use temporary home directories and need no server. End-to-end tests that drive the built CLI against a real BarnDog server, PostgreSQL, and Git run in the BarnDog server repository against a published release, so keep the public surface (commands, options, `--json` output, and the files under `~/.barndog/`) stable or change it deliberately.
+This repository uses pnpm (pinned in `packageManager`); don't commit a `package-lock.json`. pnpm refuses packages published less than a day ago; `pnpm-workspace.yaml` exempts only our own `@barndog-ai/*` scope, so a fresh `@barndog-ai/api-contract` installs at once. Don't widen that exemption for third-party packages. Before finishing a code change, run `pnpm lint`, `pnpm format:check`, `pnpm typecheck`, and `pnpm test`. Unit tests use temporary home directories and need no server. End-to-end tests that drive the built CLI against a real BarnDog server, PostgreSQL, and Git run in the BarnDog server repository against a published release, so keep the public surface (commands, options, `--json` output, and the files under `~/.barndog/`) stable or change it deliberately.
 
 The command reference at [barndog.dev/docs/cli](https://barndog.dev/docs/cli) is checked against `createProgram()`: every runnable command needs documentation, and every long option must be mentioned in its command's section. Adding, renaming, or removing a command or option needs a matching docs update.
 
@@ -33,6 +33,8 @@ git push --follow-tags
 ```
 
 The workflow checks that the tag matches `package.json`, runs the full checks, publishes with npm trusted publishing and provenance, and creates a GitHub release with generated notes. A version with a prerelease suffix (`0.2.0-rc.0`) goes to the `next` dist-tag and is marked as a prerelease; everything else goes to `latest`. While the version is 0.x, a breaking change to the public surface (commands, options, `--json` output, files under `~/.barndog/`) bumps the minor version; anything else bumps the patch version. Docs describe the latest `main` and don't name a version.
+
+Publishing has no npm token. The `barndog` package trusts `release.yml` in `barndog-ai/barndog-cli`, running in the `npm` GitHub environment (npmjs.com → `barndog` → Settings → Trusted publishing); renaming the workflow file or environment breaks publishing until that setting is updated.
 
 ## Code style
 
