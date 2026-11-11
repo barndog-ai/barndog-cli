@@ -1,0 +1,4 @@
+# pnpm rejects packages published within the last day. Our own generated
+# contract package is released together with the server, so exempt its scope.
+minimumReleaseAgeExclude:
+  - "@barndog-ai/*"
