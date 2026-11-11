@@ -23,6 +23,17 @@ The command reference at [barndog.dev/docs/cli](https://barndog.dev/docs/cli) is
 
 `BARNDOG_DEFAULT_SERVER`, set in `.env` (see `.env.example`) or the shell when running `pnpm build`, replaces the server the setup prompt offers (`src/config/build.ts`, default `https://barndog.dev`). `scripts/finish-build.mjs` writes it into `dist/config/build.js` and restores the executable bit on `dist/cli.js`.
 
+## Releases
+
+The version lives only in `package.json`; `barndog --version` reads it at runtime. Every npm version has a matching `vX.Y.Z` Git tag and GitHub release, all created by `.github/workflows/release.yml`. Never run `npm publish` by hand. To release from a clean, up-to-date `main`:
+
+```sh
+npm version patch      # or minor, or prerelease --preid rc; commits and tags
+git push --follow-tags
+```
+
+The workflow checks that the tag matches `package.json`, runs the full checks, publishes with npm trusted publishing and provenance, and creates a GitHub release with generated notes. A version with a prerelease suffix (`0.2.0-rc.0`) goes to the `next` dist-tag and is marked as a prerelease; everything else goes to `latest`. While the version is 0.x, a breaking change to the public surface (commands, options, `--json` output, files under `~/.barndog/`) bumps the minor version; anything else bumps the patch version. Docs describe the latest `main` and don't name a version.
+
 ## Code style
 
 - Use double quotes, semicolons, and two spaces for indentation (no tabs).
