@@ -1,0 +1,53 @@
+import { homedir } from "node:os";
+import { normalizeRepositoryRemote } from "@barndog-ai/api-contract";
+import type { WorkspaceModel } from "../git-workspace/format.js";
+import { authStatus } from "../auth/session.js";
+import { readSettings } from "../../config/settings.js";
+import { repositoryContext, localRepository } from "../repositories/context.js";
+import { openRepoSource } from "../environment/workspace-source.js";
+
+/** The barndog.yaml answer to "which repository scope is this folder?". */
+async function repoStatus(model: WorkspaceModel, cwd: string) {
+  const local = await localRepository(cwd);
+  const matches = Object.entries(model.config.repositories).filter(
+    ([, repository]) =>
+      repository.gitRemote &&
+      local.remotes.includes(
+        normalizeRepositoryRemote(repository.gitRemote) ?? "",
+      ),
+  );
+  const [slug, declared] = matches.length === 1 ? matches[0]! : [];
+  const scope = (type: "team" | "repo", name: string | undefined) =>
+    model.scopes.find((s) => s.type === type && s.slug === name);
+  const repository = slug ? scope("repo", slug) : undefined;
+  const team = scope("team", declared?.team);
+  return {
+    ...local,
+    repository: repository
+      ? { id: repository.id, slug: repository.slug, name: repository.name }
+      : null,
+    team: team ? { id: team.id, slug: team.slug, name: team.name } : null,
+    ambiguous: matches.length > 1,
+    policyScopes: [
+      { type: "org" as const, id: model.organizationId },
+      ...(team ? [{ type: "team" as const, id: team.id }] : []),
+    ],
+  };
+}
+
+export async function inspect(
+  action: string,
+  home = homedir(),
+  cwd = process.cwd(),
+) {
+  if (action === "whoami") return authStatus(home);
+  if (action === "open") return { url: (await authStatus(home)).server };
+  if (action === "repo-status") {
+    const settings = await readSettings(home);
+    const repo =
+      settings && openRepoSource(settings, home, { refresh: "auto" });
+    if (repo) return repoStatus(await repo.model(), cwd);
+    return repositoryContext(home, cwd);
+  }
+  throw new Error(`Unknown inspection: ${action}`);
+}

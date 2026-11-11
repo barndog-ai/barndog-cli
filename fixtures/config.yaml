@@ -1,0 +1,11 @@
+# Example only. The active configuration is ~/.barndog/config.yaml.
+# Sources are relative to this file; use an absolute source when copying to the home config.
+version: 1
+harnesses:
+  - claude
+  - codex
+  - cursor
+skills:
+  - id: 729b9d5a-4a8c-4aa7-9b8d-975a55ac373e
+    source: ./skills/barndog-distribution-check
+    enabled: true

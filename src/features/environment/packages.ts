@@ -1,0 +1,191 @@
+import { createHash, randomUUID } from "node:crypto";
+import {
+  mkdir,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  lstat,
+  writeFile,
+} from "node:fs/promises";
+import { join } from "node:path";
+import { parse } from "yaml";
+import { hookManifestSchema } from "@barndog-ai/api-contract";
+import {
+  defaultLimits,
+  parsePackage,
+  packageFingerprint,
+  packageMetadata,
+  directoryFingerprint,
+  writePackage,
+  type PackageEntry,
+} from "@barndog-ai/api-contract/package";
+import type { Connection } from "../../config/settings.js";
+import { serverFetch } from "../auth/transport.js";
+
+/** One identity's cache partition: server, organization and developer never mix. */
+export function cacheKey(conn: Connection) {
+  const server = createHash("sha256").update(conn.server).digest("hex");
+  return join(server, conn.organizationId, conn.developerId);
+}
+
+export const cacheRoot = (key: string, home: string) =>
+  join(home, ".barndog", "packages", key);
+
+/**
+ * Deletes cached versions nothing installs any more. Every cached version was
+ * downloaded from the workspace, so an older one can always be fetched again.
+ * Other identities' caches are left alone.
+ */
+export async function pruneCache(
+  key: string,
+  home: string,
+  keep: ReadonlySet<string>,
+) {
+  const root = cacheRoot(key, home);
+  let removed = 0;
+  const children = async (path: string) => {
+    try {
+      return await readdir(path);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+      throw error;
+    }
+  };
+  for (const parent of [root, join(root, "hooks")])
+    for (const asset of await children(parent)) {
+      if (!/^[0-9a-f-]{36}$/i.test(asset)) continue;
+      const directory = join(parent, asset);
+      for (const revision of await children(directory)) {
+        const path = join(directory, revision);
+        if (keep.has(path)) continue;
+        if (!/^[0-9a-f]{40}$/.test(revision) && !revision.startsWith(".stage-"))
+          continue;
+        await rm(path, { recursive: true, force: true });
+        removed++;
+      }
+      if (!(await children(directory)).length)
+        await rm(directory, { recursive: true, force: true });
+    }
+  return removed;
+}
+
+type CachedAsset = { id: string; name: string; revision: string };
+
+/** Returns the immutable cached folder for a revision, loading it only when absent. */
+export async function storePackage(
+  kind: "skill" | "hook",
+  asset: CachedAsset,
+  key: string,
+  home: string,
+  load: () => Promise<PackageEntry[]>,
+) {
+  const parent = join(
+    cacheRoot(key, home),
+    ...(kind === "hook" ? ["hooks"] : []),
+    asset.id,
+  );
+  await mkdir(parent, { recursive: true, mode: 0o700 });
+  const check = async (root: string) => {
+    const saved = JSON.parse(
+      await readFile(join(root, "manifest.json"), "utf8"),
+    );
+    if (
+      typeof saved.fingerprint !== "string" ||
+      (await directoryFingerprint(join(root, asset.name))) !== saved.fingerprint
+    )
+      throw new Error(`Cached ${kind} was modified locally: ${asset.name}`);
+  };
+  for (const revision of await readdir(parent))
+    if (/^[0-9a-f]{40}$/.test(revision)) await check(join(parent, revision));
+  const target = join(parent, asset.revision);
+  try {
+    await lstat(target);
+    await check(target);
+    return join(target, asset.name);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  const entries = await load();
+  const stage = join(parent, `.stage-${randomUUID()}`);
+  try {
+    await writePackage(join(stage, asset.name), entries);
+    await writeFile(
+      join(stage, "manifest.json"),
+      JSON.stringify({ fingerprint: packageFingerprint(entries) }),
+      { mode: 0o600 },
+    );
+    await rename(stage, target);
+  } finally {
+    await rm(stage, { recursive: true, force: true });
+  }
+  return join(target, asset.name);
+}
+
+export async function cachedPackage(
+  kind: "skill" | "hook",
+  asset: {
+    id: string;
+    name: string;
+    version: { commit: string; number: number };
+  },
+  conn: Connection,
+  home: string,
+) {
+  return storePackage(
+    kind,
+    { id: asset.id, name: asset.name, revision: asset.version.commit },
+    cacheKey(conn),
+    home,
+    async () => {
+      const response = await serverFetch(
+        conn.server,
+        home,
+      )(
+        `${conn.server}/v1/${kind === "skill" ? "skills" : "hooks"}/${asset.id}/versions/${asset.version.number}/package`,
+      );
+      if (!response.ok)
+        throw new Error(
+          `Package download failed (${response.status}): ${asset.name}`,
+        );
+      if (response.headers.get("etag") !== `"${asset.version.commit}"`)
+        throw new Error("Package revision does not match catalog");
+      if (!response.body) throw new Error("Missing package body");
+      let size = 0;
+      const chunks: Uint8Array[] = [];
+      for await (const chunk of response.body) {
+        size += chunk.length;
+        if (size > defaultLimits.compressed)
+          throw new Error("PACKAGE_TOO_LARGE");
+        chunks.push(chunk);
+      }
+      const entries = await parsePackage(
+        Buffer.concat(chunks),
+        defaultLimits,
+        kind === "hook" ? "hook.yaml" : "SKILL.md",
+      );
+      const metadata =
+        kind === "skill"
+          ? packageMetadata(entries)
+          : hookManifestSchema.parse(
+              parse(
+                entries
+                  .find((e) => e.path === "hook.yaml")!
+                  .data.toString("utf8"),
+              ),
+            );
+      if (metadata.name !== asset.name)
+        throw new Error("Package name does not match catalog");
+      if (kind === "hook")
+        for (const implementation of Object.values(
+          hookManifestSchema.parse(metadata).implementations,
+        )) {
+          if (implementation)
+            for (const script of implementation.scripts)
+              if (!entries.some((e) => e.path === script))
+                throw new Error(`Missing Hook script: ${script}`);
+        }
+      return entries;
+    },
+  );
+}

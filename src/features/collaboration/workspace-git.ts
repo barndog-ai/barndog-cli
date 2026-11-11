@@ -1,0 +1,562 @@
+import { randomBytes } from "node:crypto";
+import { homedir } from "node:os";
+import { dirname, resolve } from "node:path";
+import { mkdir, realpath, rm } from "node:fs/promises";
+
+import {
+  packageFingerprint,
+  validatePackageEntries,
+  writePackage,
+  type PackageEntry,
+} from "@barndog-ai/api-contract/package";
+import {
+  diffEntries,
+  mergeEntries,
+  readDirectory,
+} from "@barndog-ai/api-contract/collaboration";
+
+import type { GitWorkspace } from "../../config/settings.js";
+import type { AssetKind } from "../asset-selection/types.js";
+import { CliError } from "../../errors.js";
+import {
+  assetFolder,
+  loadWorkspace,
+  type RepoAsset,
+  type RepoScope,
+  type WorkspaceModel,
+} from "../git-workspace/format.js";
+import { git, gitText } from "../git-workspace/git.js";
+import {
+  commitFiles,
+  openPullRequest,
+  pushCommit,
+  remoteBranch,
+} from "../git-workspace/publish.js";
+import { isBlob, gitSnapshot, TREE_MODE } from "../git-workspace/snapshot.js";
+import {
+  acceptedCommit,
+  gitDirectory,
+  gitRepoSource,
+  recordFetch,
+  trackingRef,
+} from "../git-workspace/source.js";
+import { metadata as packageMetadataFor, type PackageKind } from "./domain.js";
+import { matchesOrigin } from "./remote.js";
+import { markResolved } from "./workspace.js";
+import {
+  applyFiles,
+  decodeFiles,
+  encodeFiles,
+  findGit,
+  locked,
+  save,
+  type GitWorkingCopy,
+} from "./workspace-store.js";
+
+async function latest(workspace: GitWorkspace, home: string) {
+  const model = await gitRepoSource(workspace, home).model();
+  return {
+    model,
+    commit: (await acceptedCommit(workspace.workspaceId, home))!,
+  };
+}
+
+function selectAsset(
+  model: WorkspaceModel,
+  kind: AssetKind,
+  name: string,
+  origin: string,
+) {
+  const matches = model.assets.filter(
+    (asset) =>
+      asset.kind === kind &&
+      asset.name === name &&
+      matchesOrigin(asset.origin, origin, model),
+  );
+  if (matches.length !== 1)
+    throw new CliError(
+      `No ${kind === "skill" ? "Skill" : kind === "hook" ? "Hook" : "MCP server"} named ${name} in ${origin}.`,
+      `barndog ${kind === "skill" ? "skills" : kind === "hook" ? "hooks" : "mcp"} search ${name}`,
+    );
+  return matches[0]!;
+}
+
+export function selectScope(model: WorkspaceModel, origin: string) {
+  const matches = model.scopes.filter((scope) =>
+    matchesOrigin(scope, origin, model),
+  );
+  if (origin === "me" || /^dev[/:]/.test(origin))
+    throw new CliError(
+      "Personal scopes don't exist in a Git repo workspace. Use org, team/<slug> or repo/<slug>.",
+    );
+  if (!matches.length && /^(team|repo)[/:]/.test(origin)) {
+    const [type, slug] = origin.split(/[/:]/) as ["team" | "repo", string];
+    return {
+      type,
+      slug,
+      path: `${type === "team" ? "teams" : "repos"}/${slug}`,
+    };
+  }
+  if (matches.length !== 1)
+    throw new CliError(
+      `No scope named ${origin}. Use org, team/<slug> or repo/<slug>.`,
+    );
+  return pickScope(matches[0]!);
+}
+
+const pickScope = (scope: RepoScope) => ({
+  type: scope.type,
+  slug: scope.slug,
+  path: scope.path,
+});
+
+const usable = (asset: RepoAsset) => {
+  if (asset.invalid)
+    throw new CliError(
+      `${asset.path} is invalid: ${asset.invalid}. Fix it on the Git host first.`,
+    );
+  return asset;
+};
+
+const scaffold = (kind: PackageKind, name: string): PackageEntry[] =>
+  kind === "skill"
+    ? [
+        {
+          path: "SKILL.md",
+          data: Buffer.from(
+            `---\nname: ${name}\ndescription: Describe this Skill\n---\n\nAdd instructions here.\n`,
+          ),
+          executable: false,
+        },
+      ]
+    : [
+        {
+          path: "hook.yaml",
+          data: Buffer.from(
+            `name: ${name}\ndescription: Describe this Hook\nimplementations:\n  claude:\n    compatibility: supported\n    scripts: [scripts/hook.sh]\n    requirements:\n      commands: [sh]\n    events:\n      SessionStart:\n        - hooks:\n            - type: command\n              command: '\${BARNDOG_HOOK_ROOT}/scripts/hook.sh'\n`,
+          ),
+          executable: false,
+        },
+        {
+          path: "scripts/hook.sh",
+          data: Buffer.from(
+            "#!/bin/sh\n# Read native input; implement the desired behavior here.\ncat >/dev/null\n",
+          ),
+          executable: true,
+        },
+      ];
+
+async function newFolder(cwd: string, target: string) {
+  const path = resolve(cwd, target);
+  await mkdir(dirname(path), { recursive: true });
+  // Never overwrite an existing directory, even if it appears empty.
+  await mkdir(path);
+  return realpath(path);
+}
+
+async function startWorkingCopy(
+  root: string,
+  record: Omit<GitWorkingCopy, "root" | "base" | "conflicts">,
+  entries: PackageEntry[],
+  base: PackageEntry[],
+  home: string,
+) {
+  try {
+    await writePackage(root, entries);
+    await save(
+      { ...record, root, base: encodeFiles(base), conflicts: [] },
+      home,
+    );
+  } catch (error) {
+    await rm(root, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+export function pullGitAsset(
+  workspace: GitWorkspace,
+  options: {
+    name: string;
+    origin: string;
+    target?: string;
+    kind?: PackageKind;
+  },
+  cwd: string,
+  home = homedir(),
+) {
+  const kind = options.kind ?? "skill";
+  return locked(home, async () => {
+    const { model, commit } = await latest(workspace, home);
+    const asset = usable(
+      selectAsset(model, kind, options.name, options.origin),
+    );
+    const root = await newFolder(cwd, options.target ?? options.name);
+    await startWorkingCopy(
+      root,
+      {
+        kind,
+        git: workspace,
+        name: asset.name,
+        scope: pickScope(asset.origin),
+        baseCommit: commit,
+      },
+      asset.entries,
+      asset.entries,
+      home,
+    );
+    return { root, commit };
+  });
+}
+
+export function createGitAsset(
+  workspace: GitWorkspace,
+  options: {
+    name: string;
+    origin: string;
+    target?: string;
+    kind?: PackageKind;
+  },
+  cwd: string,
+  home = homedir(),
+) {
+  const kind = options.kind ?? "skill";
+  return locked(home, async () => {
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(options.name))
+      throw new Error("Use a lowercase hyphenated package name");
+    const { model, commit } = await latest(workspace, home);
+    const scope = selectScope(model, options.origin);
+    const root = await newFolder(cwd, options.target ?? options.name);
+    await startWorkingCopy(
+      root,
+      { kind, git: workspace, name: options.name, scope, baseCommit: commit },
+      scaffold(kind, options.name),
+      [],
+      home,
+    );
+    return { root, kind, name: options.name };
+  });
+}
+
+export function gitWorkingStatus(cwd: string, home = homedir()) {
+  return locked(home, async () => {
+    const work = await findGit(cwd, home);
+    return {
+      root: work.root,
+      name: work.name,
+      baseVersion: null,
+      baseCommit: work.baseCommit,
+      proposal: null,
+      review: work.review
+        ? { branch: work.review.branch, url: work.review.url ?? null }
+        : null,
+      conflicts: work.conflicts,
+      pending: false,
+      external: null,
+      changes: await diffEntries(
+        decodeFiles(work.base),
+        await readDirectory(work.root),
+      ),
+    };
+  });
+}
+
+const assetIn = (model: WorkspaceModel, work: GitWorkingCopy) =>
+  model.assets.find(
+    (asset) =>
+      asset.kind === work.kind &&
+      asset.path === assetFolder(work.scope.path, work.kind, work.name),
+  );
+
+const fingerprint = (entries: PackageEntry[]) => packageFingerprint(entries);
+
+async function branchFiles(work: GitWorkingCopy, head: string, home: string) {
+  const repo = gitDirectory(work.git.workspaceId, home);
+  await git(
+    [
+      "fetch",
+      "--quiet",
+      "--no-tags",
+      "origin",
+      `refs/heads/${work.review!.branch}`,
+    ],
+    { repo },
+  );
+  const model = await loadWorkspace(await gitSnapshot(repo, head));
+  const asset = assetIn(model, work);
+  if (!asset)
+    throw new CliError(
+      `${work.review!.branch} no longer contains ${work.name}.`,
+    );
+  return usable(asset).entries;
+}
+
+export function updateGitWorkingCopy(cwd: string, home = homedir()) {
+  return locked(home, async () => {
+    const work = await findGit(cwd, home);
+    const previous = structuredClone(work);
+    if (work.conflicts.length)
+      throw new Error("Resolve existing conflicts before pulling again");
+    const repo = gitDirectory(work.git.workspaceId, home);
+    const { model, commit } = await latest(work.git, home);
+    let entries = await readDirectory(work.root);
+    const conflicts = new Set<string>();
+    const merge = async (base: PackageEntry[], incoming: PackageEntry[]) => {
+      const merged = await mergeEntries(base, entries, incoming);
+      entries = merged.entries;
+      merged.conflicts.forEach((path) => conflicts.add(path));
+    };
+    if (work.review) {
+      const head = await remoteBranch(repo, work.review.branch);
+      if (head && head !== work.review.head) {
+        const remote = await branchFiles(work, head, home);
+        await merge(decodeFiles(work.review.files), remote);
+        work.review = {
+          ...work.review,
+          head,
+          files: encodeFiles(remote),
+        };
+      }
+    }
+    const current = assetIn(model, work);
+    if (current) {
+      const incoming = usable(current).entries;
+      if (fingerprint(incoming) !== fingerprint(decodeFiles(work.base)))
+        await merge(decodeFiles(work.base), incoming);
+      work.base = encodeFiles(incoming);
+      // The review is over once its content is what the default branch holds.
+      if (
+        work.review &&
+        fingerprint(incoming) === fingerprint(decodeFiles(work.review.files))
+      )
+        delete work.review;
+    }
+    work.baseCommit = commit;
+    work.conflicts = [...conflicts];
+    await applyFiles(work, entries, home, previous);
+    return {
+      root: work.root,
+      conflicts: work.conflicts,
+      baseVersion: null,
+      commit,
+    };
+  });
+}
+
+export function resolveGitConflict(
+  path: string,
+  cwd: string,
+  home = homedir(),
+) {
+  return locked(home, async () =>
+    markResolved(await findGit(cwd, home), path, cwd, home),
+  );
+}
+
+export function pushGitWorkingCopy(
+  workspace: GitWorkspace,
+  options: {
+    origin?: string;
+    kind?: PackageKind;
+    name?: string;
+    publish?: boolean;
+    new?: boolean;
+    title?: string;
+  },
+  cwd: string,
+  home = homedir(),
+) {
+  return locked(home, async () => {
+    const { model, commit: tip } = await latest(workspace, home);
+    let work: GitWorkingCopy;
+    try {
+      work = await findGit(cwd, home);
+    } catch (error) {
+      if (!options.origin || !(error instanceof CliError)) throw error;
+      const root = await realpath(cwd);
+      const kind = options.kind ?? "skill";
+      work = {
+        root,
+        kind,
+        git: workspace,
+        name: packageMetadataFor(await readDirectory(root), kind).name,
+        scope: selectScope(model, options.origin),
+        baseCommit: tip,
+        base: [],
+        conflicts: [],
+      };
+      await save(work, home);
+    }
+    if (options.kind && work.kind !== options.kind)
+      throw new Error("Working copy belongs to a different asset kind");
+    if (options.name && work.name !== options.name)
+      throw new Error("Working-copy name does not match the requested asset");
+    if (work.git.workspaceId !== workspace.workspaceId)
+      throw new CliError(
+        "This working copy belongs to a different Git workspace.",
+      );
+    if (work.conflicts.length)
+      throw new Error(
+        "Resolve conflicts with barndog resolve <path> before pushing",
+      );
+    const files = validatePackageEntries(
+      await readDirectory(work.root),
+      undefined,
+      work.kind === "hook" ? "hook.yaml" : "SKILL.md",
+    );
+    if (packageMetadataFor(files, work.kind).name !== work.name)
+      throw new Error("Package name cannot change in this working copy");
+    const repo = gitDirectory(workspace.workspaceId, home);
+    const path = assetFolder(work.scope.path, work.kind, work.name);
+    const change = {
+      replace: path,
+      files: files.map((file) => ({
+        ...file,
+        path: `${path}/${file.path}`,
+      })),
+    };
+    const title = options.title ?? `Update ${work.name}`;
+
+    if (options.publish) {
+      const current = assetIn(model, work);
+      if (
+        fingerprint(current?.entries ?? []) !==
+        fingerprint(decodeFiles(work.base))
+      )
+        throw new CliError(
+          `${work.name} changed on ${workspace.branch} since you pulled it.`,
+          "barndog pull",
+        );
+      if (fingerprint(files) === fingerprint(decodeFiles(work.base)))
+        return { unchanged: true };
+      const commit = await commitFiles(repo, tip, change, title);
+      await pushCommit(repo, commit, workspace.branch);
+      await git(["update-ref", trackingRef(workspace.branch), commit], {
+        repo,
+      });
+      await recordFetch(workspace, commit, home);
+      work.base = encodeFiles(files);
+      work.baseCommit = commit;
+      delete work.review;
+      await save(work, home);
+      return { branch: workspace.branch, commit, published: true };
+    }
+
+    let review = options.new ? undefined : work.review;
+    if (review) {
+      const head = await remoteBranch(repo, review.branch);
+      if (head === null) review = undefined;
+      else if (head !== review.head)
+        throw new CliError(
+          `${review.branch} changed on the Git host.`,
+          "barndog pull",
+        );
+    }
+    const previous = review
+      ? decodeFiles(review.files)
+      : decodeFiles(work.base);
+    if (fingerprint(files) === fingerprint(previous))
+      return { unchanged: true };
+    const branch =
+      review?.branch ??
+      `barndog/${work.scope.type === "org" ? "org" : `${work.scope.type}-${work.scope.slug}`}-${work.name}-${randomBytes(3).toString("hex")}`;
+    const commit = await commitFiles(
+      repo,
+      review?.head ?? work.baseCommit,
+      change,
+      title,
+    );
+    await pushCommit(repo, commit, branch);
+    const opened = review?.url
+      ? { url: review.url, opened: false }
+      : await openPullRequest({
+          url: workspace.url,
+          base: workspace.branch,
+          branch,
+          title,
+        });
+    work.review = {
+      branch,
+      head: commit,
+      files: encodeFiles(files),
+      ...(opened.url ? { url: opened.url } : {}),
+    };
+    await save(work, home);
+    return { branch, commit, url: opened.url ?? null, opened: opened.opened };
+  });
+}
+
+/** Commits that changed an asset, oldest first; their position is the version number. */
+async function assetHistory(repo: string, commit: string, path: string) {
+  const output = await gitText(
+    ["log", "--reverse", "--format=%H%x00%ct%x00%an%x00%s", commit, "--", path],
+    { repo },
+  );
+  return output
+    .split("\n")
+    .filter(Boolean)
+    .map((line, index) => {
+      const [hash, time, author, subject] = line.split("\0");
+      return {
+        number: index + 1,
+        commit: hash!,
+        publishedAt: new Date(Number(time) * 1000).toISOString(),
+        publishedBy: author!,
+        description: subject!,
+      };
+    });
+}
+
+async function filesAt(repo: string, commit: string, path: string) {
+  const snapshot = await gitSnapshot(repo, commit);
+  const single = snapshot.entries.find((entry) => entry.path === path);
+  const members =
+    single && single.mode !== TREE_MODE
+      ? [{ ...single, path: path.split("/").at(-1)! }]
+      : snapshot.entries
+          .filter(
+            (entry) => entry.path.startsWith(`${path}/`) && isBlob(entry.mode),
+          )
+          .map((entry) => ({
+            ...entry,
+            path: entry.path.slice(path.length + 1),
+          }));
+  const blobs = await snapshot.readBlobs(members.map((entry) => entry.hash));
+  return members.map((entry): PackageEntry => ({
+    path: entry.path,
+    data: blobs.get(entry.hash)!,
+    executable: entry.mode === "100755",
+  }));
+}
+
+export async function gitHistory(
+  workspace: GitWorkspace,
+  action: "versions" | "version-show" | "version-diff",
+  options: {
+    name: string;
+    origin: string;
+    kind?: AssetKind;
+    version?: number;
+    from?: number;
+    to?: number;
+  },
+  home = homedir(),
+) {
+  const { model, commit } = await latest(workspace, home);
+  const asset = selectAsset(
+    model,
+    options.kind ?? "skill",
+    options.name,
+    options.origin,
+  );
+  const repo = gitDirectory(workspace.workspaceId, home);
+  const history = await assetHistory(repo, commit, asset.path);
+  if (action === "versions") return history;
+  const at = (number: number | undefined) => {
+    const version = number ? history[number - 1] : history.at(-1);
+    if (!version) throw new CliError(`${asset.name} has no version ${number}.`);
+    return filesAt(repo, version.commit, asset.path);
+  };
+  if (action === "version-show")
+    return { files: encodeFiles(await at(options.version)) };
+  return diffEntries(await at(options.from), await at(options.to));
+}

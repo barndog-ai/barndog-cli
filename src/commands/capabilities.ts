@@ -1,0 +1,709 @@
+import { openBrowser } from "../ui/auth.js";
+import { safe } from "../ui/collaboration.js";
+import { renderMcp } from "../ui/mcp.js";
+import { runSelection } from "../ui/selection.js";
+import type { Check } from "../features/doctor/index.js";
+import {
+  bad,
+  bold,
+  clean,
+  dim,
+  fields,
+  heading,
+  hint,
+  json,
+  ok,
+  originLabel,
+  renderValue,
+  table,
+  warn,
+} from "../ui/format.js";
+
+type RepoStatus = {
+  root: string | null;
+  remotes: string[];
+  repository: { id: string; name: string; slug: string } | null;
+  team: { name: string; slug: string } | null;
+  ambiguous: boolean;
+};
+
+import { InvalidArgumentError, Option, type Command } from "commander";
+import { ORIGIN_HELP } from "../ui/format.js";
+import type { CommandContext } from "./context.js";
+import { pickInstalled, resolveOrigin } from "./origin.js";
+import {
+  renderHookCompatibility,
+  type HookCompatibility,
+} from "../ui/hook-compatibility.js";
+import type { AssetKind } from "../features/asset-selection/types.js";
+import type { CapabilityOptions } from "../features/capabilities/index.js";
+import type { Adaptation } from "../features/hooks/adapt.js";
+import type { Harness } from "../harnesses/types.js";
+
+function positive(value: string) {
+  const result = Number(value);
+  if (!Number.isSafeInteger(result) || result < 1)
+    throw new InvalidArgumentError("Use a positive integer");
+  return result;
+}
+
+export function registerCapabilities(
+  program: Command,
+  context: CommandContext,
+) {
+  const write = (value: string) => context.write(safe(value));
+  const print = (result: unknown) => {
+    if (context.mode.json) context.write(json(result));
+    else if (typeof result === "object" && result && "message" in result)
+      write(String(result.message));
+    else for (const line of renderValue(result)) context.write(line);
+  };
+  const run = async (action: string, options: CapabilityOptions = {}) => {
+    const result = await context.capability(action, options);
+    if (action === "hooks-test") {
+      const test = result as {
+        stdout: string;
+        stderr: string;
+        exitCode: number;
+        timedOut: boolean;
+      };
+      // The Hook's own result is the command's result, however it is printed.
+      if (test.exitCode || test.timedOut)
+        process.exitCode = test.timedOut ? 124 : test.exitCode;
+      if (context.mode.json) return context.write(json(result));
+      if (test.stdout) write(test.stdout.trimEnd());
+      if (test.stderr) write(test.stderr.trimEnd());
+      write(
+        test.timedOut
+          ? `${bad("✖")} Hook test timed out.`
+          : test.exitCode
+            ? `${bad("✖")} Hook test exited ${test.exitCode}.`
+            : `${ok("✔")} Hook test exited 0.`,
+      );
+      return;
+    }
+    if (action === "hooks-compatibility" && !context.mode.json) {
+      for (const line of renderHookCompatibility(
+        options.name!,
+        result as HookCompatibility,
+      ))
+        context.write(line);
+      return;
+    }
+    if (
+      !context.mode.json &&
+      (action === "show" || action === "mcp-create" || action === "mcp-update")
+    ) {
+      if (action !== "show") write(`${ok("✔")} Published ${options.name}.`);
+      for (const line of renderMcp(result)) context.write(line);
+      return;
+    }
+    print(result);
+  };
+  /** Adds the owning scope, asking only when several scopes share the name. */
+  const locate = async <T extends { origin?: string }>(
+    kind: AssetKind,
+    name: string | undefined,
+    options: T,
+    usage: string,
+  ) =>
+    name
+      ? {
+          ...options,
+          name,
+          origin: await resolveOrigin(
+            context,
+            kind,
+            name,
+            options.origin,
+            usage.replace("<name>", name),
+          ),
+        }
+      : { ...options, ...(await pickInstalled(context, kind, usage)) };
+  program
+    .command("whoami")
+    .description("Show who you're signed in as (same as auth status)")
+    .action(() => context.authStatus());
+  program
+    .command("open")
+    .description("Open your BarnDog workspace in a browser")
+    .option("--no-browser", "Print the URL without opening it")
+    .action(async (options: { browser: boolean }) => {
+      const { url } = (await context.capability("open", {})) as { url: string };
+      if (context.mode.json) return context.write(json({ url }));
+      if (!options.browser) return context.write(url);
+      try {
+        await openBrowser(url);
+        context.write(`${ok("✔")} Opened ${bold(url)} in your browser.`);
+      } catch {
+        context.write(`Couldn't open a browser. Visit ${bold(url)}`);
+      }
+    });
+  program
+    .command("repo")
+    .description("See how the current Git repository maps to BarnDog")
+    .command("status", { isDefault: true })
+    .description(
+      "Show the repository, its owning team and whether you're subscribed",
+    )
+    .action(async () => {
+      const result = (await context.capability(
+        "repo-status",
+        {},
+      )) as RepoStatus;
+      const sets = result.repository
+        ? ((await context
+            .environment("sets-list", {})
+            .catch(() => undefined)) as
+            | { subscriptions: { scope: { type: string; id: string } }[] }
+            | undefined)
+        : undefined;
+      if (context.mode.json) return context.write(json(result));
+      if (!result.root) {
+        context.write("Not inside a Git repository.");
+        context.write(
+          hint("cd <your-repository> && barndog repo status", "Tip"),
+        );
+        return;
+      }
+      const subscribed =
+        result.repository &&
+        sets?.subscriptions.some(
+          (s) =>
+            s.scope.type === "repo" && s.scope.id === result.repository!.id,
+        );
+      for (const line of fields([
+        ["Folder", result.root],
+        ["Remotes", result.remotes.join(", ") || dim("none")],
+        [
+          "Repository",
+          result.repository
+            ? `${bold(result.repository.name)} ${dim(`repo/${result.repository.slug}`)}`
+            : result.ambiguous
+              ? warn("matches several BarnDog repositories")
+              : dim("not registered in BarnDog"),
+        ],
+        [
+          "Owning team",
+          result.team
+            ? `${result.team.name} ${dim(`team/${result.team.slug}`)}`
+            : undefined,
+        ],
+        [
+          "Subscribed",
+          result.repository ? (subscribed ? ok("yes") : "no") : undefined,
+        ],
+      ]))
+        context.write(line);
+      if (result.repository && !subscribed) {
+        context.write("");
+        context.write(
+          hint(`barndog sets install repo/${result.repository.slug}`) +
+            dim("  to use this repository's shared assets"),
+        );
+      }
+      if (!result.repository && !result.ambiguous) {
+        context.write("");
+        context.write(
+          dim(
+            "An admin can register this repository in the BarnDog workspace.",
+          ),
+        );
+      }
+    });
+  program
+    .command("doctor")
+    .description(
+      "Check your setup, session and installed assets, and suggest fixes",
+    )
+    .action(async () => {
+      const checks = (await context.capability("doctor", {})) as Check[];
+      if (context.mode.json) return context.write(json(checks));
+      context.write(`\n${heading("doctor")}\n`);
+      const width = Math.max(...checks.map((c) => c.name.length));
+      for (const check of checks) {
+        const mark =
+          check.status === "ok"
+            ? ok("✔")
+            : check.status === "warn"
+              ? warn("!")
+              : bad("✖");
+        context.write(
+          `${mark} ${check.name.padEnd(width)}  ${check.status === "ok" ? dim(check.detail) : check.detail}`,
+        );
+        if (check.fix)
+          context.write(`  ${" ".repeat(width)}  ${hint(check.fix, "Fix")}`);
+      }
+      const failed = checks.filter((c) => c.status === "fail").length;
+      const warned = checks.filter((c) => c.status === "warn").length;
+      context.write("");
+      context.write(
+        failed
+          ? `${bad("✖")} ${failed} ${failed === 1 ? "problem" : "problems"} found.`
+          : warned
+            ? `${warn("!")} ${warned} ${warned === 1 ? "warning" : "warnings"}.`
+            : `${ok("✔")} Everything looks good.`,
+      );
+      if (failed) process.exitCode = 1;
+    });
+  const mcp = program.commands.find((c) => c.name() === "mcp")!;
+  for (const action of ["create", "update"] as const) {
+    const command = mcp
+      .command(`${action} <name>`)
+      .description(
+        `${action === "create" ? "Create" : "Publish a new revision of"} an MCP configuration directly`,
+      )
+      .requiredOption("--origin <origin>", ORIGIN_HELP)
+      .requiredOption(
+        "--file <file>",
+        "JSON connection definition with secret references",
+      )
+      .option("--key <key>", "Stable key for exact retries");
+    if (action === "update")
+      command.requiredOption(
+        "--expected-version <id>",
+        "Inspected configuration version ID",
+      );
+    command.action((name, options) =>
+      run(`mcp-${action}`, { ...options, name }),
+    );
+  }
+  mcp
+    .command("show <name>")
+    .option("--origin <origin>", ORIGIN_HELP)
+    .description("Inspect a connection definition")
+    .action(async (name, options) =>
+      run("show", {
+        ...(await locate("mcp", name, options, `barndog mcp show ${name}`)),
+        kind: "mcp",
+      }),
+    );
+  mcp
+    .command("versions <name>")
+    .option("--origin <origin>", ORIGIN_HELP)
+    .description("Inspect immutable configuration history")
+    .action(async (name, options) =>
+      run(
+        "mcp-versions",
+        await locate("mcp", name, options, `barndog mcp versions ${name}`),
+      ),
+    );
+  mcp
+    .command("auth <name>")
+    .option("--origin <origin>", ORIGIN_HELP)
+    .addOption(
+      new Option("--harness <harness>", "Native login owner")
+        .choices(["claude", "codex", "cursor"])
+        .makeOptionMandatory(),
+    )
+    .description("Enter native authentication without sharing credentials")
+    .action(async (name, options) =>
+      run(
+        "mcp-auth",
+        await locate(
+          "mcp",
+          name,
+          options,
+          `barndog mcp auth ${name} --harness ${options.harness}`,
+        ),
+      ),
+    );
+  const hooks = program.commands.find((c) => c.name() === "hooks")!;
+  hooks
+    .command("test [name]")
+    .option("--origin <origin>", ORIGIN_HELP)
+    .addOption(
+      new Option("--harness <harness>", "Chosen implementation")
+        .choices(["claude", "codex", "cursor"])
+        .makeOptionMandatory(),
+    )
+    .requiredOption("--input <file>", "Native JSON test input")
+    .option("--event <event>", "Native event name")
+    .option("--handler <number>", "One-based command index", positive)
+    .option("--timeout <seconds>", "Maximum test duration", positive)
+    .description("Explicitly run one published command Hook with test input")
+    .action(async (name, options) =>
+      run(
+        "hooks-test",
+        await locate(
+          "hook",
+          name,
+          options,
+          `barndog hooks test <name> --harness ${options.harness} --input ${options.input}`,
+        ),
+      ),
+    );
+  hooks
+    .command("compatibility [name]")
+    .option("--origin <origin>", ORIGIN_HELP)
+    .description(
+      "Inspect version-specific declarations and local runtime requirements",
+    )
+    .action(async (name, options) =>
+      run(
+        "hooks-compatibility",
+        await locate(
+          "hook",
+          name,
+          options,
+          "barndog hooks compatibility <name>",
+        ),
+      ),
+    );
+  hooks
+    .command("adapt [name]")
+    .option("--origin <origin>", ORIGIN_HELP)
+    .addOption(
+      new Option(
+        "--for <tools...>",
+        "Coding tools to adapt it for (default: the ones this machine uses that it doesn't cover)",
+      ).choices(["claude", "codex", "cursor"]),
+    )
+    .description(
+      "Print a prompt for an AI agent to adapt a Hook to coding tools it wasn't written for",
+    )
+    .action(
+      async (
+        name: string | undefined,
+        options: { origin?: string; for?: Harness[] },
+      ) => {
+        const located = await locate(
+          "hook",
+          name,
+          options,
+          "barndog hooks adapt <name>",
+        );
+        const result = (await context.capability("hooks-adapt", {
+          name: located.name,
+          origin: located.origin,
+          targets: options.for,
+        })) as Adaptation;
+        if (context.mode.json) return context.write(json(result));
+        // Printed bare, so it can be piped to the clipboard or an agent.
+        context.write(
+          result.prompt ??
+            dim(
+              `${result.name} already has settings for every coding tool this machine uses.`,
+            ),
+        );
+      },
+    );
+  const knowledge = program
+    .command("knowledge")
+    .description("Read your organization's shared knowledge documents");
+  knowledge
+    .command("list")
+    .description("List knowledge documents and when coding tools see them")
+    .option("--always", "Only documents listed at every session start")
+    .action(async (options) => {
+      const docs = (await context.capability("knowledge-list", options)) as {
+        name: string;
+        description: string;
+        accessMode: string;
+        listedAtStart: boolean;
+      }[];
+      if (context.mode.json) return context.write(json(docs));
+      const problems = (await context
+        .capability("knowledge-problems", {})
+        .catch(() => [])) as { path: string; reason: string }[] | undefined;
+      for (const problem of problems ?? [])
+        context.write(`${warn("!")} ${problem.path}: ${problem.reason}`);
+      if (!docs.length)
+        return context.write(dim("No knowledge documents yet."));
+      for (const line of table(
+        docs.map((doc) => [
+          bold(clean(doc.name)),
+          doc.listedAtStart
+            ? ok("every session")
+            : doc.accessMode === "always"
+              ? dim("off")
+              : dim("on demand"),
+          dim(clean(doc.description)),
+        ]),
+        { header: ["Name", "Listed", "Description"] },
+      ))
+        context.write(line);
+      context.write("");
+      if (docs.some((d) => d.accessMode === "always" && !d.listedAtStart))
+        context.write(
+          hint("barndog knowledge enable", "Tip") +
+            dim("  to list these at session start again"),
+        );
+      context.write(
+        hint("barndog knowledge get <name>", "Tip") + dim("  to read one"),
+      );
+    });
+  knowledge
+    .command("get <name>")
+    .description("Print a knowledge document")
+    .action(async (name) => {
+      const result = (await context.capability("knowledge-get", { name })) as {
+        version: { content: { markdown: string } };
+      };
+      if (context.mode.json) return context.write(json(result));
+      write(result.version.content.markdown);
+    });
+  for (const action of ["enable", "disable"] as const)
+    knowledge
+      .command(action)
+      .description(
+        action === "enable"
+          ? "Tell coding tools at session start which knowledge documents exist"
+          : "Stop listing knowledge documents at session start",
+      )
+      .action(async () => {
+        await runSelection(context, `knowledge-${action}`, {});
+        if (context.mode.json) return;
+        context.write(
+          action === "enable"
+            ? `${ok("✔")} Coding tools now see the list of knowledge documents when a session starts.`
+            : `${ok("✔")} Knowledge documents are no longer listed at session start.`,
+        );
+      });
+  const people = program
+    .command("people")
+    .description("Find coworkers and the personal assets they share");
+  people
+    .command("list")
+    .description("List people in your organization")
+    .option("--search <query>", "Search names or handles")
+    .action(async (options) => {
+      const rows = (await context.capability("developers-list", options)) as {
+        slug: string;
+        name: string;
+      }[];
+      if (context.mode.json) return context.write(json(rows));
+      if (!rows.length) return context.write(dim("No matching people."));
+      for (const line of table(
+        rows.map((person) => [
+          bold(clean(person.name)),
+          dim(`@${clean(person.slug)}`),
+        ]),
+        { header: ["Name", "Handle"] },
+      ))
+        context.write(line);
+      context.write("");
+      context.write(
+        hint("barndog people show <handle>", "Tip") +
+          dim("  to see what someone shares"),
+      );
+    });
+  people
+    .command("show <handle>")
+    .description("List a person's shared assets")
+    .option("--search <query>", "Filter asset names")
+    .action(async (name, options) => {
+      const result = (await context.capability("developers-assets", {
+        ...options,
+        name,
+      })) as {
+        developer: { name: string; slug: string };
+        assets: {
+          kind: string;
+          name: string;
+          origin: { type: string; slug: string };
+        }[];
+      };
+      if (context.mode.json) return context.write(json(result));
+      context.write(
+        `${bold(clean(result.developer.name))} ${dim(`@${result.developer.slug}`)}`,
+      );
+      context.write("");
+      if (!result.assets.length)
+        return context.write(dim("  Nothing shared yet."));
+      for (const line of table(
+        result.assets.map((asset) => [
+          dim(asset.kind),
+          bold(clean(asset.name)),
+          originLabel(asset.origin),
+        ]),
+        { header: ["Kind", "Name", "Origin"] },
+      ))
+        context.write(line);
+    });
+  const github = program
+    .command("github")
+    .description("Manage GitHub App connections, contributions and mirrors");
+  for (const action of ["auth", "install"] as const)
+    github
+      .command(action)
+      .option("--no-browser", "Print the URL without opening it")
+      .action((options) => run(`github-${action}`, options));
+  for (const action of ["status", "installations", "list"] as const)
+    github.command(action).action(() => run(`github-${action}`));
+  for (const action of ["connect", "import"] as const) {
+    const command = github
+      .command(`${action} <name>`)
+      .addOption(
+        new Option("--kind <kind>", "Git-backed asset kind")
+          .choices(["skill", "hook"])
+          .default("skill"),
+      )
+      .requiredOption("--origin <origin>", ORIGIN_HELP)
+      .requiredOption(
+        "--installation <id>",
+        "BarnDog installation binding UUID",
+      )
+      .requiredOption(
+        "--repository <owner/name>",
+        "Customer-selected GitHub repository",
+      );
+    if (action === "connect")
+      command
+        .addOption(
+          new Option("--mode <mode>", "mirror keeps BarnDog authoritative")
+            .choices(["connect", "transfer", "mirror"])
+            .default("connect"),
+        )
+        .option("--expected-version <id>", "Inspected BarnDog version ID");
+    if (action === "import")
+      command
+        .addOption(
+          new Option(
+            "--authority <authority>",
+            "Copy into BarnDog or keep GitHub authoritative",
+          )
+            .choices(["barndog", "github"])
+            .default("github"),
+        )
+        .option(
+          "--key <key>",
+          "Required for BarnDog-owned copies; retain for exact retries",
+        );
+    command.action((name, options) =>
+      run(`github-${action}`, { ...options, name }),
+    );
+  }
+  github
+    .command("create-repository <name>")
+    .description("Create a GitHub repository and export published history")
+    .addOption(
+      new Option("--kind <kind>", "Asset kind")
+        .choices(["skill", "hook"])
+        .default("skill"),
+    )
+    .requiredOption("--origin <origin>", ORIGIN_HELP)
+    .requiredOption("--installation <id>", "BarnDog installation binding UUID")
+    .requiredOption("--repository <owner/name>", "New repository to create")
+    .requiredOption("--key <key>", "Stable key; retain for exact retries")
+    .requiredOption("--expected-version <id>", "Inspected BarnDog version")
+    .addOption(
+      new Option("--mode <mode>", "Content authority after export")
+        .choices(["mirror", "transfer"])
+        .default("mirror"),
+    )
+    .addOption(
+      new Option("--visibility <visibility>", "New repository visibility")
+        .choices(["private", "public"])
+        .default("private"),
+    )
+    .action((name, options) =>
+      run("github-create-repository", { ...options, name }),
+    );
+  for (const action of ["show", "sync", "remote-head"] as const)
+    github
+      .command(`${action} <id>`)
+      .action((id) => run(`github-${action}`, { id }));
+  github
+    .command("resolve-mirror <id>")
+    .addOption(
+      new Option("--action <action>", "Explicit divergence resolution")
+        .choices(["use-barndog", "use-mirror", "disconnect"])
+        .makeOptionMandatory(),
+    )
+    .requiredOption("--expected-version <id>", "Inspected BarnDog version")
+    .requiredOption(
+      "--expected-remote <sha|absent>",
+      "Inspected remote main SHA or absent",
+    )
+    .option("--key <key>", "Stable key for exact retries")
+    .action((id, options) => run("github-mirror-resolve", { ...options, id }));
+  const pulls = github
+    .command("pulls")
+    .description("Inspect and contribute to externally authoritative assets");
+  pulls.command("list <id>").action((id) => run("github-pulls-list", { id }));
+  pulls
+    .command("show <id> <number>")
+    .action((id, number) =>
+      run("github-pulls-show", { id, number: positive(number) }),
+    );
+  pulls
+    .command("create <id>")
+    .requiredOption("--expected-commit <sha>", "Inspected canonical commit")
+    .requiredOption("--title <title>", "Pull request title")
+    .option("--directory <path>", "Complete editable package directory")
+    .option("--body <text>", "Pull request body")
+    .option("--body-file <path>", "Pull request body file")
+    .option("--key <key>", "Stable key for exact retries")
+    .action((id, options) => run("github-pulls-create", { ...options, id }));
+  pulls
+    .command("revise <id> <number>")
+    .requiredOption("--expected-commit <sha>", "Inspected pull head commit")
+    .option("--title <title>", "Updated title")
+    .option("--directory <path>", "Complete package directory")
+    .option("--body <text>", "Updated body")
+    .option("--body-file <file>", "Updated body file")
+    .option("--key <key>", "Stable key for exact retries")
+    .action((id, number, options) =>
+      run("github-pulls-revise", { ...options, id, number: positive(number) }),
+    );
+  for (const action of ["review", "comment", "merge"] as const) {
+    const command = pulls
+      .command(`${action} <id> <number>`)
+      .requiredOption("--expected-commit <sha>", "Inspected pull head commit");
+    if (action !== "merge")
+      command
+        .option("--body <text>", "Review or comment")
+        .option("--body-file <file>", "Review or comment file");
+    if (action === "review")
+      command.addOption(
+        new Option("--event <event>", "Review decision")
+          .choices(["APPROVE", "REQUEST_CHANGES", "COMMENT"])
+          .makeOptionMandatory(),
+      );
+    if (action === "comment")
+      command
+        .option("--path <file>", "Inline file")
+        .option("--line <number>", "Inline line", positive)
+        .addOption(
+          new Option("--side <side>", "Inline diff side").choices([
+            "LEFT",
+            "RIGHT",
+          ]),
+        );
+    command.action((id, number, options) =>
+      run(`github-pulls-${action}`, {
+        ...options,
+        id,
+        number: positive(number),
+      }),
+    );
+  }
+  const describe = (parent: Command, descriptions: Record<string, string>) => {
+    for (const command of parent.commands)
+      if (!command.description() && descriptions[command.name()])
+        command.description(descriptions[command.name()]!);
+  };
+  describe(github, {
+    auth: "Link your GitHub account to BarnDog",
+    install: "Install the BarnDog GitHub App on an account or organization",
+    status: "Show your GitHub account and App connection",
+    installations: "List GitHub App installations you can use",
+    list: "List Skills and Hooks connected to GitHub repositories",
+    connect: "Connect a Skill or Hook to a GitHub repository",
+    import: "Import a Skill or Hook from a GitHub repository",
+    show: "Show a GitHub connection",
+    sync: "Sync a connection with its repository now",
+    "remote-head": "Show the repository's current main commit",
+    "resolve-mirror": "Resolve a mirror that diverged from BarnDog",
+  });
+  describe(pulls, {
+    list: "List pull requests for a connected asset",
+    show: "Show a pull request",
+    create: "Open a pull request with your edits",
+    revise: "Update an open pull request",
+    review: "Approve or request changes on a pull request",
+    comment: "Comment on a pull request",
+    merge: "Merge a pull request",
+  });
+}

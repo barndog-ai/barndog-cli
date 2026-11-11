@@ -1,0 +1,204 @@
+# BarnDog CLI
+
+Working notes for agents and contributors. `README.md` is for people deciding whether to use the CLI; user documentation lives at [barndog.dev/docs](https://barndog.dev/docs). This file covers how the code is organized and how its behavior is specified.
+
+## Commands
+
+```sh
+npm install
+npm run build          # tsc, then scripts/finish-build.mjs
+npm link               # puts the development `barndog` on PATH
+npm run barndog -- sync
+npm run format         # ESLint spacing fixes, then Prettier
+npm run lint
+npm run format:check
+npm test               # builds, then runs dist/tests/*.test.js
+```
+
+Before finishing a code change, run `npm run lint`, `npm run format:check`, and `npm test`. Unit tests use temporary home directories and need no server. End-to-end tests that drive the built CLI against a real BarnDog server, PostgreSQL, and Git run in the BarnDog server repository against a published release, so keep the public surface (commands, options, `--json` output, and the files under `~/.barndog/`) stable or change it deliberately.
+
+The command reference at [barndog.dev/docs/cli](https://barndog.dev/docs/cli) is checked against `createProgram()`: every runnable command needs documentation, and every long option must be mentioned in its command's section. Adding, renaming, or removing a command or option needs a matching docs update.
+
+`BARNDOG_DEFAULT_SERVER`, set in `.env` (see `.env.example`) or the shell when running `npm run build`, replaces the server the setup prompt offers (`src/config/build.ts`, default `https://barndog.dev`). `scripts/finish-build.mjs` writes it into `dist/config/build.js` and restores the executable bit on `dist/cli.js`.
+
+## Code style
+
+- Use double quotes, semicolons, and two spaces for indentation (no tabs).
+- Prettier handles formatting; ESLint enforces blank lines after import blocks, between class methods, and around standalone declarations. Keep related imports and class fields grouped.
+- Use `npm run lint:fix` for automatic lint fixes. Generated output, dependencies, machine-local state, and canonical skill fixtures are excluded from formatting.
+
+## Terminal output
+
+- Use the shared `primary()` formatter from `src/ui/theme.ts` for brand accents (`#C54836`), including the heading and interactive selection. Keep ordinary text neutral.
+- Define colors as named constants in `src/ui/theme.ts`; do not hardcode color values in UI components. Use `selected()` for green checked circles and `primary()` for the cursor and other brand accents.
+- Format commands shown in help, instructions, next steps, and errors consistently with bold terminal styling. For example, use `styleText('bold', 'barndog sync')` from `node:util`.
+- Respect terminal capabilities and `NO_COLOR`; use the appropriate output stream when applying styling. Do not print Markdown backticks as a substitute for terminal formatting.
+- Keep instructions concise and concrete. Refer to actual filenames or paths, such as `~/.barndog/config.yaml`, instead of vague terms such as "skill configuration directory."
+- Use whitespace and restrained emphasis to establish hierarchy. Avoid repeating keyboard instructions already displayed by the prompt.
+
+Commands render tables and key/value blocks through `src/ui/format.ts` and end failures with a `Fix:` command (`CliError` in `src/errors.ts`). `--json` prints the underlying data instead, and failures print `{"error":{"message","fix"}}` on stderr with the same exit code. Asset and set commands open a searchable picker (`src/ui/pick.ts`) only when the name is omitted in an interactive terminal; `--json`, `--no-interactive`, `CI`, or a non-TTY make missing names fail with a usage hint. Pickers draw from the right source: `install` from the catalog minus what is selected, `remove`/`disable`/`enable`/`rename` from the local inventory (`src/features/inventory/`). Bare `barndog` prints help grouped into Get started, Assets, Working copy & review, and Workspace sections.
+
+## Architecture
+
+Commander.js owns command parsing, argument validation, and generated help. Inquirer is responsible for interactive prompts.
+
+```text
+src/
+├── cli.ts                  # Executable entry point, exit codes and process errors
+├── program.ts              # Commander composition and dependencies
+├── version.ts              # `barndog --version` report
+├── commands/               # Thin command handlers and availability checks
+├── features/               # Workflows, grouped by feature; no UI imports
+├── harnesses/              # Native adapters, hook profiles, registry and detection
+├── config/                 # Settings, installation state and build-time config
+├── ui/                     # Prompts, result formatting and shared theme
+└── tests/                  # Command, workflow and filesystem coverage
+```
+
+- `src/cli.ts` is the executable entry point and handles process exit codes and errors. `src/program.ts` constructs a fresh Commander program and wires dependencies.
+- Register commands under `src/commands/` and in `createProgram()`. Keep handlers thin: parse arguments, call a workflow, and present its results. The program factory accepts injected operations and output callbacks, so parsing and help can be tested without installing anything or opening prompts.
+- Put reusable operations under `src/features/`, grouped by feature. Return structured results; do not import Commander, Inquirer, terminal styling, or UI modules into feature operations.
+- Keep native tool definitions and detection under `src/harnesses/`; reuse the registered adapters for discovery and installation destinations.
+- Keep configuration and installation-state persistence under `src/config/` and terminal prompts and formatting under `src/ui/`.
+- Tests live in `src/tests/`. Test command parsing separately from workflows and filesystem behavior. Do not introduce placeholder modules for features that are not being implemented.
+- The [asset selection engine](src/features/asset-selection/README.md) calculates workspace subscriptions, individual selections, exclusions, and activation for Skills, MCP configurations, and Hooks. It is a pure library; commands, settings, and native installation use it.
+- The CLI talks to a BarnDog server through the typed client and shared package helpers in [`@barndog-ai/api-contract`](https://www.npmjs.com/package/@barndog-ai/api-contract). That package is generated from the server; never copy its types into this repository.
+
+## Workspace sources
+
+`barndog init` chooses where assets come from: a BarnDog server (cloud or self-hosted), one Git repository (`--repo <url>`) on any host using the developer's own credentials and no BarnDog server, or a local folder (`--local`, `~/.barndog/workspace`) with the same layout. Skills, knowledge, MCP configurations, and Hooks install from Git and local workspaces as they do from cloud, with no prompt: keeping the repository safe is the job of its maintainers and members.
+
+`WorkspaceSource` (`src/features/environment/source.ts`) is all sync knows about where assets come from. `cloudSource` wraps the REST API; `src/features/git-workspace/` reads a bare clone in `~/.barndog/git/<workspaceId>.git` or a folder, through a `Snapshot` of Git object names, and builds the same catalog cloud returns. Asset IDs are hashes formatted as UUIDv4, and versions are Git tree or blob hashes. Nothing is checked out and no repository hooks run. `src/features/collaboration/workspace-git.ts` handles working copies, committing to review branches through a throwaway index. `barndog migrate --to <server>` moves a Git workspace to cloud. A local folder can stay active beside a Git or Cloud workspace (`src/features/git-workspace/overlay.ts`), and `barndog local move` copies its assets across. `barndog skills add`, `hooks add` and `mcp add` bring assets into the local folder from a repository, a harness or JSON (`src/features/imports/`). `src/commands/availability.ts` stops commands the current setup can't run, before they prompt or reach a server.
+
+Every workspace type registers a session-start `sync --auto` in each selected harness. Git limits its fetches to one per five minutes. Cloud goes through `src/features/environment/auto-sync.ts`: at most once per five minutes it reads `/v1/environment/catalog/revision` and syncs only when that differs from the revision last delivered, recorded in `~/.barndog/cloud-check.json`. A local folder beside cloud always syncs, because it can change at any time.
+
+## Setup
+
+`barndog init` chooses a workspace connection, takes its server URL (`--server <url>` supplies it directly), and signs in (`--no-browser` for SSH). Setup verifies and reuses existing sessions, or starts sign-in for missing or expired ones. It shows the organization and identity before selecting harnesses and organization, membership-team, and personal assets. Local mode cannot be combined with a server. After the user confirms starting over, setup asks for the source again and only contacts a server for cloud; choosing another source removes what the old one installed. Successful sign-in is retained when setup is cancelled; saved preferences and installed assets are preserved. Re-running `init` replaces the selection with exactly what is chosen.
+
+Harness detection lists Claude Code, Codex, and Cursor. It looks for executable commands on PATH and, on macOS, installed apps in `/Applications` and `~/Applications`. Skill directories do not count as installation evidence. An undetected harness remains selectable. First-time setup starts with nothing checked; rerunning setup restores saved choices. Ctrl+C cancels without changing settings. Onboarding requires a terminal; noninteractive sync works after onboarding and never silently selects all harnesses.
+
+Connected setup preselects the organization and, when the developer belongs to exactly one team, that team. Multiple membership teams start unchecked. Personal assets are an optional source. Each source offers all, recommended only, or custom selections. Personal recommendations are personal assets marked recommended in an organization or team distribution. Custom and personal choices select current individual assets; organization/team subscriptions follow matching future additions. Scopes already subscribed to (including repositories and non-member teams) are also offered, so unchecking removes them. Other repositories are not listed during init; `barndog sets list --origin repo --search <name>` finds one and `barndog sets install repo/<name>` adds it. Without `--mode`, set installation prompts for all, recommended only, or custom; noninteractive callers must pass `--mode`. Directory changes never choose or switch the team. Reopening setup restores saved choices as defaults but replaces the selection: unchecked sources, earlier individual picks outside the choices, exclusions, and disabled overrides are dropped. Shared knowledge defaults to enabled; `knowledge: false` or `barndog knowledge disable` turns it off, and setup preserves a saved disabled setting.
+
+## Selections and settings
+
+A set is an existing organization, team, or repository scope. Individually installing an asset records a persistent independent selection, even when a set already supplies it. Team switching replaces team subscriptions and retains other subscriptions, independent choices, exclusions, and activation overrides. `remove`, `enable`, `disable`, and `rename` exist under `skills`, `mcp`, and `hooks`; a removal also excludes an asset still supplied by a subscription. `sets switch` replaces the team or repository subscriptions of the same type. Reinstalling a scope or asset with existing overrides asks for a decision. Noninteractive callers must pass `--overrides preserve`, `--overrides clear`, or a JSON `--decisions` file containing `[{"assetId":"<uuid>","choice":"preserve"}]`.
+
+There is one user configuration, `~/.barndog/config.yaml`. All commands apply the same machine-wide environment regardless of the current directory. Version-1 local selections and version-2 API selections migrate without losing connection, harness, or activation settings. API selections live in `environment`:
+
+```yaml
+version: 2
+harnesses: [claude, codex, cursor]
+skills: []
+connection:
+  server: https://your-barndog.example
+  organizationId: <uuid>
+  developerId: <uuid>
+environment:
+  subscriptions: []
+  individualAssetIds: []
+  excludedAssetIds: []
+  disabledAssetIds: []
+knowledge: true
+```
+
+`sync --config <path>` is an explicit one-shot delivery input that shares the user's installation ownership state. It does not establish project configuration or change the default preferences. The override must include `version`, `harnesses`, and `skills`. `fixtures/config.yaml` is a development example and is never loaded automatically.
+
+`skills list`, `mcp list`, and `hooks list` show installed, then disabled, then available assets (origin, contributing sets, harnesses, state; `--paths` for locations). `--installed`, `--disabled`, and `--available` narrow the list. Catalog search (`skills search [query]`, also `mcp`/`hooks`) and `sets list` show 20 results per page by default with `--origin`, `--page`, and `--limit` (up to 100). Search and pagination filter the complete visible catalog locally; they do not install assets or change selections.
+
+## Safe native delivery
+
+BarnDog records only its own Skill links, MCP entries, and Hook registrations in `~/.barndog/state.json`. It never adopts an existing installation, even an identical one. Collisions and manual edits stop preflight before destination changes. JSONC comments and unrelated entries, TOML settings, native authentication data, and working copies survive updates and removal. A removed Skill link leaves its source intact. Published caches and editable working copies remain separate. Cached package modifications are rejected before reuse.
+
+Each published Skill or Hook is materialized once into a readable, stable folder, `~/.barndog/installed/{skills,hooks}/<name>`, from the immutable commit-pinned cache in `~/.barndog/packages/` (keyed by server, organization, developer, asset ID, and commit so identities and versions never mix). Harness links point at the stable folder; new versions are mirrored into it file by file (`src/features/environment/installed.ts`), so harness file watchers see updates. After each successful sync, `pruneCache` (`src/features/environment/packages.ts`) deletes cached versions no installed folder uses for the current identity; other identities' caches are untouched. `state.json` records each folder's fingerprint; hand edits stop sync with a fix. Folder writes are journaled like links and files.
+
+Skill links per harness:
+
+| Harness     | Destination               |
+| ----------- | ------------------------- |
+| Claude Code | `~/.claude/skills/<name>` |
+| Codex       | `~/.agents/skills/<name>` |
+| Cursor      | `~/.cursor/skills/<name>` |
+
+Cursor support targets local Agent sessions. Cursor also discovers the shared `~/.agents/skills/` and compatibility `~/.claude/skills/` locations, so those links may already expose a Skill there; BarnDog also manages Cursor's own directory. Harness selection controls which native directories BarnDog manages; it does not prevent a harness from discovering Skills through another harness's compatibility directory. Cursor Cloud Agents and remote workers are out of scope.
+
+Synchronization stages all content, resolves the complete catalog, checks runtimes and destinations, and journals writes before applying them. Every required package is fetched and validated before harness links change; missing assets, network failures, conflicting names, or unmanaged destinations fail without replacing the installation. A later command rolls an interrupted operation forward; unexpected intervening edits stop recovery. Preserve those edits before restoring a journal's expected state. Migration backups are in `~/.barndog/migrations/`. Never discard an unresolved journal to force an installation. A user-level lock (`~/.barndog/sync.lock`) prevents concurrent syncs.
+
+`doctor` recovers a pending sync first, then runs every check (configuration, harness detection, session, preflight, clashes, unsupported Hooks) without applying new native writes, printing a fix for each problem; it may populate the package cache. Unsupported Hook implementations are reported per harness and skipped. Codex configurations using a top-level inline `mcp_servers = { ... }` table are rejected safely; native table sections are supported. Custom `CLAUDE_CONFIG_DIR` and nondefault `CODEX_HOME` locations are reported as unsupported before delivery.
+
+## Name clashes
+
+Skill folder names and MCP server keys are shared namespaces per harness. `src/features/environment/names.ts` resolves clashes before staging. The asset already installed (else the most specific scope: dev, repo, team, org) keeps the name. In a terminal the user chooses to rename the new or installed asset to `<origin-type>-<origin-slug>-<name>`, skip the new one, or replace the installed one. Renames persist in `localNames` (asset ID → name) in `config.yaml`; skip and replace persist in `disabledAssetIds`. A renamed Skill's installed `SKILL.md` `name:` is rewritten to match its folder. Automatic renames are dropped once the clash is gone. Without a terminal, the newcomer is skipped for that run, the sync completes, and a `rename … --as …` fix is printed; `doctor` and `status` list unresolved clashes.
+
+## MCP configurations
+
+The JSON file for `mcp create`/`update` is the server's distinct MCP definition: transport `stdio` with `command`, `args`, and `environment`, or `http` (Streamable HTTP) with `url` and `headers`; plus `description`, `authentication`, and optional `sourceUrl`. Environment/header values are `{ "secretRef": "LOCAL_ENVIRONMENT_VARIABLE" }`, never credential values. Claude and Cursor receive native variable references; Codex receives native forwarding/header references and, for renamed stdio variables, a local reference-only launcher. Missing values fail locally at runtime. Native OAuth remains per harness. Claude/Codex login runs in BarnDog's neutral user directory; Cursor authentication uses its settings UI. Unchanged syncs do not log out or rewrite registrations. `--key` makes cloud writes retry exactly.
+
+## Hooks
+
+A Hook scaffold (`hooks create`) is a private editable working copy, not an installation. Hook collaboration reuses the Skill working-copy/review machinery with distinct Hook schemas and endpoints. `hooks pull`, `versions`, `show`, `diff`, and `changes` provide the matching workflows. Root `push`, `pull`, `status`, `diff`, and `resolve` recognize the registered package kind. Only explicit `hooks test` runs a script; publishing, pulling, and syncing never do. Choose a handler explicitly when an event has several commands. Tests inherit the caller's working directory and runtime environment, supply the chosen native JSON input, and limit time/output. Script execution currently requires a POSIX shell.
+
+Each manifest declares its own harness events, scripts, requirements, and compatibility. BarnDog binds `BARNDOG_HOOK_ROOT` to the stable installed package folder without translating events or changing working-directory semantics. The harness's own plugin-root variables (`rootVariables` in its hook profile, such as `CLAUDE_PLUGIN_ROOT`) are bound to the same folder. Each harness's hook profile lives in `src/harnesses/<harness>.ts`: the settings files to detect, its events, and its root variables. `hooks add` installs a Hook only for harnesses whose settings it finds and never translates between them; for the rest, `src/features/hooks/adapt.ts` writes one agent prompt (`hooks adapt` reprints it). `src/features/hooks/divergence.ts` warns when harnesses run different scripts, using `divergentHookTools` from the contract package so the workspace UI shows the same warning. Native harness trust/review requirements still apply after registration. `hooks show` exposes the manifest; `hooks compatibility` reports the version-specific support matrix and unmet local requirements; explicit test success does not change the author's compatibility claims.
+
+## Knowledge and discovery
+
+Knowledge startup integration supplies only names and descriptions of `always` entries. Full content requires `knowledge get`; on-demand entries remain in the listing. Disabling integration removes only BarnDog's owned index registration. Discovery follows tenant visibility. Skill/Hook promotion creates a proposal for a new scope-owned asset; MCP promotion creates a separate authorized configuration. A fork into your own personal scope is published at once; other targets need a review. Original personal assets remain intact.
+
+Repository inspection matches Git fetch remotes against web-managed `gitRemote` values. SSH/HTTPS normalize to the same credential-free host/path. No match or ambiguous mappings are reported without guessing from folder names.
+
+## Authentication
+
+`barndog login` prompts for the server URL on first use; `--server <origin>` supplies it directly, and later logins reuse the saved server. The browser opens the server's sign-in page; the user confirms that its code matches the terminal. `--no-browser` displays the URL/code without opening a browser. An existing session is reported instead of reopening the browser unless `--force` is passed. An operator must bind the user's identity to an active BarnDog developer before organization access is granted.
+
+`auth status` / `whoami` show identity, organization, role, server and session expiry, and exit 1 when signed out. `logout` revokes the selected server's credential and removes its local copy; the saved connection remains the default server. Sessions last up to 30 days and may end earlier.
+
+Credentials are stored in `~/.barndog/credentials.json` (mode `0600`, parent directory `0700`), keyed by server origin. Identity-provider keys and refresh tokens stay on the server. API and package requests attach the BarnDog credential, reject redirects, and require HTTPS except for loopback development servers. Login never prints the credential. Remove API selections before switching server, organization, or developer. Authentication and network failures preserve settings and installed files. Logout and access removal cannot retract content already downloaded.
+
+## Working copies and review
+
+`skills pull <name> --origin <origin>` creates an editable working folder (default `./<name>`; `--directory <path>` selects another new folder) and refuses existing destinations. Origins accept `org`, `team/<slug>`, `repo/<slug>`, `dev/<slug>`, `me`, scope UUIDs, and colon selectors such as `org:<slug>`. For a new Skill, create its folder and `SKILL.md`, then run `barndog push --origin <origin>` there. No local Git repository or commits are required. Local `.git` state is excluded from uploads; symlinks and unsafe packages are rejected. Working folders are independent of installed harness packages; pull, edit, review, and push leave installation choices alone.
+
+Reviews and merges require the revision that was inspected. Approval does not publish. Members merge under their team's or repository's approval and merger settings; defaults are one other member's approval and any member may merge. Request-changes reviews remain blocking until the requesting eligible reviewer approves the current revision. Material revisions invalidate approvals. Authors can't review their own changes. Scope admins and organization admins can bypass review thresholds; personal owners may publish their own Skills. `push --publish` requires that direct-publication authority. Normal pushes create suggestions even for admins. Authors and authorized admins may reject; rejected proposals require `push --new`.
+
+Inline comments take `--path SKILL.md --side new --start-line 6 --end-line 6`. `--replacement-file <path>` and `--expected-file <path>` suggest a replacement using exact text files; a file's closing newline isn't part of the selected lines. `--body-file <path>` supplies longer comments, `--thread <id>` replies, `changes apply <id> <thread> --revision <number>` applies a current suggestion, and `changes resolve-discussion` / `changes reopen-discussion` set discussion state. Applying a suggestion creates a revision; the author runs `barndog pull` to receive it.
+
+`barndog pull` first reconciles remote proposal edits, then merges the latest published version into the working copy. Nonconflicting text edits combine automatically. Conflicting text has base/local/remote markers; binary and modify/delete conflicts retain the local choice for explicit resolution. After editing, `barndog resolve <path>` marks a file resolved; push is blocked until every conflict is resolved. Stale proposals cannot merge, including admin merges.
+
+Working-copy records, base/proposal snapshots, retry keys, and conflict state live under `~/.barndog/workspaces/`, keyed by canonical folder path. Commands work from the working folder or its descendants. Moving a working folder does not move its registration. Recovery snapshots under `workspaces/snapshots/` retain the pre-pull files and metadata. Interrupted local writes resume on the next working-copy command. Ambiguous upload failures retain the original submission for exact retry; definitive validation/conflict failures allow reconciliation without discarding local edits. Server or identity mismatches block remote operations.
+
+`features/collaboration/workspace.ts` orchestrates package creation, local reconciliation, and submission. `workspace-store.ts` owns persisted records, the workspace lock, snapshots, and interrupted-write recovery. `workspace-github.ts` owns external pull-request reconciliation and submission. Changes here must preserve existing working-copy records and retry keys.
+
+## GitHub connections and mirrors
+
+Connect, import, and transfer make GitHub authoritative. Working-copy `push` creates or revises the same external PR; `pull` reconciles PR edits and newly published main content. Pending uploads retain exact payloads and keys across ambiguous failures. `github pulls review`, `comment`, and `merge` use an inspected `--expected-commit`. Standalone `pulls create` and `revise` accept a complete `--directory`, title/body, expected commit, and retry key. Publication occurs only after canonical main is fetched and validated; `push --publish` still obeys GitHub permissions and protections.
+
+`--mode mirror` keeps BarnDog authoritative and uses internal collaboration. Divergence requires `github resolve-mirror <id> --action <use-barndog|use-mirror|disconnect> --expected-version <uuid> --expected-remote <sha|absent> --key <retry-key>`. No mode silently changes authority or overwrites unrelated history. `github import --authority barndog` makes an independent BarnDog-owned copy with published ancestry; `--authority github` (the default) keeps connected-import behavior. `github create-repository` creates a destination and exports published history; an ambiguous create never silently adopts an existing repository.
+
+## Legacy local-source format
+
+Version-1 configurations list local Skill directories directly and still work:
+
+```yaml
+version: 1
+harnesses: [claude, codex]
+skills:
+  - id: 729b9d5a-4a8c-4aa7-9b8d-975a55ac373e
+    source: ./skills/example
+    enabled: true
+```
+
+Each selection has a stable UUIDv4, a local source directory, and an explicit enabled flag. Relative sources resolve from the configuration file, so `./skills/example` means `~/.barndog/skills/example`; absolute paths also work. The directory must contain `SKILL.md` with a lowercase hyphenated `name` matching the directory name and a nonempty `description` in YAML frontmatter.
+
+The next sync adopts these entries (`adoptLinkedFolders` in `src/features/imports/local.ts`): it copies each folder into the local workspace at `~/.barndog/workspace/org/skills/<name>`, removes the entry from `skills`, and leaves the original folder untouched. An entry with `enabled: false` stays disabled. From then on the workspace copy is what installs, so editing or removing the original folder, or the `skills` entry, no longer changes what is installed; edit or delete the workspace copy instead. A folder that can't be copied stays linked and the sync reports why. Adoption happens even when the copied Skill is skipped by a name clash. Local directories are never uploaded to a server.
+
+Deselecting a harness removes its managed links and keeps selections. Sync refuses to overwrite unmanaged destinations, including links whose ownership records were lost, and never recursively deletes a skill directory.
+
+## Live distribution check
+
+Filesystem tests alone do not establish that a live agent discovered or used a Skill. To check native discovery, select `fixtures/skills/barndog-distribution-check`, run `barndog sync`, then in a fresh session invoke `/barndog-distribution-check` (Claude Code), `$barndog-distribution-check` (Codex), or `/barndog-distribution-check` in a local Cursor Agent chat. Each agent must read the supporting file and return:
+
+```text
+BarnDog skill distribution verified: amber-otter-729.
+```
+
+Then disable the fixture, sync, and verify in fresh sessions that it is gone; re-enable and sync to restore it. A second `barndog sync` should report links unchanged. Native discovery references: [Claude Code](https://code.claude.com/docs/en/skills), [Codex](https://developers.openai.com/codex/skills), [Cursor](https://cursor.com/docs/skills).
