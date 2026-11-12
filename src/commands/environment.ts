@@ -15,7 +15,6 @@ import {
 import {
   assetListing,
   inventoryHints,
-  kindLabels,
   type ListFilter,
   renderCatalog,
   renderInventory,
@@ -37,6 +36,7 @@ import {
   section,
   table,
 } from "../ui/format.js";
+import { assetKindList, assetKinds } from "../features/asset-kinds/index.js";
 
 export { runSelection } from "../ui/selection.js";
 
@@ -99,22 +99,21 @@ type ListCommandOptions = ListFilter & {
   limit: number;
 };
 
+/** What `add` copies from, as its usage shows it. */
+const addArguments: Record<AssetKind, string> = {
+  skill: " <source>",
+  mcp: "",
+  hook: " <url>",
+};
+
 export function registerEnvironment(program: Command, context: CommandContext) {
-  for (const kind of ["skill", "mcp", "hook"] as const) {
-    const labels = kindLabels[kind];
-    const group = labels.group;
-    const addCommand = `barndog ${group} add${
-      kind === "mcp" ? "" : kind === "skill" ? " <source>" : " <url>"
-    }`;
+  for (const kind of assetKindList) {
+    const labels = assetKinds[kind];
+    const group = labels.command;
+    const addCommand = `barndog ${group} add${addArguments[kind]}`;
     const command = program
       .command(group)
-      .description(
-        kind === "skill"
-          ? "Install, browse and manage Skills"
-          : kind === "mcp"
-            ? "Install, browse and manage MCP servers"
-            : "Install, browse and manage Hooks",
-      );
+      .description(`Install, browse and manage ${labels.many}`);
 
     const listCommand = command
       .command("list")

@@ -26,7 +26,7 @@ import { originLabel } from "../environment/names.js";
 import { environmentCatalog, request } from "../environment/remote.js";
 import { synchronize } from "../environment/sync.js";
 import { locked } from "../environment/transaction.js";
-import { assetFolder, stableId, type RepoAsset } from "./format.js";
+import { assetPath, stableId, type RepoAsset } from "./format.js";
 import { checkRepositoryUrl, cloneOrigin, git } from "./git.js";
 import {
   connectGitWorkspace,
@@ -208,9 +208,7 @@ async function moveToGit(
     const path =
       item.kind === "knowledge"
         ? `org/knowledge/${item.name}.md`
-        : item.kind === "mcp"
-          ? `${scope.path}/mcp/${item.name}.yaml`
-          : assetFolder(scope.path, item.kind, item.name);
+        : assetPath(scope.path, item.kind, item.name);
     if (
       shared.assets.some((asset) => asset.path === path) ||
       shared.knowledge.some((doc) => doc.path === path)
@@ -360,8 +358,9 @@ async function moveToCloud(
         entries: item.entries,
         definition: item.definition,
       };
-      if (item.kind === "mcp") await publishMcp(asset, scope, conn, home);
-      else await publishPackage(asset, scope, conn, home);
+      if (asset.kind === "mcp") await publishMcp(asset, scope, conn, home);
+      else
+        await publishPackage({ ...asset, kind: asset.kind }, scope, conn, home);
       rows.push({ ...base, status: "moved" });
     } catch (error) {
       rows.push({

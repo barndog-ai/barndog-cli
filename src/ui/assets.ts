@@ -5,7 +5,6 @@ import type {
   InventoryState,
 } from "../features/inventory/index.js";
 import type { CatalogAsset } from "../features/catalog/index.js";
-import type { AssetKind } from "../features/asset-selection/types.js";
 import { assetPage, type ListOptions } from "./asset-list.js";
 import { displayPath } from "./output.js";
 import {
@@ -20,33 +19,6 @@ import {
   section,
   table,
 } from "./format.js";
-
-export const kindLabels: Record<
-  AssetKind,
-  { group: string; one: string; a: string; many: string; title: string }
-> = {
-  skill: {
-    group: "skills",
-    one: "Skill",
-    a: "a Skill",
-    many: "Skills",
-    title: "Skills",
-  },
-  mcp: {
-    group: "mcp",
-    one: "MCP server",
-    a: "an MCP server",
-    many: "MCP servers",
-    title: "MCP servers",
-  },
-  hook: {
-    group: "hooks",
-    one: "Hook",
-    a: "a Hook",
-    many: "Hooks",
-    title: "Hooks",
-  },
-};
 
 export const harnessNames = (harnesses: readonly Harness[]) =>
   harnesses.map((h) => adapters[h].name).join(", ");

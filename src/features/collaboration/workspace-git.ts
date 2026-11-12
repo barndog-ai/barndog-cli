@@ -19,7 +19,7 @@ import type { GitWorkspace } from "../../config/settings.js";
 import type { AssetKind } from "../asset-selection/types.js";
 import { CliError } from "../../errors.js";
 import {
-  assetFolder,
+  assetPath,
   loadWorkspace,
   type RepoAsset,
   type RepoScope,
@@ -40,7 +40,12 @@ import {
   recordFetch,
   trackingRef,
 } from "../git-workspace/source.js";
-import { metadata as packageMetadataFor, type PackageKind } from "./domain.js";
+import { metadata as packageMetadataFor } from "./domain.js";
+import {
+  assetKinds,
+  assetNotFound,
+  type PackageKind,
+} from "../asset-kinds/index.js";
 import { matchesOrigin } from "./remote.js";
 import { markResolved } from "./workspace.js";
 import {
@@ -73,11 +78,7 @@ function selectAsset(
       asset.name === name &&
       matchesOrigin(asset.origin, origin, model),
   );
-  if (matches.length !== 1)
-    throw new CliError(
-      `No ${kind === "skill" ? "Skill" : kind === "hook" ? "Hook" : "MCP server"} named ${name} in ${origin}.`,
-      `barndog ${kind === "skill" ? "skills" : kind === "hook" ? "hooks" : "mcp"} search ${name}`,
-    );
+  if (matches.length !== 1) throw assetNotFound(kind, name, origin);
   return matches[0]!;
 }
 
@@ -117,34 +118,6 @@ const usable = (asset: RepoAsset) => {
     );
   return asset;
 };
-
-const scaffold = (kind: PackageKind, name: string): PackageEntry[] =>
-  kind === "skill"
-    ? [
-        {
-          path: "SKILL.md",
-          data: Buffer.from(
-            `---\nname: ${name}\ndescription: Describe this Skill\n---\n\nAdd instructions here.\n`,
-          ),
-          executable: false,
-        },
-      ]
-    : [
-        {
-          path: "hook.yaml",
-          data: Buffer.from(
-            `name: ${name}\ndescription: Describe this Hook\nimplementations:\n  claude:\n    compatibility: supported\n    scripts: [scripts/hook.sh]\n    requirements:\n      commands: [sh]\n    events:\n      SessionStart:\n        - hooks:\n            - type: command\n              command: '\${BARNDOG_HOOK_ROOT}/scripts/hook.sh'\n`,
-          ),
-          executable: false,
-        },
-        {
-          path: "scripts/hook.sh",
-          data: Buffer.from(
-            "#!/bin/sh\n# Read native input; implement the desired behavior here.\ncat >/dev/null\n",
-          ),
-          executable: true,
-        },
-      ];
 
 async function newFolder(cwd: string, target: string) {
   const path = resolve(cwd, target);
@@ -229,7 +202,7 @@ export function createGitAsset(
     await startWorkingCopy(
       root,
       { kind, git: workspace, name: options.name, scope, baseCommit: commit },
-      scaffold(kind, options.name),
+      assetKinds[kind].scaffold(options.name),
       [],
       home,
     );
@@ -264,7 +237,7 @@ const assetIn = (model: WorkspaceModel, work: GitWorkingCopy) =>
   model.assets.find(
     (asset) =>
       asset.kind === work.kind &&
-      asset.path === assetFolder(work.scope.path, work.kind, work.name),
+      asset.path === assetPath(work.scope.path, work.kind, work.name),
   );
 
 const fingerprint = (entries: PackageEntry[]) => packageFingerprint(entries);
@@ -401,12 +374,12 @@ export function pushGitWorkingCopy(
     const files = validatePackageEntries(
       await readDirectory(work.root),
       undefined,
-      work.kind === "hook" ? "hook.yaml" : "SKILL.md",
+      assetKinds[work.kind].manifest,
     );
     if (packageMetadataFor(files, work.kind).name !== work.name)
       throw new Error("Package name cannot change in this working copy");
     const repo = gitDirectory(workspace.workspaceId, home);
-    const path = assetFolder(work.scope.path, work.kind, work.name);
+    const path = assetPath(work.scope.path, work.kind, work.name);
     const change = {
       replace: path,
       files: files.map((file) => ({

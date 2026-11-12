@@ -10,6 +10,11 @@ import { resolve } from "node:path";
 import { CliError, friendlyHint, friendlyMessage } from "../errors.js";
 import { ApiError } from "@barndog-ai/api-contract";
 import type { PushOptions } from "../features/collaboration/index.js";
+import {
+  assetKinds,
+  packageKindList,
+  type PackageKind,
+} from "../features/asset-kinds/index.js";
 import { pickOne } from "../ui/pick.js";
 import { resolveOrigin } from "./origin.js";
 import { clean, json, ORIGIN_HELP, originLabel, warn } from "../ui/format.js";
@@ -32,33 +37,39 @@ type Run = (operation: Promise<unknown>, options?: RunOptions) => Promise<void>;
 
 type WithKind = <T extends object>(options: T) => T & { kind?: "hook" };
 
-/** Skill and Hook changes are separate lists; point at the other when an ID isn't here. */
+/** Skill changes also have the root `barndog changes`, which server hints name. */
+const changesCommand: Record<PackageKind, string> = {
+  skill: "barndog changes",
+  hook: "barndog hooks changes",
+};
+
+/** Each package kind has its own list of changes; point at the others when an ID isn't here. */
 function reviewError(
   error: unknown,
-  kind: "skill" | "hook",
+  kind: PackageKind,
   { changeId, thread }: RunOptions,
 ) {
   if (!(error instanceof ApiError)) return error;
   if (error.status === 404 && changeId && !thread)
     return new CliError(
-      `No ${kind === "skill" ? "Skill" : "Hook"} Suggested Change has that ID.`,
-      `barndog ${kind === "skill" ? "hooks changes" : "changes"} show ${changeId}`,
+      `No ${assetKinds[kind].one} Suggested Change has that ID.`,
+      packageKindList
+        .filter((other) => other !== kind)
+        .map((other) => `${changesCommand[other]} show ${changeId}`)
+        .join(" or "),
       { cause: error },
     );
   const hint = friendlyHint(error);
-  return kind === "hook" && hint
-    ? new CliError(
-        friendlyMessage(error),
-        hint.replace(/^barndog changes/, "barndog hooks changes"),
-        { cause: error },
-      )
+  const ownHint = hint?.replace(/^barndog changes/, changesCommand[kind]);
+  return ownHint !== hint
+    ? new CliError(friendlyMessage(error), ownHint, { cause: error })
     : error;
 }
 
 export function registerCollaboration(
   program: Command,
   context: CommandContext,
-  kind: "skill" | "hook" = "skill",
+  kind: PackageKind = "skill",
 ) {
   // Skill is the default package kind, so only Hook operations name theirs.
   const withKind: WithKind = (options) =>
@@ -82,11 +93,9 @@ export function registerCollaboration(
     await run(context.pushWorkingCopy(withKind(options)));
     await warnDivergence(nearestHookFolder(process.cwd()));
   };
-  const skills = program.commands.find(
-    (c) => c.name() === (kind === "hook" ? "hooks" : "skills"),
-  )!;
-  const noun = kind === "skill" ? "Skill" : "Hook";
-  const group = kind === "skill" ? "skills" : "hooks";
+  const noun = assetKinds[kind].one;
+  const group = assetKinds[kind].command;
+  const kindCommand = program.commands.find((c) => c.name() === group)!;
   /** Fills a missing name and origin from a searchable catalog list. */
   const choose = async (
     name: string | undefined,
@@ -118,7 +127,7 @@ export function registerCollaboration(
     );
     return { name: row.name, origin: originLabel(row.origin) };
   };
-  skills
+  kindCommand
     .command("pull [name]")
     .option("--origin <origin>", ORIGIN_HELP)
     .option("--directory <path>", "Folder for the editable copy")
@@ -176,7 +185,7 @@ export function registerCollaboration(
     ["show", "Print the files of a published version"],
     ["diff", "Compare two published versions"],
   ] as const) {
-    const command = skills
+    const command = kindCommand
       .command(`${name} [name]`)
       .description(description)
       .option("--origin <origin>", ORIGIN_HELP);
@@ -204,7 +213,7 @@ export function registerCollaboration(
       );
     });
   }
-  skills
+  kindCommand
     .command("push [name]")
     .description("Propose this working copy's edits as a Suggested Change")
     .option(
@@ -215,7 +224,7 @@ export function registerCollaboration(
     .option("--new", "Start a new proposal")
     .option("--title <title>", "Proposal title")
     .action((name, options) => push({ ...options, name }));
-  skills
+  kindCommand
     .command("create <name>")
     .requiredOption("--origin <origin>", ORIGIN_HELP)
     .option("--directory <path>", "New editable folder")
@@ -225,7 +234,7 @@ export function registerCollaboration(
     .action((name, options) =>
       run(context.createPackage(withKind({ ...options, name }))),
     );
-  for (const parent of kind === "hook" ? [skills] : [program, skills])
+  for (const parent of kind === "hook" ? [kindCommand] : [program, kindCommand])
     registerChanges(parent, context, withKind, run);
 }
 

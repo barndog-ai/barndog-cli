@@ -23,6 +23,7 @@ import {
   type Snapshot,
   type SnapshotEntry,
 } from "./snapshot.js";
+import { assetKinds } from "../asset-kinds/index.js";
 
 export const CONFIG_FILE = "barndog.yaml";
 
@@ -401,13 +402,11 @@ export function assertAssetName(name: string, fix: string) {
     throw new CliError(`${name} can't be used as a name. ${NAME_RULE}.`, fix);
 }
 
-/** Where a new asset of this kind belongs inside a scope. */
-export function assetFolder(
-  scopePath: string,
-  kind: "skill" | "hook",
-  name: string,
-) {
-  return `${scopePath}/${kind === "skill" ? "skills" : "hooks"}/${name}`;
+/** Where a new asset belongs inside a scope: a folder per package, a file per MCP server. */
+export function assetPath(scopePath: string, kind: AssetKind, name: string) {
+  const folder = `${scopePath}/${assetKinds[kind].folder}`;
+  if (kind === "mcp") return `${folder}/${name}.yaml`;
+  return `${folder}/${name}`;
 }
 
 const WELCOME = `# BarnDog workspace

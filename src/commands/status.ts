@@ -1,13 +1,9 @@
 import type { Command } from "commander";
 import type { CommandContext } from "./context.js";
-import {
-  harnessNames,
-  inventoryHints,
-  kindLabels,
-  renderInventory,
-} from "../ui/assets.js";
+import { harnessNames, inventoryHints, renderInventory } from "../ui/assets.js";
 import { renderCollaboration } from "../ui/collaboration.js";
 import { dim, fields, heading, hint, json, ok, plural } from "../ui/format.js";
+import { assetKindList, assetKinds } from "../features/asset-kinds/index.js";
 
 export function registerStatus(program: Command, context: CommandContext) {
   program
@@ -50,20 +46,20 @@ export function registerStatus(program: Command, context: CommandContext) {
         context.write(line);
       if (inventory.offline)
         context.write(dim(`\nShowing local state only: ${inventory.offline}`));
-      for (const kind of ["skill", "mcp", "hook"] as const) {
+      for (const kind of assetKindList) {
         const items = inventory.items.filter((item) => item.kind === kind);
         context.write("");
         if (!items.length) {
-          context.write(`${kindLabels[kind].title} ${dim("(0)")}`);
+          context.write(`${assetKinds[kind].many} ${dim("(0)")}`);
           context.write(
             dim(
-              `  None. ${`barndog ${kindLabels[kind].group} install`} to add some.`,
+              `  None. ${`barndog ${assetKinds[kind].command} install`} to add some.`,
             ),
           );
           continue;
         }
         for (const line of renderInventory(items, {
-          heading: kindLabels[kind].title,
+          heading: assetKinds[kind].many,
           paths: options.paths,
         }))
           context.write(line);

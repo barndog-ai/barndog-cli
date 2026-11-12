@@ -1,4 +1,5 @@
-import { hookSchema, mcpSchema, skillSchema } from "@barndog-ai/api-contract";
+import { mcpSchema } from "@barndog-ai/api-contract";
+import { assetKinds } from "../asset-kinds/index.js";
 
 import type { Connection } from "../../config/settings.js";
 import type { AssetKind, AssetReference } from "../asset-selection/types.js";
@@ -32,7 +33,7 @@ export function cloudSource(conn: Connection, home: string): WorkspaceSource {
       const data = await currentAsset(kind, reference, conn, home);
       return cachedPackage(
         kind,
-        kind === "skill" ? skillSchema.parse(data) : hookSchema.parse(data),
+        assetKinds[kind].schema.parse(data),
         conn,
         home,
       );

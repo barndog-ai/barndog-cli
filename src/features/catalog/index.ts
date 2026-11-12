@@ -2,8 +2,7 @@ import { homedir } from "node:os";
 import { mcpListSchema } from "@barndog-ai/api-contract";
 import { readSettings, type Connection } from "../../config/settings.js";
 import { CliError } from "../../errors.js";
-import { catalog as skillCatalog } from "../skills/remote.js";
-import { hookCatalog } from "../collaboration/remote.js";
+import { packageCatalogs } from "../collaboration/remote.js";
 import { request } from "../environment/remote.js";
 import { openRepoSource } from "../environment/workspace-source.js";
 import { activeLocal, localOverlay } from "../git-workspace/overlay.js";
@@ -110,10 +109,7 @@ async function sharedCatalog(
     );
   const conn = settings.connection;
   if (kind === "mcp") return mcpCatalog(conn, home);
-  const packages =
-    kind === "skill"
-      ? await skillCatalog(conn, home)
-      : await hookCatalog(conn, home);
+  const packages = await packageCatalogs[kind](conn, home);
   return packages.map((item) => ({
     id: item.id,
     kind,

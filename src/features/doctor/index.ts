@@ -13,6 +13,7 @@ import { adapters } from "../../harnesses/registry.js";
 import { authStatus } from "../auth/session.js";
 import { LoginRequiredError } from "../auth/transport.js";
 import { synchronize } from "../environment/sync.js";
+import { assetKinds } from "../asset-kinds/index.js";
 
 export type Check = {
   name: string;
@@ -149,8 +150,8 @@ export async function doctor(home = homedir()): Promise<Check[]> {
         checks.push({
           name: "Name clash",
           status: "warn",
-          detail: `${event.skipped.origin} ${event.skipped.name} is skipped: ${event.installed.origin} already installs a ${event.kind === "skill" ? "Skill" : "MCP server"} with that name.`,
-          fix: `barndog ${event.kind === "skill" ? "skills" : "mcp"} rename ${event.skipped.name} --origin ${event.skipped.origin} --as ${event.skipped.rename}`,
+          detail: `${event.skipped.origin} ${event.skipped.name} is skipped: ${event.installed.origin} already installs ${assetKinds[event.kind].a} with that name.`,
+          fix: `barndog ${assetKinds[event.kind].command} rename ${event.skipped.name} --origin ${event.skipped.origin} --as ${event.skipped.rename}`,
         });
       if (event.type === "invalid")
         checks.push({

@@ -15,20 +15,14 @@ import {
   packageFingerprint,
   type PackageEntry,
 } from "@barndog-ai/api-contract/package";
-
-export type InstalledKind = "skill" | "hook";
+import { assetKinds, type PackageKind } from "../asset-kinds/index.js";
 
 /** Readable, stable folders that harnesses resolve; the commit-pinned cache stays internal. */
-export function installedRoot(home: string, kind: InstalledKind) {
-  return join(
-    home,
-    ".barndog",
-    "installed",
-    kind === "skill" ? "skills" : "hooks",
-  );
+export function installedRoot(home: string, kind: PackageKind) {
+  return join(home, ".barndog", "installed", assetKinds[kind].folder);
 }
 
-export function installedPath(home: string, kind: InstalledKind, name: string) {
+export function installedPath(home: string, kind: PackageKind, name: string) {
   return join(installedRoot(home, kind), name);
 }
 

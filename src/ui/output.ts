@@ -20,6 +20,7 @@ import {
 import { ApiError } from "@barndog-ai/api-contract";
 
 import { CliError, friendlyHint, friendlyMessage } from "../errors.js";
+import { assetKinds } from "../features/asset-kinds/index.js";
 
 export function displayPath(path: string): string {
   const homeRelative = relative(homedir(), path);
@@ -177,8 +178,8 @@ export function renderSyncOutput(
     else if (event.type === "clash")
       output.push(
         "",
-        `${warn("!")} ${event.kind === "skill" ? "Skill" : "MCP server"} ${bold(event.skipped.name)} from ${event.skipped.origin} was skipped: ${event.installed.origin} already installs one with that name.`,
-        `  ${hint(`barndog ${event.kind === "skill" ? "skills" : "mcp"} rename ${event.skipped.name} --origin ${event.skipped.origin} --as ${event.skipped.rename}`, "Fix")}`,
+        `${warn("!")} ${assetKinds[event.kind].one} ${bold(event.skipped.name)} from ${event.skipped.origin} was skipped: ${event.installed.origin} already installs one with that name.`,
+        `  ${hint(`barndog ${assetKinds[event.kind].command} rename ${event.skipped.name} --origin ${event.skipped.origin} --as ${event.skipped.rename}`, "Fix")}`,
       );
   output.push("");
   return output;

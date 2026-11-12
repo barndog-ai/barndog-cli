@@ -28,7 +28,6 @@ import {
   installedPath,
   installedRoot,
   treeFingerprint,
-  type InstalledKind,
 } from "./installed.js";
 import {
   installedName,
@@ -71,6 +70,11 @@ import {
   type Write,
 } from "./transaction.js";
 import type { AssetCatalog } from "../asset-selection/types.js";
+import {
+  assetKinds,
+  packageKindList,
+  type PackageKind,
+} from "../asset-kinds/index.js";
 
 const nativeSchema = z.array(
   z
@@ -131,7 +135,7 @@ export const clashPrompt: { resolver?: ClashResolver } = {};
 
 type InstalledTree = {
   id: string;
-  kind: InstalledKind;
+  kind: PackageKind;
   path: string;
   source: string;
   rename: string | null;
@@ -143,7 +147,7 @@ const installedSchema = z.array(
   z
     .object({
       id: z.string(),
-      kind: z.enum(["skill", "hook"]),
+      kind: z.enum(packageKindList),
       path: z.string(),
       fingerprint: z.string(),
       versionId: z.string().optional(),
@@ -383,7 +387,7 @@ export async function synchronize(
     }
     const stage = async (
       id: string,
-      kind: InstalledKind,
+      kind: PackageKind,
       name: string,
       source: string,
       rename: string | null,
@@ -590,7 +594,7 @@ export async function synchronize(
             !settings.connection &&
             !settings.gitWorkspace
               ? "To keep them, copy that folder somewhere else first."
-              : `To keep them, make an editable copy with \`barndog ${entry.kind === "skill" ? "skills" : "hooks"} pull\` first.`
+              : `To keep them, make an editable copy with \`barndog ${assetKinds[entry.kind].command} pull\` first.`
           }`,
           `rm -rf ${shellQuote(entry.path)} && barndog sync`,
         );

@@ -13,6 +13,7 @@ import type { AssetKind } from "../asset-selection/types.js";
 import { randomUUID } from "node:crypto";
 import { moveLocalAssets, type MoveResult } from "../git-workspace/move.js";
 import { LOCAL_ORIGIN } from "../git-workspace/overlay.js";
+import { assetKindList } from "../asset-kinds/index.js";
 
 export async function developers(search?: string, home = homedir()) {
   const conn = await connection(home);
@@ -89,7 +90,7 @@ export type PromoteInput = {
 };
 
 const promotionSchema = z.object({
-  kind: z.enum(["skill", "hook", "mcp"]),
+  kind: z.enum(assetKindList),
   id: z.uuid(),
   changeId: z.uuid().optional(),
 });

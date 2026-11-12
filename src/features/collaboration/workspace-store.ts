@@ -21,6 +21,7 @@ import {
   type PackageEntry,
 } from "@barndog-ai/api-contract/package";
 import { readDirectory } from "@barndog-ai/api-contract/collaboration";
+import { packageKindList } from "../asset-kinds/index.js";
 
 const filesSchema = z.array(
   z.object({ path: z.string(), content: z.string(), executable: z.boolean() }),
@@ -29,7 +30,7 @@ const filesSchema = z.array(
 export type Files = z.infer<typeof filesSchema>;
 
 const workspaceSchema = z.object({
-  kind: z.enum(["skill", "hook"]).default("skill"),
+  kind: z.enum(packageKindList).default("skill"),
   root: z.string().refine(isAbsolute),
   connection: z.object({
     server: z.string(),
@@ -88,7 +89,7 @@ const workspaceSchema = z.object({
 export type Workspace = z.infer<typeof workspaceSchema>;
 
 const gitWorkspaceSchema = z.object({
-  kind: z.enum(["skill", "hook"]),
+  kind: z.enum(packageKindList),
   root: z.string().refine(isAbsolute),
   git: z.object({
     url: z.string(),

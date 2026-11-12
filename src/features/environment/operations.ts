@@ -39,6 +39,7 @@ import {
 } from "../git-workspace/overlay.js";
 import { CliError } from "../../errors.js";
 import { originLabel, validInstalledName } from "./names.js";
+import { assetKinds } from "../asset-kinds/index.js";
 
 /** How to treat exclusions and disabled assets that a change would undo. */
 export type Overrides = {
@@ -226,9 +227,6 @@ async function applyChange(
   return syncSelection(workspace, result.state);
 }
 
-const groupName = (kind: AssetKind) =>
-  kind === "skill" ? "skills" : kind === "mcp" ? "mcp" : "hooks";
-
 /**
  * The asset `target` names for `change`. Anything but install also accepts the
  * UUID of an asset that's no longer in the catalog, so it can still be cleaned up.
@@ -239,7 +237,7 @@ function assetId(
   change: AssetChange | "rename",
 ) {
   const { settings, catalog, identity } = workspace;
-  const command = `barndog ${groupName(target.kind)} ${change}`;
+  const command = `barndog ${assetKinds[target.kind].command} ${change}`;
   const localNames = settings.version === 2 ? (settings.localNames ?? {}) : {};
   const named = catalog.assets.filter(
     (a) =>
@@ -263,8 +261,8 @@ function assetId(
     );
   if (!id)
     throw new CliError(
-      `No ${target.kind === "mcp" ? "MCP server" : target.kind} named ${target.name}${target.origin ? ` in ${target.origin}` : ""} is available to you.`,
-      `barndog ${groupName(target.kind)} search ${target.name}`,
+      `No ${assetKinds[target.kind].one} named ${target.name}${target.origin ? ` in ${target.origin}` : ""} is available to you.`,
+      `barndog ${assetKinds[target.kind].command} search ${target.name}`,
     );
   return id;
 }

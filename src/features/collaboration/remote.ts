@@ -12,11 +12,12 @@ import {
 import { parsePackage, defaultLimits } from "@barndog-ai/api-contract/package";
 import { apiClient, catalog } from "../skills/remote.js";
 import { serverFetch } from "../auth/transport.js";
+import { collaborationClient, packagePath } from "./domain.js";
 import {
-  collaborationClient,
-  packagePath,
+  assetKinds,
+  assetNotFound,
   type PackageKind,
-} from "./domain.js";
+} from "../asset-kinds/index.js";
 import { readSettings, type Connection } from "../../config/settings.js";
 import { CliError } from "../../errors.js";
 
@@ -83,18 +84,11 @@ export async function selectSkill(
   home = homedir(),
   kind: PackageKind = "skill",
 ) {
-  const values =
-    kind === "skill"
-      ? await catalog(conn, home)
-      : await hookCatalog(conn, home);
+  const values = await packageCatalogs[kind](conn, home);
   const matches = values.filter(
     (s) => s.name === name && matchesOrigin(s.origin, selector, conn),
   );
-  if (matches.length !== 1)
-    throw new CliError(
-      `No ${kind === "skill" ? "Skill" : "Hook"} named ${name} in ${selector}.`,
-      `barndog ${kind === "skill" ? "skills" : "hooks"} search ${name}`,
-    );
+  if (matches.length !== 1) throw assetNotFound(kind, name, selector);
   return matches[0]!;
 }
 
@@ -164,7 +158,7 @@ export async function download(
   return parsePackage(
     Buffer.concat(chunks),
     defaultLimits,
-    kind === "hook" ? "hook.yaml" : "SKILL.md",
+    assetKinds[kind].manifest,
   );
 }
 
@@ -212,3 +206,9 @@ export async function hookCatalog(
   } while (cursor);
   return values;
 }
+
+/** Every published package of a kind that you can see. */
+export const packageCatalogs: Record<
+  PackageKind,
+  (conn: Connection, home: string) => Promise<Skill[]>
+> = { skill: catalog, hook: hookCatalog };

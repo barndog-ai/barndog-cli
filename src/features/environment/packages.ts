@@ -9,19 +9,18 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { join } from "node:path";
-import { parse } from "yaml";
-import { hookManifestSchema } from "@barndog-ai/api-contract";
 import {
   defaultLimits,
   parsePackage,
   packageFingerprint,
-  packageMetadata,
   directoryFingerprint,
   writePackage,
   type PackageEntry,
 } from "@barndog-ai/api-contract/package";
 import type { Connection } from "../../config/settings.js";
 import { serverFetch } from "../auth/transport.js";
+import { assetKinds, type PackageKind } from "../asset-kinds/index.js";
+import { metadata } from "../collaboration/domain.js";
 
 /** One identity's cache partition: server, organization and developer never mix. */
 export function cacheKey(conn: Connection) {
@@ -74,7 +73,7 @@ type CachedAsset = { id: string; name: string; revision: string };
 
 /** Returns the immutable cached folder for a revision, loading it only when absent. */
 export async function storePackage(
-  kind: "skill" | "hook",
+  kind: PackageKind,
   asset: CachedAsset,
   key: string,
   home: string,
@@ -82,7 +81,7 @@ export async function storePackage(
 ) {
   const parent = join(
     cacheRoot(key, home),
-    ...(kind === "hook" ? ["hooks"] : []),
+    ...assetKinds[kind].cachePath,
     asset.id,
   );
   await mkdir(parent, { recursive: true, mode: 0o700 });
@@ -123,7 +122,7 @@ export async function storePackage(
 }
 
 export async function cachedPackage(
-  kind: "skill" | "hook",
+  kind: PackageKind,
   asset: {
     id: string;
     name: string;
@@ -142,7 +141,7 @@ export async function cachedPackage(
         conn.server,
         home,
       )(
-        `${conn.server}/v1/${kind === "skill" ? "skills" : "hooks"}/${asset.id}/versions/${asset.version.number}/package`,
+        `${conn.server}/v1/${assetKinds[kind].route}/${asset.id}/versions/${asset.version.number}/package`,
       );
       if (!response.ok)
         throw new Error(
@@ -162,29 +161,10 @@ export async function cachedPackage(
       const entries = await parsePackage(
         Buffer.concat(chunks),
         defaultLimits,
-        kind === "hook" ? "hook.yaml" : "SKILL.md",
+        assetKinds[kind].manifest,
       );
-      const metadata =
-        kind === "skill"
-          ? packageMetadata(entries)
-          : hookManifestSchema.parse(
-              parse(
-                entries
-                  .find((e) => e.path === "hook.yaml")!
-                  .data.toString("utf8"),
-              ),
-            );
-      if (metadata.name !== asset.name)
+      if (metadata(entries, kind).name !== asset.name)
         throw new Error("Package name does not match catalog");
-      if (kind === "hook")
-        for (const implementation of Object.values(
-          hookManifestSchema.parse(metadata).implementations,
-        )) {
-          if (implementation)
-            for (const script of implementation.scripts)
-              if (!entries.some((e) => e.path === script))
-                throw new Error(`Missing Hook script: ${script}`);
-        }
       return entries;
     },
   );

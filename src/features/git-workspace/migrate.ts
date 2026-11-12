@@ -40,6 +40,7 @@ import type {
   WorkspaceModel,
 } from "./format.js";
 import { localOverlay } from "./overlay.js";
+import type { PackageKind } from "../asset-kinds/index.js";
 
 export type MigrationRow = {
   kind: string;
@@ -61,13 +62,12 @@ const sameScope = (cloud: CloudScope, local: RepoScope) =>
   (local.type === "org" || cloud.slug === local.slug);
 
 export async function publishPackage(
-  asset: PublishableAsset,
+  asset: PublishableAsset & { kind: PackageKind },
   scope: CloudScope,
   conn: Connection,
   home: string,
 ) {
-  const kind = asset.kind === "hook" ? "hook" : "skill";
-  const client = collaborationClient(conn.server, home, kind);
+  const client = collaborationClient(conn.server, home, asset.kind);
   const files = encodeFiles(asset.entries);
   const metadata: ChangeUpload = {
     name: asset.name,
@@ -266,7 +266,12 @@ export async function migrate(
         pending.push(() =>
           asset.kind === "mcp"
             ? publishMcp(asset, pair.cloud, conn, home)
-            : publishPackage(asset, pair.cloud, conn, home),
+            : publishPackage(
+                { ...asset, kind: asset.kind },
+                pair.cloud,
+                conn,
+                home,
+              ),
         );
       }
     }

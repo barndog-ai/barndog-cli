@@ -7,10 +7,11 @@ import {
 } from "../features/environment/names.js";
 import { bold, dim, fields, warn } from "./format.js";
 import { promptTheme } from "./theme.js";
+import { assetKinds } from "../features/asset-kinds/index.js";
 
 /** Asks once per clash; the sync persists the answer. */
 export async function promptClash(clash: Clash): Promise<ClashChoice> {
-  const noun = clash.kind === "skill" ? "Skills" : "MCP servers";
+  const noun = assetKinds[clash.kind].many;
   console.log("");
   console.log(`${warn("!")} Two ${noun} want the name ${bold(clash.name)}`);
   for (const line of fields(
@@ -56,7 +57,7 @@ export async function promptClash(clash: Clash): Promise<ClashChoice> {
   console.log(
     dim(
       "  Saved. Change it later with barndog " +
-        (clash.kind === "skill" ? "skills" : "mcp") +
+        assetKinds[clash.kind].command +
         " rename, enable or disable.",
     ),
   );

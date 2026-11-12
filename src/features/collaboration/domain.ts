@@ -6,15 +6,13 @@ import {
 import { parse } from "yaml";
 import { serverFetch, normalizeServer } from "../auth/transport.js";
 import { homedir } from "node:os";
+import { assetKinds, type PackageKind } from "../asset-kinds/index.js";
 
-export type PackageKind = "skill" | "hook";
-
+/** The typed client speaks Skill routes; other package kinds swap in their own. */
 export function packagePath(path: string, kind: PackageKind) {
-  return kind === "skill"
-    ? path
-    : path
-        .replace(/^\/v1\/skills(?=\/|$)/, "/v1/hooks")
-        .replace(/^\/v1\/skill-changes(?=\/|$)/, "/v1/hook-changes");
+  return path
+    .replace(/^\/v1\/skills(?=\/|$)/, `/v1/${assetKinds[kind].route}`)
+    .replace(/^\/v1\/skill-changes(?=\/|$)/, `/v1/${kind}-changes`);
 }
 
 function fields(value: unknown, from: string, to: string): unknown {

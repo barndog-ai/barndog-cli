@@ -14,7 +14,6 @@ import {
   defaultLimits,
   packageFingerprint,
   writePackage,
-  type PackageEntry,
 } from "@barndog-ai/api-contract/package";
 import {
   diffEntries,
@@ -25,8 +24,8 @@ import {
 import {
   collaborationClient,
   metadata as packageMetadataFor,
-  type PackageKind,
 } from "./domain.js";
+import { assetKinds, type PackageKind } from "../asset-kinds/index.js";
 import {
   connection,
   download,
@@ -556,33 +555,7 @@ export async function createWorkspace(
     await mkdir(dirname(path), { recursive: true });
     await mkdir(path);
     const root = await realpath(path);
-    const entries: PackageEntry[] =
-      kind === "skill"
-        ? [
-            {
-              path: "SKILL.md",
-              data: Buffer.from(
-                `---\nname: ${name}\ndescription: Describe this Skill\n---\n\nAdd instructions here.\n`,
-              ),
-              executable: false,
-            },
-          ]
-        : [
-            {
-              path: "hook.yaml",
-              data: Buffer.from(
-                `name: ${name}\ndescription: Describe this Hook\nimplementations:\n  claude:\n    compatibility: supported\n    scripts: [scripts/hook.sh]\n    requirements:\n      commands: [sh]\n    events:\n      SessionStart:\n        - hooks:\n            - type: command\n              command: '\${BARNDOG_HOOK_ROOT}/scripts/hook.sh'\n`,
-              ),
-              executable: false,
-            },
-            {
-              path: "scripts/hook.sh",
-              data: Buffer.from(
-                "#!/bin/sh\n# Read native input; implement the desired behavior here.\ncat >/dev/null\n",
-              ),
-              executable: true,
-            },
-          ];
+    const entries = assetKinds[kind].scaffold(name);
     try {
       await writePackage(root, entries);
       await save(

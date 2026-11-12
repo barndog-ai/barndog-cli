@@ -37,6 +37,7 @@ import type {
   GithubPullsReviseOptions,
 } from "../features/github/pulls.js";
 import type { Harness } from "../harnesses/types.js";
+import { packageKindList } from "../features/asset-kinds/index.js";
 
 function positive(value: string) {
   const result = Number(value);
@@ -541,7 +542,7 @@ export function registerCapabilities(
       .command(`${name} <name>`)
       .addOption(
         new Option("--kind <kind>", "Git-backed asset kind")
-          .choices(["skill", "hook"])
+          .choices(packageKindList)
           .default("skill"),
       )
       .requiredOption("--origin <origin>", ORIGIN_HELP)
@@ -600,7 +601,7 @@ export function registerCapabilities(
     .description("Create a GitHub repository and export published history")
     .addOption(
       new Option("--kind <kind>", "Asset kind")
-        .choices(["skill", "hook"])
+        .choices(packageKindList)
         .default("skill"),
     )
     .requiredOption("--origin <origin>", ORIGIN_HELP)

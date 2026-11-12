@@ -1,18 +1,15 @@
 import { z } from "zod";
-import {
-  environmentCatalogSchema,
-  hookSchema,
-  mcpSchema,
-  skillSchema,
-  ApiError,
-} from "@barndog-ai/api-contract";
+import { environmentCatalogSchema, ApiError } from "@barndog-ai/api-contract";
 import { serverFetch } from "../auth/transport.js";
 import { connection } from "../collaboration/remote.js";
 import { connectionContext } from "../skills/remote.js";
 import { homedir } from "node:os";
-import { CliError } from "../../errors.js";
 import type { Connection } from "../../config/settings.js";
-import type { AssetKind } from "../asset-selection/types.js";
+import {
+  assetKinds,
+  assetNotFound,
+  type AssetKind,
+} from "../asset-kinds/index.js";
 
 /**
  * A caller-chosen idempotency key. Sending the same key again retries the
@@ -92,23 +89,16 @@ export async function environmentCatalog(
   };
 }
 
-export const assetRoute = (kind: AssetKind) =>
-  kind === "skill" ? "skills" : kind === "hook" ? "hooks" : "mcps";
-
-export const assetSchema = (kind: AssetKind) =>
-  kind === "skill" ? skillSchema : kind === "hook" ? hookSchema : mcpSchema;
-
 export async function getAsset(
   kind: AssetKind,
   id: string,
   conn: Connection,
   home = homedir(),
 ) {
-  // Parse in each domain rather than defining a generic content schema.
-  const path = `/v1/${assetRoute(kind)}/${z.uuidv4().parse(id)}`;
-  if (kind === "skill") return request(conn, path, skillSchema, home);
-  if (kind === "hook") return request(conn, path, hookSchema, home);
-  return request(conn, path, mcpSchema, home);
+  const path = `/v1/${assetKinds[kind].route}/${z.uuidv4().parse(id)}`;
+  return assetKinds[kind].schema.parse(
+    await request(conn, path, z.unknown(), home),
+  );
 }
 
 export async function selectAsset(
@@ -125,11 +115,7 @@ export async function selectAsset(
       (a.id === name || a.name === name) &&
       matchesOrigin(a.origin, origin, conn),
   );
-  if (matches.length !== 1)
-    throw new CliError(
-      `No ${kind === "mcp" ? "MCP server" : kind} named ${name} in ${origin}.`,
-      `barndog ${kind === "skill" ? "skills" : kind === "hook" ? "hooks" : "mcp"} search ${name}`,
-    );
+  if (matches.length !== 1) throw assetNotFound(kind, name, origin);
   return {
     connection: conn,
     reference: matches[0]!,

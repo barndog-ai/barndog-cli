@@ -26,7 +26,7 @@ import { CliError, friendlyMessage } from "../../errors.js";
 import { renameSkillEntries } from "../environment/installed.js";
 import {
   assertAssetName,
-  assetFolder,
+  assetPath,
   validAssetName,
 } from "../git-workspace/format.js";
 import { withLocalSubscription } from "../git-workspace/overlay.js";
@@ -39,6 +39,7 @@ import {
 } from "./discover.js";
 import { readFolder } from "./folder.js";
 import { fetchRemote, type RemoteRepo } from "./remote.js";
+import { assetKinds, type PackageKind } from "../asset-kinds/index.js";
 
 const SOURCES_FILE = ".barndog-sources.json";
 
@@ -182,15 +183,15 @@ export async function adoptLinkedFolders(home: string): Promise<string[]> {
   return notices;
 }
 
-function folderFor(kind: "skill" | "hook", name: string) {
+function folderFor(kind: PackageKind, name: string) {
   assertAssetName(
     name,
-    `barndog ${kind === "skill" ? "skills" : "hooks"} add <source> --as <new-name>`,
+    `barndog ${assetKinds[kind].command} add <source> --as <new-name>`,
   );
-  return assetFolder("org", kind, name);
+  return assetPath("org", kind, name);
 }
 
-async function assertFree(root: string, kind: string, name: string) {
+async function assertFree(root: string, kind: PackageKind, name: string) {
   try {
     if (!(await readdir(root)).length) return;
   } catch (error) {
@@ -199,8 +200,8 @@ async function assertFree(root: string, kind: string, name: string) {
     if (code !== "ENOTDIR") throw error;
   }
   throw new CliError(
-    `A local ${kind === "skill" ? "Skill" : "Hook"} named ${name} already exists at ${root}.`,
-    `barndog ${kind === "skill" ? "skills" : "hooks"} add <source> --as <new-name>`,
+    `A local ${assetKinds[kind].one} named ${name} already exists at ${root}.`,
+    `barndog ${assetKinds[kind].command} add <source> --as <new-name>`,
   );
 }
 
@@ -290,7 +291,7 @@ async function applyUpdate(
   if (packageFingerprint(current) !== record.fingerprint && !options.force)
     throw new CliError(
       `${record.name} was edited locally, so updating would lose those edits.`,
-      `barndog ${record.kind === "skill" ? "skills" : "hooks"} update ${record.name} --force`,
+      `barndog ${assetKinds[record.kind].command} update ${record.name} --force`,
     );
   return fetchRemote(
     { url: record.url, rest: null, ref: record.ref, path: record.root },
