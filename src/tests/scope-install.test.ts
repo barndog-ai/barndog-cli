@@ -1,21 +1,27 @@
 import { expect, test } from "vitest";
 import { runSetInstall } from "../ui/scope-install.js";
-import type { EnvironmentOptions } from "../features/environment/operations.js";
 
 function fixture() {
-  const calls: { action: string; options: EnvironmentOptions }[] = [];
+  const calls: { action: string; options: unknown }[] = [];
   const asset = {
     id: "asset",
     name: "review",
     origin: { type: "repo", slug: "dashboard" },
   };
+  const applied = () => ({ status: "applied" as const, events: [] });
   const context = {
     write: () => {},
-    environment: async (action: string, options: EnvironmentOptions) => {
-      calls.push({ action, options });
-      return action === "sets-preview"
-        ? { assets: [asset], selectedAssetIds: [] }
-        : { status: "applied", events: [] };
+    installSet: async (options: object) => {
+      calls.push({ action: "install", options });
+      return applied();
+    },
+    previewSet: async (origin: string) => {
+      calls.push({ action: "preview", options: { origin } });
+      return { assets: [asset], selectedAssetIds: [] } as never;
+    },
+    installSetAssets: async (options: object) => {
+      calls.push({ action: "install-assets", options });
+      return applied();
     },
   };
   return { context, calls, asset };
@@ -43,8 +49,8 @@ test("scope install requires a mode outside a terminal and explicit modes never 
   );
   expect(f.calls).toStrictEqual([
     {
-      action: "sets-install",
-      options: { origin: "repo/dashboard", mode: "all" },
+      action: "install",
+      options: { origin: "repo/dashboard", mode: "all", resolution: undefined },
     },
   ]);
 });
@@ -64,10 +70,13 @@ test("scope install prompts for a mode and custom selection applies once", async
     },
   );
   expect(f.calls.map((call) => call.action)).toStrictEqual([
-    "sets-preview",
-    "sets-install-custom",
+    "preview",
+    "install-assets",
   ]);
-  expect(f.calls[1]!.options.assetIds).toStrictEqual([f.asset.id]);
+  expect(f.calls[1]!.options).toStrictEqual({
+    origin: "repo/dashboard",
+    assetIds: [f.asset.id],
+  });
   f.calls.length = 0;
   await runSetInstall(
     f.context,
@@ -76,8 +85,12 @@ test("scope install prompts for a mode and custom selection applies once", async
   );
   expect(f.calls).toStrictEqual([
     {
-      action: "sets-install",
-      options: { origin: "repo/dashboard", mode: "recommended" },
+      action: "install",
+      options: {
+        origin: "repo/dashboard",
+        mode: "recommended",
+        resolution: undefined,
+      },
     },
   ]);
 });
@@ -89,7 +102,7 @@ test("empty or cancelled custom selection never writes", async () => {
     { origin: "repo/dashboard" },
     { interactive: true, mode: async () => "custom", assets: async () => [] },
   );
-  expect(f.calls.map((call) => call.action)).toStrictEqual(["sets-preview"]);
+  expect(f.calls.map((call) => call.action)).toStrictEqual(["preview"]);
   f.calls.length = 0;
   await expect(
     runSetInstall(
@@ -104,5 +117,5 @@ test("empty or cancelled custom selection never writes", async () => {
       },
     ),
   ).rejects.toThrow(/cancelled/);
-  expect(f.calls.map((call) => call.action)).toStrictEqual(["sets-preview"]);
+  expect(f.calls.map((call) => call.action)).toStrictEqual(["preview"]);
 });

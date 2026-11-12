@@ -1,10 +1,6 @@
 import { InvalidArgumentError, type Command } from "commander";
 import { styleText } from "node:util";
 import type { CommandContext } from "./context.js";
-import type {
-  CollaborationAction,
-  CollaborationOptions,
-} from "../features/collaboration/index.js";
 import { renderCollaboration } from "../ui/collaboration.js";
 import {
   folderDivergence,
@@ -13,6 +9,7 @@ import {
 import { resolve } from "node:path";
 import { CliError, friendlyHint, friendlyMessage } from "../errors.js";
 import { ApiError } from "@barndog-ai/api-contract";
+import type { PushOptions } from "../features/collaboration/index.js";
 import { pickOne } from "../ui/pick.js";
 import { resolveOrigin } from "./origin.js";
 import { clean, json, ORIGIN_HELP, originLabel, warn } from "../ui/format.js";
@@ -23,17 +20,29 @@ function positive(value: string) {
   return Number(value);
 }
 
+type RunOptions = {
+  /** The Suggested Change, and discussion, that an error refers to. */
+  changeId?: string;
+  thread?: string;
+  /** Print a Suggested Change with its reviews, discussions and files. */
+  details?: boolean;
+};
+
+type Run = (operation: Promise<unknown>, options?: RunOptions) => Promise<void>;
+
+type WithKind = <T extends object>(options: T) => T & { kind?: "hook" };
+
 /** Skill and Hook changes are separate lists; point at the other when an ID isn't here. */
 function reviewError(
   error: unknown,
   kind: "skill" | "hook",
-  options: CollaborationOptions,
+  { changeId, thread }: RunOptions,
 ) {
   if (!(error instanceof ApiError)) return error;
-  if (error.status === 404 && options.id && !options.thread)
+  if (error.status === 404 && changeId && !thread)
     return new CliError(
       `No ${kind === "skill" ? "Skill" : "Hook"} Suggested Change has that ID.`,
-      `barndog ${kind === "skill" ? "hooks changes" : "changes"} show ${options.id}`,
+      `barndog ${kind === "skill" ? "hooks changes" : "changes"} show ${changeId}`,
       { cause: error },
     );
   const hint = friendlyHint(error);
@@ -51,30 +60,27 @@ export function registerCollaboration(
   context: CommandContext,
   kind: "skill" | "hook" = "skill",
 ) {
-  const run = async (
-    action: CollaborationAction,
-    options: CollaborationOptions = {},
-  ) => {
-    const result = await context
-      .collaborate(action, kind === "hook" ? { ...options, kind } : options)
-      .catch((error: unknown) => {
-        throw reviewError(error, kind, options);
-      });
-    if (context.mode.json) {
-      context.write(json(result));
-      return;
-    }
-    for (const line of renderCollaboration(action, result)) context.write(line);
-    if (kind !== "hook" || (action !== "pull-skill" && action !== "push"))
-      return;
-    // Editing is when tools drifting apart matters, so say it at both ends.
-    const pulled =
-      action === "pull-skill"
-        ? ((result as { root?: string } | null)?.root ??
-          resolve(options.directory ?? options.name ?? "."))
-        : nearestHookFolder(process.cwd());
-    const warning = pulled && (await folderDivergence(pulled));
+  // Skill is the default package kind, so only Hook operations name theirs.
+  const withKind: WithKind = (options) =>
+    kind === "hook" ? { ...options, kind } : options;
+  const run: Run = async (operation, options = {}) => {
+    const result = await operation.catch((error: unknown) => {
+      throw reviewError(error, kind, options);
+    });
+    if (context.mode.json) context.write(json(result));
+    else
+      for (const line of renderCollaboration(result, options))
+        context.write(line);
+  };
+  /** Editing is when tools drifting apart matters, so Hooks say it at both ends. */
+  const warnDivergence = async (folder: string | null) => {
+    if (kind !== "hook" || context.mode.json) return;
+    const warning = folder && (await folderDivergence(folder));
     if (warning) context.write(`${warn("!")} ${warning}`);
+  };
+  const push = async (options: PushOptions) => {
+    await run(context.pushWorkingCopy(withKind(options)));
+    await warnDivergence(nearestHookFolder(process.cwd()));
   };
   const skills = program.commands.find(
     (c) => c.name() === (kind === "hook" ? "hooks" : "skills"),
@@ -119,27 +125,30 @@ export function registerCollaboration(
     .description(
       `Download a ${noun} into an editable folder to change and propose edits`,
     )
-    .action(async (name, options) =>
-      run("pull-skill", {
+    .action(async (name, options) => {
+      const target = {
         ...options,
         ...(await choose(name, options.origin, `barndog ${group} pull <name>`)),
-      }),
-    );
+      };
+      const pulled = context.pullPackage(withKind(target));
+      await run(pulled);
+      await warnDivergence(
+        (await pulled)?.root ?? resolve(target.directory ?? target.name),
+      );
+    });
   if (kind === "skill") {
-    for (const [command, description] of [
-      [
-        "pull",
+    program
+      .command("pull")
+      .description(
         "Bring the latest published version into this working copy, keeping your edits",
-      ],
-      [
-        "diff",
+      )
+      .action(() => run(context.updateWorkingCopy()));
+    program
+      .command("diff")
+      .description(
         "Show your edits in this working copy (elsewhere: preview what sync would change)",
-      ],
-    ] as const)
-      program
-        .command(command)
-        .description(description)
-        .action(() => run(command));
+      )
+      .action(() => run(context.workingDiff()));
     program
       .command("push")
       .description("Propose this working copy's edits as a Suggested Change")
@@ -153,20 +162,19 @@ export function registerCollaboration(
         "Start a new proposal instead of updating the linked proposal",
       )
       .option("--title <title>", "Suggested Change title")
-      .action((options) => run("push", options));
+      .action(push);
     program
       .command("resolve <path>")
       .description("Mark a conflicted file in this working copy as resolved")
-      .action((path) => run("resolve", { path }));
+      .action((path) => run(context.resolveFile(path)));
   }
-  for (const [name, action, description] of [
+  for (const [name, description] of [
     [
-      "versions",
       "versions",
       `List ${noun === "Skill" ? "a Skill's" : "a Hook's"} published versions`,
     ],
-    ["show", "version-show", "Print the files of a published version"],
-    ["diff", "version-diff", "Compare two published versions"],
+    ["show", "Print the files of a published version"],
+    ["diff", "Compare two published versions"],
   ] as const) {
     const command = skills
       .command(`${name} [name]`)
@@ -178,16 +186,23 @@ export function registerCollaboration(
       command
         .requiredOption("--from <number>", "Old version", positive)
         .requiredOption("--to <number>", "New version", positive);
-    command.action(async (asset, options) =>
-      run(action, {
+    command.action(async (asset, options) => {
+      const target = withKind({
         ...options,
         ...(await choose(
           asset,
           options.origin,
           `barndog ${group} ${name} <name>`,
         )),
-      }),
-    );
+      });
+      await run(
+        name === "versions"
+          ? context.packageVersions(target)
+          : name === "show"
+            ? context.versionFiles(target)
+            : context.diffVersions(target),
+      );
+    });
   }
   skills
     .command("push [name]")
@@ -199,7 +214,7 @@ export function registerCollaboration(
     .option("--publish", "Publish with direct authority")
     .option("--new", "Start a new proposal")
     .option("--title <title>", "Proposal title")
-    .action((name, options) => run("push", { ...options, name }));
+    .action((name, options) => push({ ...options, name }));
   skills
     .command("create <name>")
     .requiredOption("--origin <origin>", ORIGIN_HELP)
@@ -207,17 +222,18 @@ export function registerCollaboration(
     .description(
       `Start a new ${noun} in an editable folder (not installed until published)`,
     )
-    .action((name, options) => run("create", { ...options, name }));
+    .action((name, options) =>
+      run(context.createPackage(withKind({ ...options, name }))),
+    );
   for (const parent of kind === "hook" ? [skills] : [program, skills])
-    registerChanges(parent, run);
+    registerChanges(parent, context, withKind, run);
 }
 
 function registerChanges(
   parent: Command,
-  run: (
-    action: CollaborationAction,
-    options?: CollaborationOptions,
-  ) => Promise<void>,
+  context: CommandContext,
+  withKind: WithKind,
+  run: Run,
 ) {
   const changes = parent
     .command("changes")
@@ -225,11 +241,16 @@ function registerChanges(
   changes
     .command("list")
     .description("List accessible Suggested Changes")
-    .action(() => run("list"));
+    .action(() => run(context.listChanges(withKind({}))));
   changes
     .command("show <id>")
     .description("Read proposal content, reviews, and discussion history")
-    .action((id) => run("show", { id }));
+    .action((id) =>
+      run(context.showChange(withKind({ id })), {
+        changeId: id,
+        details: true,
+      }),
+    );
   changes
     .command("diff <id>")
     .description("Inspect a proposal diff")
@@ -239,7 +260,9 @@ function registerChanges(
       "Compare to another proposal revision",
       positive,
     )
-    .action((id, options) => run("change-diff", { ...options, id }));
+    .action((id, options) =>
+      run(context.changeDiff(withKind({ ...options, id })), { changeId: id }),
+    );
   for (const [name, description] of [
     ["approve", "Approve a reviewed revision"],
     ["request-changes", "Request further changes"],
@@ -250,7 +273,17 @@ function registerChanges(
       .command(`${name} <id>`)
       .description(description)
       .requiredOption("--revision <number>", "Revision you reviewed", positive)
-      .action((id, options) => run(name, { ...options, id }));
+      .action((id, options) => {
+        const target = withKind({ ...options, id });
+        return run(
+          name === "reject"
+            ? context.rejectChange(target)
+            : name === "merge"
+              ? context.mergeChange(target)
+              : context.reviewChange(name, target),
+          { changeId: id },
+        );
+      });
   changes
     .command("comment <id>")
     .description("Comment, reply, or suggest an inline replacement")
@@ -264,7 +297,12 @@ function registerChanges(
     .option("--end-line <number>", "Last line", positive)
     .option("--replacement-file <path>", "Replacement text file")
     .option("--expected-file <path>", "Exact original text file")
-    .action((id, options) => run("comment", { ...options, id }));
+    .action((id, options) =>
+      run(context.commentOnChange(withKind({ ...options, id })), {
+        changeId: id,
+        thread: options.thread,
+      }),
+    );
   for (const [name, description] of [
     ["apply", "Apply a current reviewer suggestion"],
     ["resolve-discussion", "Resolve a discussion"],
@@ -278,7 +316,18 @@ function registerChanges(
         "Current proposal revision",
         positive,
       )
-      .action((id, thread, options) => run(name, { ...options, id, thread }));
+      .action((id, thread, options) => {
+        const target = withKind({ ...options, id, thread });
+        return run(
+          name === "apply"
+            ? context.applySuggestion(target)
+            : context.setDiscussionResolved({
+                ...target,
+                resolved: name === "resolve-discussion",
+              }),
+          { changeId: id, thread },
+        );
+      });
   changes.addHelpText(
     "after",
     `\nReview ${styleText("bold", "barndog changes diff <id>")} before approving a revision. Approval does not publish; use ${styleText("bold", "barndog changes merge <id> --revision <number>")}.`,

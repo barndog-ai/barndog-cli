@@ -528,35 +528,53 @@ async function filesAt(repo: string, commit: string, path: string) {
   }));
 }
 
-export async function gitHistory(
+type HistoryTarget = { name: string; origin: string; kind?: AssetKind };
+
+/** An asset's published history: one version per commit that changed it. */
+async function history(
   workspace: GitWorkspace,
-  action: "versions" | "version-show" | "version-diff",
-  options: {
-    name: string;
-    origin: string;
-    kind?: AssetKind;
-    version?: number;
-    from?: number;
-    to?: number;
-  },
-  home = homedir(),
+  target: HistoryTarget,
+  home: string,
 ) {
   const { model, commit } = await latest(workspace, home);
   const asset = selectAsset(
     model,
-    options.kind ?? "skill",
-    options.name,
-    options.origin,
+    target.kind ?? "skill",
+    target.name,
+    target.origin,
   );
   const repo = gitDirectory(workspace.workspaceId, home);
-  const history = await assetHistory(repo, commit, asset.path);
-  if (action === "versions") return history;
-  const at = (number: number | undefined) => {
-    const version = number ? history[number - 1] : history.at(-1);
+  const versions = await assetHistory(repo, commit, asset.path);
+  const filesOf = (number = versions.length) => {
+    const version = versions[number - 1];
     if (!version) throw new CliError(`${asset.name} has no version ${number}.`);
     return filesAt(repo, version.commit, asset.path);
   };
-  if (action === "version-show")
-    return { files: encodeFiles(await at(options.version)) };
-  return diffEntries(await at(options.from), await at(options.to));
+  return { versions, filesOf };
+}
+
+export async function gitVersions(
+  workspace: GitWorkspace,
+  target: HistoryTarget,
+  home = homedir(),
+) {
+  return (await history(workspace, target, home)).versions;
+}
+
+export async function gitVersionFiles(
+  workspace: GitWorkspace,
+  target: HistoryTarget & { version?: number },
+  home = homedir(),
+) {
+  const { filesOf } = await history(workspace, target, home);
+  return { files: encodeFiles(await filesOf(target.version)) };
+}
+
+export async function gitVersionDiff(
+  workspace: GitWorkspace,
+  target: HistoryTarget & { from: number; to: number },
+  home = homedir(),
+) {
+  const { filesOf } = await history(workspace, target, home);
+  return diffEntries(await filesOf(target.from), await filesOf(target.to));
 }

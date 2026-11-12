@@ -42,6 +42,30 @@ Publishing has no npm token. The `barndog` package trusts `release.yml` in `barn
 - Prettier handles formatting; ESLint enforces blank lines after import blocks, between class methods, and around standalone declarations. Keep related imports and class fields grouped.
 - Use `pnpm lint:fix` for automatic lint fixes. Generated output, dependencies, machine-local state, and canonical skill fixtures are excluded from formatting.
 
+## Lessons learned
+
+When a fix corrects a mistake that could come back, first look for an ESLint rule (or a narrow `no-restricted-syntax` selector) that catches it without flagging legitimate code:
+
+- If one fully does the job, add it as `error` in the same change and fix every existing violation. The rule is the record; don't also write a lesson. Never add a rule as `warn` to fix later; `warn` is only for rules that are advisory on purpose, such as `complexity`.
+- Otherwise add a lesson here before finishing the change. Write only the rule, not the story of what went wrong: what to do, why in one sentence, and the warning signs that show the mistake returning. Keep each lesson short and update it when it turns out to be incomplete. If a lint rule covers part of it, enforce that part with the rule and keep only the rest here.
+
+### One typed function per operation; never route on a string
+
+An operation selected by a string is invisible to the type checker: typos fail at runtime, callers cast results and assert options, and unused operations go unnoticed.
+
+- Give every operation its own exported function. Required inputs are required parameters, and the return type says what comes back. Expose it as its own `CommandContext` member wired in `createProgram()`, and fake only that member in tests.
+- Share plumbing through private helpers (`withLockedWorkspace()` in `environment/operations.ts`, `backend()` in `collaboration/index.ts`), never through a shared entry point that takes the operation's name.
+- A typed union parameter is fine when the variants differ only in name, take the same options and return the same type: `changeAsset("install" | "remove" | "enable" | "disable", …)`. When a variant needs other options or returns something else, split it out.
+- Warning signs: a parameter named `action`, `type` or `operation` typed `string`; an options type whose fields are all optional; `Promise<unknown>` results that callers cast with `as`; `!` on option fields; template literals that build operation names; `throw new Error(\`Unknown action: …\`)`.
+
+### Names say what; comments say why
+
+A comment that restates the code drifts from it and buries the comments that matter; a clearer name never drifts.
+
+- Before writing a comment, try to make it unnecessary: rename the function or variable (`cloudConnection()` rather than `cloud()`), replace a positional boolean with a named option (`findScope(…, { forRemoval })`) or a value the function already understands (`assetId(…, change)`), or use a default parameter instead of explaining a fallback.
+- Keep a comment only for what the code can't say: why something is done, a rule from outside the code (a server or harness behavior), a non-obvious consequence (`installSetAssets` doesn't follow later additions to the scope), or a units/format note on a field (`decisions` is a file path, not JSON).
+- Warning signs: a comment whose words mostly repeat the identifier below it; a call site where you can't tell what a boolean argument means without opening the function (`assetId(workspace, target, true)`, unlike `setKnowledge(true)`); a comment explaining what an abbreviation or generic name (`run`, `typed`, `handle`, `data`) means.
+
 ## Terminal output
 
 - Use the shared `primary()` formatter from `src/ui/theme.ts` for brand accents (`#C54836`), including the heading and interactive selection. Keep ordinary text neutral.
@@ -71,7 +95,7 @@ src/
 ```
 
 - `src/cli.ts` is the executable entry point and handles process exit codes and errors. `src/program.ts` constructs a fresh Commander program and wires dependencies.
-- Register commands under `src/commands/` and in `createProgram()`. Keep handlers thin: parse arguments, call a workflow, and present its results. The program factory accepts injected operations and output callbacks, so parsing and help can be tested without installing anything or opening prompts.
+- Register commands under `src/commands/` and in `createProgram()`. Keep handlers thin: parse arguments, call a workflow, and present its results. The program factory accepts injected operations and output callbacks, so parsing and help can be tested without installing anything or opening prompts. Handlers reach features through `CommandContext` (`src/commands/context.ts`), one typed member per operation; see [Lessons learned](#lessons-learned).
 - Put reusable operations under `src/features/`, grouped by feature. Return structured results; do not import Commander, Inquirer, terminal styling, or UI modules into feature operations.
 - Keep native tool definitions and detection under `src/harnesses/`; reuse the registered adapters for discovery and installation destinations.
 - Keep configuration and installation-state persistence under `src/config/` and terminal prompts and formatting under `src/ui/`.

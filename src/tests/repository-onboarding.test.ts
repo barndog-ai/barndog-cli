@@ -19,7 +19,7 @@ import {
   localRepository,
 } from "../features/repositories/context.js";
 import { createProgram } from "../program.js";
-import { collaborate } from "../features/collaboration/index.js";
+import { workingDiff, workingStatus } from "../features/collaboration/index.js";
 
 const org = randomUUID(),
   developer = randomUUID(),
@@ -225,7 +225,7 @@ test("connected onboarding loads actual membership without using repository sugg
     { type: "org", id: org },
   ]);
   // Outside a working copy, status defers to the machine overview.
-  expect(await collaborate("status", {}, home, home)).toStrictEqual({
+  expect(await workingStatus(home, home)).toStrictEqual({
     mode: "environment",
   });
 });
@@ -266,7 +266,7 @@ test("local-only environment inspection and synchronization preview need no serv
     home,
   );
   const before = await readFile(settingsPath(home), "utf8");
-  const diff = (await collaborate("diff", {}, home, home)) as {
+  const diff = (await workingDiff(home, home)) as {
     mode: string;
     events: unknown[];
   };

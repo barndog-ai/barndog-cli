@@ -108,11 +108,7 @@ export function registerCapabilities(
     .action(async () => {
       const result = await context.repoStatus();
       const sets = result.repository
-        ? ((await context
-            .environment("sets-list", {})
-            .catch(() => undefined)) as
-            | { subscriptions: { scope: { type: string; id: string } }[] }
-            | undefined)
+        ? await context.listSets().catch(() => undefined)
         : undefined;
       if (context.mode.json) return context.write(json(result));
       if (!result.root) {
@@ -462,7 +458,9 @@ export function registerCapabilities(
           : "Stop listing knowledge documents at session start",
       )
       .action(async () => {
-        await runSelection(context, `knowledge-${action}`, {});
+        await runSelection(context, () =>
+          context.setKnowledge(action === "enable"),
+        );
         if (context.mode.json) return;
         context.write(
           action === "enable"

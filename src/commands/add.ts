@@ -121,7 +121,7 @@ export function registerAdd(program: Command, context: CommandContext) {
               `${result.name}: ${result.changes.length ? `${result.changes.length} file${result.changes.length === 1 ? "" : "s"} changed` : "up to date"}`,
             );
             if (result.changes.length)
-              for (const line of renderCollaboration("diff", result.changes))
+              for (const line of renderCollaboration(result.changes))
                 context.write(line);
           }
           if (applied) {

@@ -17,21 +17,18 @@ export function registerStatus(program: Command, context: CommandContext) {
     )
     .option("--paths", "Show installed folders and configuration files")
     .action(async (options: { paths?: boolean }) => {
-      const working = (await context.collaborate("status", {})) as {
-        mode?: string;
-      };
+      const working = await context.workingStatus();
       const inventory = await context.inventory();
       if (context.mode.json)
         return context.write(
           json(
-            working.mode === "environment"
-              ? inventory
-              : { workingCopy: working, ...inventory },
+            "changes" in working
+              ? { workingCopy: working, ...inventory }
+              : inventory,
           ),
         );
-      if (working.mode !== "environment") {
-        for (const line of renderCollaboration("status", working))
-          context.write(line);
+      if ("changes" in working) {
+        for (const line of renderCollaboration(working)) context.write(line);
         context.write("");
       }
       context.write(`${heading("status")}\n`);

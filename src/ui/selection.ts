@@ -2,37 +2,30 @@ import select from "@inquirer/select";
 import confirm from "@inquirer/confirm";
 import type { CommandContext, Mode } from "../commands/context.js";
 import { CliError } from "../errors.js";
-import type { EnvironmentOptions } from "../features/environment/operations.js";
-import type {
-  OverrideConflict,
-  OverrideResolution,
-} from "../features/asset-selection/types.js";
+import type { SelectionOutcome } from "../features/environment/operations.js";
+import type { OverrideResolution } from "../features/asset-selection/types.js";
 import { json } from "./format.js";
 import { renderSyncOutput } from "./output.js";
 import { promptTheme } from "./theme.js";
 
-export type SelectionContext = Pick<CommandContext, "environment" | "write"> & {
+export type SelectionContext = Pick<CommandContext, "write"> & {
   mode?: Pick<Mode, "json">;
 };
 
+/** A change that would undo exclusions or disabled assets runs again with the answer. */
 export async function runSelection(
   context: SelectionContext,
-  action: string,
-  options: EnvironmentOptions,
+  change: (resolution?: OverrideResolution) => Promise<SelectionOutcome>,
 ) {
+  let resolution: OverrideResolution | undefined;
   while (true) {
-    const result = (await context.environment(action, options)) as {
-      status: string;
-      events?: Parameters<typeof renderSyncOutput>[0];
-      conflicts?: OverrideConflict[];
-    };
+    const result = await change(resolution);
     if (result.status !== "decision-required") {
       if (context.mode?.json) {
         context.write(json(result));
         return;
       }
-      for (const line of renderSyncOutput(result.events ?? []))
-        context.write(line);
+      for (const line of renderSyncOutput(result.events)) context.write(line);
       return;
     }
     if (context.mode?.json || !process.stdin.isTTY || !process.stdout.isTTY)
@@ -50,10 +43,9 @@ export async function runSelection(
         { value: "per-asset", name: "Choose for each asset" },
       ],
     });
-    let resolution: OverrideResolution;
     if (type === "per-asset") {
       const decisions: { assetId: string; choice: "preserve" | "clear" }[] = [];
-      for (const conflict of result.conflicts ?? [])
+      for (const conflict of result.conflicts)
         decisions.push({
           assetId: conflict.asset.id,
           choice: (await confirm({
@@ -66,6 +58,5 @@ export async function runSelection(
         });
       resolution = { type: "per-asset", decisions };
     } else resolution = { type: type as "preserve-all" | "clear-all" };
-    options = { ...options, resolution };
   }
 }

@@ -147,14 +147,16 @@ test("mcp add marks OAuth servers, by flag or from the pasted JSON", () => {
 
 test("--json covers review commands and selection changes", async () => {
   const change = [{ id: "1", name: "a", status: "open", revision: 1 }];
-  const list = program({ collaborate: async () => change });
+  const list = program({ listChanges: async () => change as never });
   await list.instance.parseAsync(["changes", "list", "--json"], {
     from: "user",
   });
   expect(JSON.parse(list.output.join("\n"))).toStrictEqual(change);
 
   const removed = { status: "applied", events: [] };
-  const selection = program({ environment: async () => removed });
+  const selection = program({
+    changeAsset: async () => removed as never,
+  });
   await selection.instance.parseAsync(
     ["skills", "remove", "x", "--origin", "org", "--json"],
     { from: "user" },
@@ -189,7 +191,7 @@ test("common server refusals carry a Fix line", () => {
 
 test("a change ID from the other list points there", async () => {
   const { instance } = program({
-    collaborate: async () => {
+    showChange: async () => {
       throw new ApiError(404, "X", "CHANGE_NOT_FOUND");
     },
   });
@@ -369,13 +371,13 @@ test("sync keeps BarnDog's own entries out of the summary", () => {
 
 test("review output uses names and hides noise about new files", () => {
   const diff = (oldExecutable: unknown, newExecutable: unknown) =>
-    renderCollaboration("diff", [
+    renderCollaboration([
       { kind: "added", path: "a", patch: "", oldExecutable, newExecutable },
     ]).join("\n");
   expect(diff(null, false)).not.toMatch(/executable/);
   expect(diff(null, true)).toMatch(/executable/);
   expect(diff(false, true)).toMatch(/executable: false → true/);
-  const [row] = renderCollaboration("versions", [
+  const [row] = renderCollaboration([
     {
       number: 2,
       commit: "abc",
@@ -421,8 +423,8 @@ test("a text file's closing newline isn't part of the selected lines", () => {
 test("assets install accepts override decisions", async () => {
   let seen: Record<string, unknown> = {};
   const { instance } = program({
-    environment: async (_, options) => {
-      seen = options as Record<string, unknown>;
+    changeAsset: async (_, target) => {
+      seen = target;
       return { status: "applied", events: [] };
     },
   });

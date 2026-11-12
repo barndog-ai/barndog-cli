@@ -299,8 +299,12 @@ test("command parsing delegates scope, native and mirror operations", async () =
   const make = () =>
     createProgram({
       write: () => undefined,
-      environment: async (action, options) => {
-        calls.push([action, options]);
+      switchSet: async (options) => {
+        calls.push(["switch", options]);
+        return { status: "applied", events: [] };
+      },
+      changeAsset: async (change, target) => {
+        calls.push([change, target]);
         return { status: "applied", events: [] };
       },
       githubResolveMirror: record("resolve-mirror"),
@@ -402,11 +406,21 @@ test("command parsing delegates scope, native and mirror operations", async () =
   ]);
   expect(calls[0]).toStrictEqual([
     "switch",
-    { origin: "team/platform", mode: "all", overrides: "preserve" },
+    {
+      origin: "team/platform",
+      mode: "all",
+      overrides: "preserve",
+      resolution: undefined,
+    },
   ]);
   expect(calls[1]).toStrictEqual([
     "install",
-    { kind: "mcp", name: "docs", origin: "team/platform" },
+    {
+      kind: "mcp",
+      name: "docs",
+      origin: "team/platform",
+      resolution: undefined,
+    },
   ]);
   expect(calls[2]).toStrictEqual([
     "resolve-mirror",

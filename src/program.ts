@@ -1,7 +1,27 @@
 import { Command, Help, Option } from "commander";
 import { styleText } from "node:util";
 import { registerCollaboration } from "./commands/collaboration.js";
-import { collaborate } from "./features/collaboration/index.js";
+import {
+  applySuggestion,
+  changeDiff,
+  commentOnChange,
+  createPackage,
+  diffVersions,
+  listChanges,
+  mergeChange,
+  packageVersions,
+  pullPackage,
+  pushWorkingCopy,
+  rejectChange,
+  resolveFile,
+  reviewChange,
+  setDiscussionResolved,
+  showChange,
+  updateWorkingCopy,
+  versionFiles,
+  workingDiff,
+  workingStatus,
+} from "./features/collaboration/index.js";
 import { registerAuth } from "./commands/auth.js";
 import { runLogin, runLogout, showAuthStatus } from "./ui/auth.js";
 import { registerInit } from "./commands/init.js";
@@ -10,7 +30,18 @@ import { registerStatus } from "./commands/status.js";
 import type { CommandContext, Mode } from "./commands/context.js";
 import { settingsPath } from "./config/settings.js";
 import { clashPrompt, synchronize } from "./features/environment/sync.js";
-import { environmentOperation } from "./features/environment/operations.js";
+import {
+  changeAsset,
+  changeAssets,
+  changeSet,
+  installSet,
+  installSetAssets,
+  listSets,
+  previewSet,
+  renameAsset,
+  setKnowledge,
+  switchSet,
+} from "./features/environment/operations.js";
 import { doctor } from "./features/doctor/index.js";
 import { repoStatus, workspaceUrl } from "./features/inspection/index.js";
 import { validateFolder } from "./features/git-workspace/assets.js";
@@ -246,7 +277,26 @@ export function createProgram(options: ProgramOptions = {}): Command {
     interactive: options.interactive ?? interactiveTerminal(),
   };
   const context: CommandContext = {
-    collaborate: options.collaborate ?? collaborate,
+    applySuggestion: options.applySuggestion ?? applySuggestion,
+    changeDiff: options.changeDiff ?? changeDiff,
+    commentOnChange: options.commentOnChange ?? commentOnChange,
+    createPackage: options.createPackage ?? createPackage,
+    diffVersions: options.diffVersions ?? diffVersions,
+    listChanges: options.listChanges ?? ((options) => listChanges(options)),
+    mergeChange: options.mergeChange ?? mergeChange,
+    packageVersions: options.packageVersions ?? packageVersions,
+    pullPackage: options.pullPackage ?? pullPackage,
+    pushWorkingCopy: options.pushWorkingCopy ?? pushWorkingCopy,
+    rejectChange: options.rejectChange ?? rejectChange,
+    resolveFile: options.resolveFile ?? ((path) => resolveFile(path)),
+    reviewChange: options.reviewChange ?? reviewChange,
+    setDiscussionResolved:
+      options.setDiscussionResolved ?? setDiscussionResolved,
+    showChange: options.showChange ?? showChange,
+    updateWorkingCopy: options.updateWorkingCopy ?? (() => updateWorkingCopy()),
+    versionFiles: options.versionFiles ?? versionFiles,
+    workingDiff: options.workingDiff ?? (() => workingDiff()),
+    workingStatus: options.workingStatus ?? (() => workingStatus()),
     login: options.login ?? ((login) => runLogin(login, write)),
     logout: options.logout ?? (() => runLogout(write)),
     authStatus:
@@ -255,7 +305,16 @@ export function createProgram(options: ProgramOptions = {}): Command {
       options.setup ??
       ((restart, server, setupOptions) =>
         runSetup({ restart, server, ...setupOptions, write: options.write })),
-    environment: options.environment ?? environmentOperation,
+    changeAsset: options.changeAsset ?? changeAsset,
+    changeAssets: options.changeAssets ?? changeAssets,
+    renameAsset: options.renameAsset ?? renameAsset,
+    listSets: options.listSets ?? (() => listSets()),
+    previewSet: options.previewSet ?? previewSet,
+    installSet: options.installSet ?? installSet,
+    installSetAssets: options.installSetAssets ?? installSetAssets,
+    changeSet: options.changeSet ?? changeSet,
+    switchSet: options.switchSet ?? switchSet,
+    setKnowledge: options.setKnowledge ?? setKnowledge,
     doctor: options.doctor ?? (() => doctor()),
     workspaceUrl: options.workspaceUrl ?? (() => workspaceUrl()),
     repoStatus: options.repoStatus ?? (() => repoStatus()),

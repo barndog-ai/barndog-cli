@@ -21,6 +21,7 @@ import {
   renderInventory,
 } from "../ui/assets.js";
 import { runSetInstall } from "../ui/scope-install.js";
+import type { SetsList } from "../features/environment/operations.js";
 import { runSelection } from "../ui/selection.js";
 import { pickMany, pickOne, type PickChoice } from "../ui/pick.js";
 import { promptTheme } from "../ui/theme.js";
@@ -265,7 +266,14 @@ export function registerEnvironment(program: Command, context: CommandContext) {
           },
         ) => {
           if (name)
-            return runSelection(context, "install", { ...options, name, kind });
+            return runSelection(context, (resolution) =>
+              context.changeAsset("install", {
+                ...options,
+                name,
+                kind,
+                resolution,
+              }),
+            );
           requireArguments(
             context,
             `barndog ${group} install <name> --origin <origin>`,
@@ -300,12 +308,15 @@ export function registerEnvironment(program: Command, context: CommandContext) {
                 : `No ${labels.many} available to install. Add one with ${addCommand}.`,
             },
           );
-          await runSelection(context, "install", {
-            kind,
-            ids,
-            overrides: options.overrides,
-            decisions: options.decisions,
-          });
+          await runSelection(context, (resolution) =>
+            context.changeAssets("install", {
+              kind,
+              ids,
+              overrides: options.overrides,
+              decisions: options.decisions,
+              resolution,
+            }),
+          );
         },
       );
 
@@ -323,7 +334,14 @@ export function registerEnvironment(program: Command, context: CommandContext) {
         .action(
           async (name: string | undefined, options: { origin?: string }) => {
             if (name)
-              return runSelection(context, action, { ...options, name, kind });
+              return runSelection(context, (resolution) =>
+                context.changeAsset(action, {
+                  ...options,
+                  name,
+                  kind,
+                  resolution,
+                }),
+              );
             requireArguments(context, `barndog ${group} ${action} <name>`);
             const items = localCandidates(
               (await context.inventory()).items,
@@ -340,10 +358,13 @@ export function registerEnvironment(program: Command, context: CommandContext) {
                     : `No ${labels.many} to ${action} on this machine.`,
               },
             );
-            await runSelection(context, action, {
-              kind,
-              ids: chosen.map((item) => item.id),
-            });
+            await runSelection(context, (resolution) =>
+              context.changeAssets(action, {
+                kind,
+                ids: chosen.map((item) => item.id),
+                resolution,
+              }),
+            );
           },
         );
 
@@ -393,13 +414,15 @@ export function registerEnvironment(program: Command, context: CommandContext) {
                 "--as",
                 suggestion,
               );
-          await runSelection(context, "rename", {
-            kind,
-            name: target,
-            origin: options.origin,
-            as,
-            reset: options.reset,
-          });
+          await runSelection(context, () =>
+            context.renameAsset({
+              kind,
+              name: target,
+              origin: options.origin,
+              as,
+              reset: options.reset,
+            }),
+          );
           // A clash prompt during the sync may have chosen a different name.
           const item = (await context.inventory()).items.find(
             (entry) =>
@@ -513,23 +536,13 @@ export function registerEnvironment(program: Command, context: CommandContext) {
   registerSets(program, context);
 }
 
-type SetsList = {
-  available: { type: string; id: string; slug: string; name?: string }[];
-  subscriptions: {
-    scope: { type: string; id: string };
-    mode: string;
-    enabled: boolean;
-  }[];
-};
-
 function registerSets(program: Command, context: CommandContext) {
   const sets = program
     .command("sets")
     .description(
       "Subscribe to everything a team, repository or the organization shares",
     );
-  const load = async () =>
-    (await context.environment("sets-list", {})) as SetsList;
+  const load = () => context.listSets();
   const label = (scope: { type: string; slug?: string; id: string }) =>
     originLabel(scope);
 
@@ -681,7 +694,9 @@ function registerSets(program: Command, context: CommandContext) {
       }
       return action === "install"
         ? runSetInstall(context, { ...options, origin })
-        : runSelection(context, `sets-${action}`, { ...options, origin });
+        : runSelection(context, (resolution) =>
+            context.changeSet(action, { ...options, origin, resolution }),
+          );
     });
   }
 
@@ -721,7 +736,9 @@ function registerSets(program: Command, context: CommandContext) {
             "There is no other team or repository to switch to.",
           );
         }
-        await runSelection(context, "switch", { ...options, origin });
+        await runSelection(context, (resolution) =>
+          context.switchSet({ ...options, origin, resolution }),
+        );
       });
   switchCommand("switch", false);
   switchCommand("switch-team", true);

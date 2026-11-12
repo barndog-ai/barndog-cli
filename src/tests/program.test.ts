@@ -179,7 +179,7 @@ test("asset search never synchronizes and install forwards name and origin", asy
       offline: null,
       items: [],
     }),
-    environment: async (...args) => {
+    changeAsset: async (...args) => {
       calls.push(args);
       return { status: "applied", events: [] };
     },
@@ -197,17 +197,29 @@ test("asset search never synchronizes and install forwards name and origin", asy
     { from: "user" },
   );
   expect(calls).toStrictEqual([
-    ["install", { origin: "team:engineering", name: "example", kind: "skill" }],
+    [
+      "install",
+      {
+        origin: "team:engineering",
+        name: "example",
+        kind: "skill",
+        resolution: undefined,
+      },
+    ],
   ]);
 });
 
 test("missing asset names fail with a usage hint instead of prompting off a terminal", async () => {
+  const unexpected = async () => {
+    throw new Error("Unexpected operation");
+  };
   const program = createProgram({
     write: () => {},
     interactive: false,
-    environment: async () => {
-      throw new Error("Unexpected operation");
-    },
+    changeAsset: unexpected,
+    changeAssets: unexpected,
+    installSet: unexpected,
+    changeSet: unexpected,
   });
   for (const args of [
     ["skills", "install"],
@@ -259,12 +271,18 @@ test("errors render a message and a fix command", () => {
 
 test("collaboration commands pass parsed arguments without performing workflow IO", async () => {
   const calls: unknown[] = [];
+  // The command only prints what comes back, so the result's shape isn't under test.
+  const record =
+    (name: string) =>
+    async (...args: unknown[]) => {
+      calls.push([name, ...args]);
+      return { unchanged: true } as never;
+    };
   const program = createProgram({
     write: () => {},
-    collaborate: async (...args) => {
-      calls.push(args);
-      return { unchanged: true };
-    },
+    pullPackage: record("pullPackage"),
+    pushWorkingCopy: record("pushWorkingCopy"),
+    reviewChange: record("reviewChange"),
   });
   await program.parseAsync(
     [
@@ -279,7 +297,7 @@ test("collaboration commands pass parsed arguments without performing workflow I
     { from: "user" },
   );
   expect(calls.pop()).toStrictEqual([
-    "pull-skill",
+    "pullPackage",
     { name: "review", origin: "team/frontend", directory: "editable" },
   ]);
   await program.parseAsync(
@@ -287,22 +305,34 @@ test("collaboration commands pass parsed arguments without performing workflow I
     { from: "user" },
   );
   expect(calls.pop()).toStrictEqual([
-    "push",
+    "pushWorkingCopy",
     { publish: true, new: true, title: "Improve instructions" },
   ]);
   await program.parseAsync(["changes", "approve", "id", "--revision", "3"], {
     from: "user",
   });
-  expect(calls.pop()).toStrictEqual(["approve", { id: "id", revision: 3 }]);
+  expect(calls.pop()).toStrictEqual([
+    "reviewChange",
+    "approve",
+    { id: "id", revision: 3 },
+  ]);
   await program.parseAsync(
     ["skills", "changes", "approve", "id", "--revision", "4"],
     { from: "user" },
   );
-  expect(calls.pop()).toStrictEqual(["approve", { id: "id", revision: 4 }]);
+  expect(calls.pop()).toStrictEqual([
+    "reviewChange",
+    "approve",
+    { id: "id", revision: 4 },
+  ]);
 });
 
 test("review commands require an explicit positive revision before workflow IO", async () => {
   let calls = 0;
+  const count = async () => {
+    calls++;
+    return {} as never;
+  };
   for (const args of [
     ["changes", "approve", "id"],
     ["changes", "merge", "id", "--revision", "0"],
@@ -311,9 +341,9 @@ test("review commands require an explicit positive revision before workflow IO",
     const program = createProgram({
       write: () => {},
       writeError: () => {},
-      collaborate: async () => {
-        calls++;
-      },
+      reviewChange: count,
+      rejectChange: count,
+      mergeChange: count,
     });
     await expect(program.parseAsync(args, { from: "user" })).rejects.toThrow(
       CommanderError,
@@ -396,7 +426,7 @@ test("offline status reports what is installed without claiming it is current", 
     write: (line) => lines.push(line),
     writeError: () => {},
     interactive: false,
-    collaborate: async () => ({ mode: "environment" }),
+    workingStatus: async () => ({ mode: "environment" }),
     inventory: async () => ({
       harnesses: ["claude"],
       server: "https://barndog.example.com",

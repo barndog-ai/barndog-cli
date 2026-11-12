@@ -2,7 +2,6 @@ import { primary } from "./theme.js";
 import { renderSyncOutput } from "./output.js";
 import { changeSchema } from "@barndog-ai/api-contract";
 import { textContent } from "@barndog-ai/api-contract/collaboration";
-import type { CollaborationAction } from "../features/collaboration/index.js";
 
 // Remote package text must not be able to emit terminal control sequences.
 export function safe(value: unknown) {
@@ -32,9 +31,10 @@ function executableNote(previous: unknown, next: unknown) {
   return `  executable: ${previous} → ${next}`;
 }
 
+/** Results are told apart by their shape, not by the command that produced them. */
 export function renderCollaboration(
-  action: CollaborationAction,
   value: unknown,
+  options: { details?: boolean } = {},
 ): string[] {
   if (Array.isArray(value)) {
     if (!value.length) return ["No changes."];
@@ -66,7 +66,7 @@ export function renderCollaboration(
         `${change.title}  ·  ${change.status}  ·  revision ${change.revision}`,
       ),
     ];
-    if (action === "show") {
+    if (options.details) {
       const details = value as {
         names?: Record<string, string>;
         baseVersionNumber?: number;
@@ -162,7 +162,7 @@ export function renderCollaboration(
           ? ["Submission awaiting confirmation; retry barndog push."]
           : []),
         ...status.conflicts.map((path) => `Conflict: ${safe(path)}`),
-        ...renderCollaboration("diff", status.changes).filter(
+        ...renderCollaboration(status.changes).filter(
           (line) => !line.startsWith("@@") && !line.startsWith("+"),
         ),
       ];

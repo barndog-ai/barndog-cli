@@ -4,7 +4,11 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { environmentOperation } from "../features/environment/operations.js";
+import {
+  installSet,
+  installSetAssets,
+  previewSet,
+} from "../features/environment/operations.js";
 import { runSetup } from "../ui/onboarding.js";
 import {
   readSettings,
@@ -194,37 +198,17 @@ for (const state of ["missing", "expired", "valid", "revoked"] as const) {
     );
     expect(logins).toBe(state === "valid" ? 0 : 1);
     if (state === "valid") {
-      await environmentOperation(
-        "sets-install",
-        { origin: "org", mode: "all" },
-        home,
-      );
-      const preview = (await environmentOperation(
-        "sets-preview",
-        { origin: "org" },
-        home,
-      )) as { assets: { id: string }[] };
+      await installSet({ origin: "org", mode: "all" }, home);
+      const preview = await previewSet("org", home);
       expect(preview.assets.map((asset) => asset.id)).toStrictEqual([mcpId]);
       const original = await readFile(settingsPath(home), "utf8");
       await expect(
-        environmentOperation(
-          "sets-install-custom",
-          { origin: "org", assetIds: [randomUUID()] },
-          home,
-        ),
+        installSetAssets({ origin: "org", assetIds: [randomUUID()] }, home),
       ).rejects.toThrow(/unavailable assets/);
       expect(await readFile(settingsPath(home), "utf8")).toBe(original);
-      await environmentOperation(
-        "sets-install-custom",
-        { origin: "org", assetIds: [] },
-        home,
-      );
+      await installSetAssets({ origin: "org", assetIds: [] }, home);
       expect(await readFile(settingsPath(home), "utf8")).toBe(original);
-      await environmentOperation(
-        "sets-install-custom",
-        { origin: "org", assetIds: [mcpId] },
-        home,
-      );
+      await installSetAssets({ origin: "org", assetIds: [mcpId] }, home);
       const custom = await readSettings(home);
       assert(custom?.version === 2);
       expect(custom.environment?.subscriptions).toStrictEqual([]);

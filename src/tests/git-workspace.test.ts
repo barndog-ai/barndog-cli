@@ -30,7 +30,17 @@ import { z } from "zod";
 import { CliError, friendlyMessage } from "../errors.js";
 import { updateCredentials } from "../features/auth/credentials.js";
 import { searchCatalog } from "../features/catalog/index.js";
-import { collaborate } from "../features/collaboration/index.js";
+import {
+  createPackage,
+  diffVersions,
+  listChanges,
+  packageVersions,
+  pullPackage,
+  pushWorkingCopy,
+  resolveFile,
+  updateWorkingCopy,
+  workingStatus,
+} from "../features/collaboration/index.js";
 import { developers, promote } from "../features/discovery/index.js";
 import { doctor } from "../features/doctor/index.js";
 import { validateFolder } from "../features/git-workspace/assets.js";
@@ -41,7 +51,11 @@ import {
 } from "../features/git-workspace/move.js";
 import { updateImported } from "../features/imports/local.js";
 import { repoStatus } from "../features/inspection/index.js";
-import { environmentOperation } from "../features/environment/operations.js";
+import {
+  changeAsset,
+  installSet,
+  renameAsset,
+} from "../features/environment/operations.js";
 import { synchronize } from "../features/environment/sync.js";
 import { loadWorkspace, stableId } from "../features/git-workspace/format.js";
 import { checkRepositoryUrl } from "../features/git-workspace/git.js";
@@ -346,11 +360,7 @@ test("merged changes reach members, sets work, and removals apply", async (t) =>
   expect(await installed(member, "skills/code-review/SKILL.md")).toMatch(
     /New\./,
   );
-  await environmentOperation(
-    "sets-install",
-    { origin: "team/web", mode: "all" },
-    member,
-  );
+  await installSet({ origin: "team/web", mode: "all" }, member);
   expect(await installed(member, "skills/lint/SKILL.md")).toMatch(/lint/);
   await rm(join(clone, "org/skills/code-review"), { recursive: true });
   await commit(clone, "Remove");
@@ -612,8 +622,7 @@ test("an invalid Skill renamed since it broke still holds its installed name", a
   expect(saved.localNames?.[id]).toBe("renamed");
   // Its installed name isn't free just because a rename is waiting on a fix.
   await expect(
-    environmentOperation(
-      "rename",
+    renameAsset(
       { kind: "skill", name: "lint", origin: "team/web", as: "code-review" },
       member,
     ),
@@ -709,14 +718,14 @@ test("a Cloud machine with a local folder keeps Cloud collaboration", async (t) 
     },
     home,
   );
-  expect(await collaborate("status", {}, home, home)).toStrictEqual({
+  expect(await workingStatus(home, home)).toStrictEqual({
     mode: "environment",
   });
-  await expect(collaborate("list", {}, home, home)).rejects.toSatisfy(
+  await expect(listChanges({}, home)).rejects.toSatisfy(
     (error: Error) => !/no review step/.test(error.message),
   );
   await expect(
-    collaborate("push", { origin: "local" }, home, home),
+    pushWorkingCopy({ origin: "local" }, home, home),
   ).rejects.toThrow(/no review step/);
 });
 
@@ -861,11 +870,7 @@ test("a terminal clone connects the workspace and an empty repo returns null", a
     },
     home,
   );
-  await environmentOperation(
-    "sets-install",
-    { origin: "org", mode: "all" },
-    home,
-  );
+  await installSet({ origin: "org", mode: "all" }, home);
   expect(await installed(home, "skills/code-review/SKILL.md")).toMatch(/Do/);
   const empty = join(root, "empty.git");
   await run(root, "init", "--bare", "--initial-branch=main", empty);
@@ -1033,19 +1038,16 @@ test("working copies push review branches and merge upstream edits", async (t) =
   const member = join(root, "member");
   await setupGit(url, member);
   const options = { name: "code-review", origin: "org" };
-  await collaborate("pull-skill", options, root, member);
+  await pullPackage(options, root, member);
   const work = join(root, "code-review");
   await write(work, "SKILL.md", skill("code-review", "Member edit."));
   await write(work, "notes.txt", "added");
-  const status = (await collaborate("status", {}, work, member)) as {
+  const status = (await workingStatus(work, member)) as {
     changes: unknown[];
   };
   expect(status.changes.length).toBe(2);
-  expect(renderCollaboration("status", status).join("\n")).toMatch(
-    /Base: [0-9a-f]{7}/,
-  );
-  const pushed = (await collaborate(
-    "push",
+  expect(renderCollaboration(status).join("\n")).toMatch(/Base: [0-9a-f]{7}/);
+  const pushed = (await pushWorkingCopy(
     { title: "Clarify" },
     work,
     member,
@@ -1054,9 +1056,7 @@ test("working copies push review branches and merge upstream edits", async (t) =
     commit: string;
   };
   expect(pushed.branch).toMatch(/^barndog\/org-code-review-[0-9a-f]{6}$/);
-  expect(renderCollaboration("push", pushed).join("\n")).toMatch(
-    /Open a pull request/,
-  );
+  expect(renderCollaboration(pushed).join("\n")).toMatch(/Open a pull request/);
   // Nothing lands on the default branch until the host merges it.
   await run(clone, "fetch", "origin");
   expect(
@@ -1072,11 +1072,11 @@ test("working copies push review branches and merge upstream edits", async (t) =
   expect(
     await run(clone, "log", "-1", "--format=%s", `origin/${pushed.branch}`),
   ).toBe("Clarify");
-  expect(await collaborate("push", {}, work, member)).toStrictEqual({
+  expect(await pushWorkingCopy({}, work, member)).toStrictEqual({
     unchanged: true,
   });
   await write(work, "notes.txt", "added twice");
-  const again = (await collaborate("push", {}, work, member)) as {
+  const again = (await pushWorkingCopy({}, work, member)) as {
     branch: string;
   };
   expect(again.branch).toBe(pushed.branch);
@@ -1092,11 +1092,11 @@ test("working copies push review branches and merge upstream edits", async (t) =
   // The host merges it, and pull closes the review.
   await run(clone, "merge", "--no-edit", `origin/${pushed.branch}`);
   await run(clone, "push", "origin", "main");
-  const pulled = (await collaborate("pull", {}, work, member)) as {
+  const pulled = (await updateWorkingCopy(work, member)) as {
     conflicts: string[];
   };
   expect(pulled.conflicts).toStrictEqual([]);
-  const after = (await collaborate("status", {}, work, member)) as {
+  const after = (await workingStatus(work, member)) as {
     review: unknown;
     changes: unknown[];
   };
@@ -1108,12 +1108,7 @@ test("pull merges upstream, conflicts block push, and resolve clears them", asyn
   const { root, url, clone } = await teamRepo(t);
   const member = join(root, "member");
   await setupGit(url, member);
-  await collaborate(
-    "pull-skill",
-    { name: "code-review", origin: "org" },
-    root,
-    member,
-  );
+  await pullPackage({ name: "code-review", origin: "org" }, root, member);
   const work = join(root, "code-review");
   await write(work, "SKILL.md", skill("code-review", "Local."));
   await write(
@@ -1122,19 +1117,19 @@ test("pull merges upstream, conflicts block push, and resolve clears them", asyn
     skill("code-review", "Upstream."),
   );
   await commit(clone, "Upstream");
-  const result = (await collaborate("pull", {}, work, member)) as {
+  const result = (await updateWorkingCopy(work, member)) as {
     conflicts: string[];
   };
   expect(result.conflicts).toStrictEqual(["SKILL.md"]);
-  await expect(collaborate("push", {}, work, member)).rejects.toThrow(
+  await expect(pushWorkingCopy({}, work, member)).rejects.toThrow(
     /Resolve conflicts/,
   );
-  await expect(
-    collaborate("resolve", { path: "SKILL.md" }, work, member),
-  ).rejects.toThrow(/conflict markers/);
+  await expect(resolveFile("SKILL.md", work, member)).rejects.toThrow(
+    /conflict markers/,
+  );
   await write(work, "SKILL.md", skill("code-review", "Merged."));
-  await collaborate("resolve", { path: "SKILL.md" }, work, member);
-  const pushed = (await collaborate("push", {}, work, member)) as {
+  await resolveFile("SKILL.md", work, member);
+  const pushed = (await pushWorkingCopy({}, work, member)) as {
     branch: string;
   };
   expect(pushed.branch).toBeTruthy();
@@ -1144,20 +1139,10 @@ test("push --publish goes straight to the default branch only when asked", async
   const { root, url, clone } = await teamRepo(t);
   const member = join(root, "member");
   await setupGit(url, member);
-  await collaborate(
-    "pull-skill",
-    { name: "code-review", origin: "org" },
-    root,
-    member,
-  );
+  await pullPackage({ name: "code-review", origin: "org" }, root, member);
   const work = join(root, "code-review");
   await write(work, "SKILL.md", skill("code-review", "Direct."));
-  const result = (await collaborate(
-    "push",
-    { publish: true },
-    work,
-    member,
-  )) as {
+  const result = (await pushWorkingCopy({ publish: true }, work, member)) as {
     published: boolean;
     branch: string;
   };
@@ -1176,7 +1161,7 @@ test("push --publish goes straight to the default branch only when asked", async
   await commit(clone, "Other");
   await write(work, "SKILL.md", skill("code-review", "Stale."));
   await expect(
-    collaborate("push", { publish: true }, work, member),
+    pushWorkingCopy({ publish: true }, work, member),
   ).rejects.toSatisfy((error: CliError) => error.hint === "barndog pull");
 });
 
@@ -1184,18 +1169,12 @@ test("create starts a new asset in a new team scope and history is readable", as
   const { root, url, clone } = await teamRepo(t);
   const member = join(root, "member");
   await setupGit(url, member);
-  await collaborate(
-    "create",
+  await createPackage(
     { name: "fresh", origin: "team/mobile", kind: "hook" },
     root,
     member,
   );
-  const pushed = (await collaborate(
-    "push",
-    {},
-    join(root, "fresh"),
-    member,
-  )) as {
+  const pushed = (await pushWorkingCopy({}, join(root, "fresh"), member)) as {
     branch: string;
   };
   expect(pushed.branch).toMatch(/^barndog\/team-mobile-fresh-/);
@@ -1214,7 +1193,7 @@ test("create starts a new asset in a new team scope and history is readable", as
   );
   await commit(clone, "Second");
   const options = { name: "code-review", origin: "org" };
-  const versions = (await collaborate("versions", options, root, member)) as {
+  const versions = (await packageVersions(options, member)) as {
     number: number;
     description: string;
   }[];
@@ -1222,12 +1201,9 @@ test("create starts a new asset in a new team scope and history is readable", as
     [1, "Add assets"],
     [2, "Second"],
   ]);
-  const diff = (await collaborate(
-    "version-diff",
-    { ...options, from: 1, to: 2 },
-    root,
-    member,
-  )) as { patch: string }[];
+  const diff = (await diffVersions({ ...options, from: 1, to: 2 }, member)) as {
+    patch: string;
+  }[];
   expect(diff[0]!.patch).toMatch(/V2/);
 });
 
@@ -1235,7 +1211,7 @@ test("review commands point to the Git host and cloud-only commands explain why"
   const { root, url } = await teamRepo(t);
   const member = join(root, "member");
   await setupGit(url, member);
-  await expect(collaborate("list", {}, root, member)).rejects.toThrow(
+  await expect(listChanges({}, member)).rejects.toThrow(
     /pull requests on your Git host/,
   );
   await expect(developers(undefined, member)).rejects.toSatisfy(
@@ -1295,12 +1271,7 @@ test("local mode delivers every kind from a folder and needs no Git", async (t) 
     /Edited/,
   );
   await expect(
-    collaborate(
-      "pull-skill",
-      { name: "code-review", origin: "org" },
-      root,
-      home,
-    ),
+    pullPackage({ name: "code-review", origin: "org" }, root, home),
   ).rejects.toThrow(/Edit them directly/);
 });
 
@@ -1634,7 +1605,7 @@ test("switching keeps local assets active next to the Git workspace", async (t) 
   expect(await installed(home, "skills/from-team/SKILL.md")).toMatch(
     /from-team/,
   );
-  await environmentOperation(
+  await changeAsset(
     "disable",
     { kind: "skill", name: "mine", origin: "local" },
     home,
@@ -2862,7 +2833,7 @@ test("a moved asset is used from its new scope once it exists there, and removin
   expect(items.map((i) => [i.origin, i.state])).toStrictEqual([
     ["team/web", "installed"],
   ]);
-  await environmentOperation(
+  await changeAsset(
     "remove",
     { kind: "skill", name: "mine", origin: "team/web" },
     home,

@@ -1,23 +1,34 @@
 import checkbox from "@inquirer/checkbox";
 import select from "@inquirer/select";
 import { CliError } from "../errors.js";
-import type { EnvironmentOptions } from "../features/environment/operations.js";
+import type { Overrides } from "../features/environment/operations.js";
+import type { CommandContext } from "../commands/context.js";
 import { runSelection, type SelectionContext } from "./selection.js";
 import { checkboxTheme, promptTheme } from "./theme.js";
 import type { ListAsset } from "./asset-list.js";
 
 type InstallMode = "recommended" | "all" | "custom";
 
+type SetInstallContext = SelectionContext &
+  Pick<CommandContext, "installSet" | "previewSet" | "installSetAssets">;
+
 export async function runSetInstall(
-  context: SelectionContext,
-  options: EnvironmentOptions,
+  context: SetInstallContext,
+  options: {
+    origin: string;
+    mode?: "recommended" | "optional" | "all";
+  } & Overrides,
   prompts: {
     interactive?: boolean;
     mode?: () => Promise<InstallMode>;
     assets?: (assets: ListAsset[], selectedIds: string[]) => Promise<string[]>;
   } = {},
 ) {
-  if (options.mode) return runSelection(context, "sets-install", options);
+  const install = (mode: "recommended" | "optional" | "all") =>
+    runSelection(context, (resolution) =>
+      context.installSet({ ...options, mode, resolution }),
+    );
+  if (options.mode) return install(options.mode);
   if (!(
     prompts.interactive ?? Boolean(process.stdin.isTTY && process.stdout.isTTY)
   ))
@@ -40,12 +51,8 @@ export async function runSetInstall(
         theme: promptTheme,
       }))
   )();
-  if (mode !== "custom")
-    return runSelection(context, "sets-install", { ...options, mode });
-  const preview = (await context.environment("sets-preview", options)) as {
-    assets: ListAsset[];
-    selectedAssetIds: string[];
-  };
+  if (mode !== "custom") return install(mode);
+  const preview = await context.previewSet(options.origin);
   if (!preview.assets.length) {
     context.write("No published assets in this source yet.");
     return;
@@ -69,5 +76,7 @@ export async function runSetInstall(
     context.write("No assets selected. Nothing changed.");
     return;
   }
-  await runSelection(context, "sets-install-custom", { ...options, assetIds });
+  await runSelection(context, () =>
+    context.installSetAssets({ origin: options.origin, assetIds }),
+  );
 }

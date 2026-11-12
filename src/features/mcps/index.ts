@@ -17,7 +17,7 @@ import {
   selectRepoAsset,
   showRepoAsset,
 } from "../git-workspace/assets.js";
-import { gitHistory } from "../collaboration/workspace-git.js";
+import { gitVersions } from "../collaboration/workspace-git.js";
 import type { Harness } from "../../harnesses/types.js";
 import {
   patchNative,
@@ -92,9 +92,8 @@ export async function mcpVersions(
 ) {
   const settings = await readSettings(home);
   if (settings?.version === 2 && settings.gitWorkspace)
-    return gitHistory(
+    return gitVersions(
       settings.gitWorkspace,
-      "versions",
       { name, origin, kind: "mcp" },
       home,
     );

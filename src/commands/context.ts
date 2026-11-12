@@ -1,10 +1,38 @@
 import type {
-  CollaborationAction,
-  CollaborationOptions,
+  applySuggestion,
+  changeDiff,
+  commentOnChange,
+  createPackage,
+  diffVersions,
+  listChanges,
+  mergeChange,
+  packageVersions,
+  pullPackage,
+  pushWorkingCopy,
+  rejectChange,
+  resolveFile,
+  reviewChange,
+  setDiscussionResolved,
+  showChange,
+  updateWorkingCopy,
+  versionFiles,
+  workingDiff,
+  workingStatus,
 } from "../features/collaboration/index.js";
 import type { SyncEvent } from "../features/skills/sync.js";
 import type { SyncOptions } from "../features/environment/sync.js";
-import type { EnvironmentOptions } from "../features/environment/operations.js";
+import type {
+  changeAsset,
+  changeAssets,
+  changeSet,
+  installSet,
+  installSetAssets,
+  listSets,
+  previewSet,
+  renameAsset,
+  setKnowledge,
+  switchSet,
+} from "../features/environment/operations.js";
 import type { Inventory } from "../features/inventory/index.js";
 import type { CatalogAsset } from "../features/catalog/index.js";
 import type { AssetKind } from "../features/asset-selection/types.js";
@@ -74,10 +102,6 @@ type Options<F extends (...args: never[]) => unknown> = Parameters<F>[0];
 export type Mode = { json: boolean; interactive: boolean };
 
 export type CommandContext = {
-  environment: (
-    action: string,
-    options: EnvironmentOptions,
-  ) => Promise<unknown>;
   login: (options: {
     server?: string;
     browser: boolean;
@@ -96,10 +120,6 @@ export type CommandContext = {
   ) => Promise<SyncEvent[]>;
   inventory: () => Promise<Inventory>;
   searchCatalog: (kind: AssetKind) => Promise<CatalogAsset[]>;
-  collaborate: (
-    action: CollaborationAction,
-    options: CollaborationOptions,
-  ) => Promise<unknown>;
   write: (message: string) => void;
   mode: Mode;
 } & FeatureFunctions;
@@ -109,6 +129,34 @@ export type CommandContext = {
  * signature of the function it is named after, without the `home` argument.
  */
 type FeatureFunctions = {
+  changeAsset: (
+    change: Parameters<typeof changeAsset>[0],
+    target: Parameters<typeof changeAsset>[1],
+  ) => ReturnType<typeof changeAsset>;
+  changeAssets: (
+    change: Parameters<typeof changeAssets>[0],
+    target: Parameters<typeof changeAssets>[1],
+  ) => ReturnType<typeof changeAssets>;
+  renameAsset: (
+    target: Options<typeof renameAsset>,
+  ) => ReturnType<typeof renameAsset>;
+  listSets: () => ReturnType<typeof listSets>;
+  previewSet: (origin: string) => ReturnType<typeof previewSet>;
+  installSet: (
+    options: Options<typeof installSet>,
+  ) => ReturnType<typeof installSet>;
+  installSetAssets: (
+    options: Options<typeof installSetAssets>,
+  ) => ReturnType<typeof installSetAssets>;
+  changeSet: (
+    change: Parameters<typeof changeSet>[0],
+    options: Parameters<typeof changeSet>[1],
+  ) => ReturnType<typeof changeSet>;
+  switchSet: (
+    options: Options<typeof switchSet>,
+  ) => ReturnType<typeof switchSet>;
+  setKnowledge: (enabled: boolean) => ReturnType<typeof setKnowledge>;
+
   doctor: () => ReturnType<typeof doctor>;
   workspaceUrl: () => ReturnType<typeof workspaceUrl>;
   repoStatus: () => ReturnType<typeof repoStatus>;
@@ -161,6 +209,57 @@ type FeatureFunctions = {
   ) => ReturnType<typeof developerAssets>;
   promote: (input: PromoteInput) => ReturnType<typeof promote>;
   fork: (input: PromoteInput) => ReturnType<typeof fork>;
+
+  createPackage: (
+    target: Options<typeof createPackage>,
+  ) => ReturnType<typeof createPackage>;
+  pullPackage: (
+    target: Options<typeof pullPackage>,
+  ) => ReturnType<typeof pullPackage>;
+  updateWorkingCopy: () => ReturnType<typeof updateWorkingCopy>;
+  workingStatus: () => ReturnType<typeof workingStatus>;
+  workingDiff: () => ReturnType<typeof workingDiff>;
+  pushWorkingCopy: (
+    options: Options<typeof pushWorkingCopy>,
+  ) => ReturnType<typeof pushWorkingCopy>;
+  resolveFile: (path: string) => ReturnType<typeof resolveFile>;
+  packageVersions: (
+    target: Options<typeof packageVersions>,
+  ) => ReturnType<typeof packageVersions>;
+  versionFiles: (
+    target: Options<typeof versionFiles>,
+  ) => ReturnType<typeof versionFiles>;
+  diffVersions: (
+    target: Options<typeof diffVersions>,
+  ) => ReturnType<typeof diffVersions>;
+  listChanges: (
+    options: Options<typeof listChanges>,
+  ) => ReturnType<typeof listChanges>;
+  showChange: (
+    target: Options<typeof showChange>,
+  ) => ReturnType<typeof showChange>;
+  changeDiff: (
+    target: Options<typeof changeDiff>,
+  ) => ReturnType<typeof changeDiff>;
+  reviewChange: (
+    decision: Parameters<typeof reviewChange>[0],
+    target: Parameters<typeof reviewChange>[1],
+  ) => ReturnType<typeof reviewChange>;
+  rejectChange: (
+    target: Options<typeof rejectChange>,
+  ) => ReturnType<typeof rejectChange>;
+  mergeChange: (
+    target: Options<typeof mergeChange>,
+  ) => ReturnType<typeof mergeChange>;
+  commentOnChange: (
+    options: Options<typeof commentOnChange>,
+  ) => ReturnType<typeof commentOnChange>;
+  applySuggestion: (
+    target: Options<typeof applySuggestion>,
+  ) => ReturnType<typeof applySuggestion>;
+  setDiscussionResolved: (
+    target: Options<typeof setDiscussionResolved>,
+  ) => ReturnType<typeof setDiscussionResolved>;
 
   githubStatus: () => ReturnType<typeof githubStatus>;
   githubAuth: (
