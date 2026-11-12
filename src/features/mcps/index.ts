@@ -10,9 +10,13 @@ import {
   mcpVersionSchema,
 } from "@barndog-ai/api-contract";
 import { connection, selectOrigin } from "../collaboration/remote.js";
-import { request, selectAsset } from "../environment/remote.js";
+import { request, selectAsset, type RetryKey } from "../environment/remote.js";
 import { readSettings } from "../../config/settings.js";
-import { repoForOrigin, selectRepoAsset } from "../git-workspace/assets.js";
+import {
+  repoForOrigin,
+  selectRepoAsset,
+  showRepoAsset,
+} from "../git-workspace/assets.js";
 import { gitHistory } from "../collaboration/workspace-git.js";
 import type { Harness } from "../../harnesses/types.js";
 import {
@@ -22,40 +26,63 @@ import {
 } from "../native/configuration.js";
 import { fileText } from "../environment/transaction.js";
 
-export async function writeMcp(
-  name: string,
-  origin: string,
-  file: string,
-  home = homedir(),
-  key: string = randomUUID(),
-  expectedVersionId?: string,
-) {
+export type McpWriteInput = {
+  name: string;
+  origin: string;
+  /** Path of the JSON connection definition. */
+  file: string;
+  key?: RetryKey;
+};
+
+async function readDefinition(file: string) {
+  return mcpDefinitionSchema.parse(JSON.parse(await readFile(file, "utf8")));
+}
+
+/** Publishes a new MCP configuration in a scope. */
+export async function createMcp(input: McpWriteInput, home = homedir()) {
   const conn = await connection(home),
-    scope = await selectOrigin(origin, conn, home);
-  const definition = mcpDefinitionSchema.parse(
-    JSON.parse(await readFile(file, "utf8")),
-  );
-  if (expectedVersionId) {
-    const selected = await selectAsset("mcp", name, origin, home);
-    return request(
-      conn,
-      `/v1/mcps/${selected.reference.id}/versions`,
-      mcpSchema,
-      home,
-      "POST",
-      {
-        definition,
-        expectedVersionId: z.uuidv4().parse(expectedVersionId),
-        idempotencyKey: key,
-      },
-    );
-  }
+    scope = await selectOrigin(input.origin, conn, home);
+  const definition = await readDefinition(input.file);
   return request(conn, "/v1/mcps", mcpSchema, home, "POST", {
-    name,
+    name: input.name,
     origin: { type: scope.type, id: scope.id },
     definition,
-    idempotencyKey: key,
+    idempotencyKey: input.key ?? randomUUID(),
   });
+}
+
+/** Publishes a new revision of an MCP configuration, against the inspected version. */
+export async function updateMcp(
+  input: McpWriteInput & { expectedVersion: string },
+  home = homedir(),
+) {
+  const conn = await connection(home);
+  await selectOrigin(input.origin, conn, home);
+  const definition = await readDefinition(input.file);
+  const selected = await selectAsset("mcp", input.name, input.origin, home);
+  return request(
+    conn,
+    `/v1/mcps/${selected.reference.id}/versions`,
+    mcpSchema,
+    home,
+    "POST",
+    {
+      definition,
+      expectedVersionId: z.uuidv4().parse(input.expectedVersion),
+      idempotencyKey: input.key ?? randomUUID(),
+    },
+  );
+}
+
+/** One MCP configuration with its definition, from the repo or the server. */
+export async function showMcp(name: string, origin: string, home = homedir()) {
+  const settings = await readSettings(home);
+  const repo = settings && repoForOrigin(settings, home, origin);
+  if (repo)
+    return showRepoAsset(
+      selectRepoAsset(await repo.model(), "mcp", name, origin),
+    );
+  return (await selectAsset("mcp", name, origin, home)).asset;
 }
 
 export async function mcpVersions(

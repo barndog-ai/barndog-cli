@@ -10,7 +10,7 @@ const timer = setTimeout(() => {
 }, 5000);
 
 try {
-  const text = knowledgeIndexText(await knowledgeList(process.argv[3], true));
+  const text = knowledgeIndexText(await knowledgeList(true, process.argv[3]));
   if (text)
     console.log(
       JSON.stringify(

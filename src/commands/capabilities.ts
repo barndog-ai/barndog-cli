@@ -2,7 +2,6 @@ import { openBrowser } from "../ui/auth.js";
 import { safe } from "../ui/collaboration.js";
 import { renderMcp } from "../ui/mcp.js";
 import { runSelection } from "../ui/selection.js";
-import type { Check } from "../features/doctor/index.js";
 import {
   bad,
   bold,
@@ -19,25 +18,24 @@ import {
   warn,
 } from "../ui/format.js";
 
-type RepoStatus = {
-  root: string | null;
-  remotes: string[];
-  repository: { id: string; name: string; slug: string } | null;
-  team: { name: string; slug: string } | null;
-  ambiguous: boolean;
-};
-
 import { InvalidArgumentError, Option, type Command } from "commander";
 import { ORIGIN_HELP } from "../ui/format.js";
 import type { CommandContext } from "./context.js";
 import { pickInstalled, resolveOrigin } from "./origin.js";
-import {
-  renderHookCompatibility,
-  type HookCompatibility,
-} from "../ui/hook-compatibility.js";
+import { renderHookCompatibility } from "../ui/hook-compatibility.js";
 import type { AssetKind } from "../features/asset-selection/types.js";
-import type { CapabilityOptions } from "../features/capabilities/index.js";
-import type { Adaptation } from "../features/hooks/adapt.js";
+import type {
+  GithubConnectOptions,
+  GithubCreateRepositoryOptions,
+  GithubRepositoryOptions,
+  GithubResolveMirrorOptions,
+} from "../features/github/connections.js";
+import type {
+  GithubPullsCommentOptions,
+  GithubPullsCreateOptions,
+  GithubPullsReviewOptions,
+  GithubPullsReviseOptions,
+} from "../features/github/pulls.js";
 import type { Harness } from "../harnesses/types.js";
 
 function positive(value: string) {
@@ -58,47 +56,8 @@ export function registerCapabilities(
       write(String(result.message));
     else for (const line of renderValue(result)) context.write(line);
   };
-  const run = async (action: string, options: CapabilityOptions = {}) => {
-    const result = await context.capability(action, options);
-    if (action === "hooks-test") {
-      const test = result as {
-        stdout: string;
-        stderr: string;
-        exitCode: number;
-        timedOut: boolean;
-      };
-      // The Hook's own result is the command's result, however it is printed.
-      if (test.exitCode || test.timedOut)
-        process.exitCode = test.timedOut ? 124 : test.exitCode;
-      if (context.mode.json) return context.write(json(result));
-      if (test.stdout) write(test.stdout.trimEnd());
-      if (test.stderr) write(test.stderr.trimEnd());
-      write(
-        test.timedOut
-          ? `${bad("✖")} Hook test timed out.`
-          : test.exitCode
-            ? `${bad("✖")} Hook test exited ${test.exitCode}.`
-            : `${ok("✔")} Hook test exited 0.`,
-      );
-      return;
-    }
-    if (action === "hooks-compatibility" && !context.mode.json) {
-      for (const line of renderHookCompatibility(
-        options.name!,
-        result as HookCompatibility,
-      ))
-        context.write(line);
-      return;
-    }
-    if (
-      !context.mode.json &&
-      (action === "show" || action === "mcp-create" || action === "mcp-update")
-    ) {
-      if (action !== "show") write(`${ok("✔")} Published ${options.name}.`);
-      for (const line of renderMcp(result)) context.write(line);
-      return;
-    }
-    print(result);
+  const printMcp = (result: unknown) => {
+    for (const line of renderMcp(result)) context.write(line);
   };
   /** Adds the owning scope, asking only when several scopes share the name. */
   const locate = async <T extends { origin?: string }>(
@@ -129,7 +88,7 @@ export function registerCapabilities(
     .description("Open your BarnDog workspace in a browser")
     .option("--no-browser", "Print the URL without opening it")
     .action(async (options: { browser: boolean }) => {
-      const { url } = (await context.capability("open", {})) as { url: string };
+      const url = await context.workspaceUrl();
       if (context.mode.json) return context.write(json({ url }));
       if (!options.browser) return context.write(url);
       try {
@@ -147,10 +106,7 @@ export function registerCapabilities(
       "Show the repository, its owning team and whether you're subscribed",
     )
     .action(async () => {
-      const result = (await context.capability(
-        "repo-status",
-        {},
-      )) as RepoStatus;
+      const result = await context.repoStatus();
       const sets = result.repository
         ? ((await context
             .environment("sets-list", {})
@@ -166,11 +122,11 @@ export function registerCapabilities(
         );
         return;
       }
+      const repositoryId = result.repository?.id;
       const subscribed =
-        result.repository &&
+        repositoryId &&
         sets?.subscriptions.some(
-          (s) =>
-            s.scope.type === "repo" && s.scope.id === result.repository!.id,
+          (s) => s.scope.type === "repo" && s.scope.id === repositoryId,
         );
       for (const line of fields([
         ["Folder", result.root],
@@ -217,7 +173,7 @@ export function registerCapabilities(
       "Check your setup, session and installed assets, and suggest fixes",
     )
     .action(async () => {
-      const checks = (await context.capability("doctor", {})) as Check[];
+      const checks = await context.doctor();
       if (context.mode.json) return context.write(json(checks));
       context.write(`\n${heading("doctor")}\n`);
       const width = Math.max(...checks.map((c) => c.name.length));
@@ -264,30 +220,54 @@ export function registerCapabilities(
         "--expected-version <id>",
         "Inspected configuration version ID",
       );
-    command.action((name, options) =>
-      run(`mcp-${action}`, { ...options, name }),
+    command.action(
+      async (
+        name: string,
+        options: {
+          origin: string;
+          file: string;
+          key?: string;
+          expectedVersion: string;
+        },
+      ) => {
+        const result =
+          action === "create"
+            ? await context.createMcp({ ...options, name })
+            : await context.updateMcp({ ...options, name });
+        if (context.mode.json) return context.write(json(result));
+        write(`${ok("✔")} Published ${name}.`);
+        printMcp(result);
+      },
     );
   }
   mcp
     .command("show <name>")
     .option("--origin <origin>", ORIGIN_HELP)
     .description("Inspect a connection definition")
-    .action(async (name, options) =>
-      run("show", {
-        ...(await locate("mcp", name, options, `barndog mcp show ${name}`)),
-        kind: "mcp",
-      }),
-    );
+    .action(async (name: string, options: { origin?: string }) => {
+      const located = await locate(
+        "mcp",
+        name,
+        options,
+        `barndog mcp show ${name}`,
+      );
+      const result = await context.showMcp(located.name, located.origin);
+      if (context.mode.json) return context.write(json(result));
+      printMcp(result);
+    });
   mcp
     .command("versions <name>")
     .option("--origin <origin>", ORIGIN_HELP)
     .description("Inspect immutable configuration history")
-    .action(async (name, options) =>
-      run(
-        "mcp-versions",
-        await locate("mcp", name, options, `barndog mcp versions ${name}`),
-      ),
-    );
+    .action(async (name: string, options: { origin?: string }) => {
+      const located = await locate(
+        "mcp",
+        name,
+        options,
+        `barndog mcp versions ${name}`,
+      );
+      print(await context.mcpVersions(located.name, located.origin));
+    });
   mcp
     .command("auth <name>")
     .option("--origin <origin>", ORIGIN_HELP)
@@ -297,16 +277,22 @@ export function registerCapabilities(
         .makeOptionMandatory(),
     )
     .description("Enter native authentication without sharing credentials")
-    .action(async (name, options) =>
-      run(
-        "mcp-auth",
-        await locate(
+    .action(
+      async (name: string, options: { origin?: string; harness: Harness }) => {
+        const located = await locate(
           "mcp",
           name,
           options,
           `barndog mcp auth ${name} --harness ${options.harness}`,
-        ),
-      ),
+        );
+        print(
+          await context.authenticateMcp(
+            located.name,
+            located.origin,
+            options.harness,
+          ),
+        );
+      },
     );
   const hooks = program.commands.find((c) => c.name() === "hooks")!;
   hooks
@@ -322,16 +308,45 @@ export function registerCapabilities(
     .option("--handler <number>", "One-based command index", positive)
     .option("--timeout <seconds>", "Maximum test duration", positive)
     .description("Explicitly run one published command Hook with test input")
-    .action(async (name, options) =>
-      run(
-        "hooks-test",
-        await locate(
+    .action(
+      async (
+        name: string | undefined,
+        options: {
+          origin?: string;
+          harness: Harness;
+          input: string;
+          event?: string;
+          handler?: number;
+          timeout?: number;
+        },
+      ) => {
+        const located = await locate(
           "hook",
           name,
           options,
           `barndog hooks test <name> --harness ${options.harness} --input ${options.input}`,
-        ),
-      ),
+        );
+        const test = await context.testHook(located.name, located.origin, {
+          harness: options.harness,
+          input: options.input,
+          event: options.event,
+          handler: options.handler,
+          timeout: options.timeout,
+        });
+        // The Hook's own result is the command's result, however it is printed.
+        if (test.exitCode || test.timedOut)
+          process.exitCode = test.timedOut ? 124 : test.exitCode;
+        if (context.mode.json) return context.write(json(test));
+        if (test.stdout) write(test.stdout.trimEnd());
+        if (test.stderr) write(test.stderr.trimEnd());
+        write(
+          test.timedOut
+            ? `${bad("✖")} Hook test timed out.`
+            : test.exitCode
+              ? `${bad("✖")} Hook test exited ${test.exitCode}.`
+              : `${ok("✔")} Hook test exited 0.`,
+        );
+      },
     );
   hooks
     .command("compatibility [name]")
@@ -339,17 +354,21 @@ export function registerCapabilities(
     .description(
       "Inspect version-specific declarations and local runtime requirements",
     )
-    .action(async (name, options) =>
-      run(
-        "hooks-compatibility",
-        await locate(
-          "hook",
-          name,
-          options,
-          "barndog hooks compatibility <name>",
-        ),
-      ),
-    );
+    .action(async (name: string | undefined, options: { origin?: string }) => {
+      const located = await locate(
+        "hook",
+        name,
+        options,
+        "barndog hooks compatibility <name>",
+      );
+      const result = await context.hookCompatibility(
+        located.name,
+        located.origin,
+      );
+      if (context.mode.json) return context.write(json(result));
+      for (const line of renderHookCompatibility(located.name, result))
+        context.write(line);
+    });
   hooks
     .command("adapt [name]")
     .option("--origin <origin>", ORIGIN_HELP)
@@ -373,11 +392,11 @@ export function registerCapabilities(
           options,
           "barndog hooks adapt <name>",
         );
-        const result = (await context.capability("hooks-adapt", {
-          name: located.name,
-          origin: located.origin,
-          targets: options.for,
-        })) as Adaptation;
+        const result = await context.adaptHook(
+          located.name,
+          located.origin,
+          options.for,
+        );
         if (context.mode.json) return context.write(json(result));
         // Printed bare, so it can be piped to the clipboard or an agent.
         context.write(
@@ -395,18 +414,11 @@ export function registerCapabilities(
     .command("list")
     .description("List knowledge documents and when coding tools see them")
     .option("--always", "Only documents listed at every session start")
-    .action(async (options) => {
-      const docs = (await context.capability("knowledge-list", options)) as {
-        name: string;
-        description: string;
-        accessMode: string;
-        listedAtStart: boolean;
-      }[];
+    .action(async (options: { always?: boolean }) => {
+      const docs = await context.knowledgeList(options.always);
       if (context.mode.json) return context.write(json(docs));
-      const problems = (await context
-        .capability("knowledge-problems", {})
-        .catch(() => [])) as { path: string; reason: string }[] | undefined;
-      for (const problem of problems ?? [])
+      const problems = await context.knowledgeProblems().catch(() => []);
+      for (const problem of problems)
         context.write(`${warn("!")} ${problem.path}: ${problem.reason}`);
       if (!docs.length)
         return context.write(dim("No knowledge documents yet."));
@@ -436,10 +448,8 @@ export function registerCapabilities(
   knowledge
     .command("get <name>")
     .description("Print a knowledge document")
-    .action(async (name) => {
-      const result = (await context.capability("knowledge-get", { name })) as {
-        version: { content: { markdown: string } };
-      };
+    .action(async (name: string) => {
+      const result = await context.knowledgeGet(name);
       if (context.mode.json) return context.write(json(result));
       write(result.version.content.markdown);
     });
@@ -467,11 +477,8 @@ export function registerCapabilities(
     .command("list")
     .description("List people in your organization")
     .option("--search <query>", "Search names or handles")
-    .action(async (options) => {
-      const rows = (await context.capability("developers-list", options)) as {
-        slug: string;
-        name: string;
-      }[];
+    .action(async (options: { search?: string }) => {
+      const rows = await context.developers(options.search);
       if (context.mode.json) return context.write(json(rows));
       if (!rows.length) return context.write(dim("No matching people."));
       for (const line of table(
@@ -492,18 +499,8 @@ export function registerCapabilities(
     .command("show <handle>")
     .description("List a person's shared assets")
     .option("--search <query>", "Filter asset names")
-    .action(async (name, options) => {
-      const result = (await context.capability("developers-assets", {
-        ...options,
-        name,
-      })) as {
-        developer: { name: string; slug: string };
-        assets: {
-          kind: string;
-          name: string;
-          origin: { type: string; slug: string };
-        }[];
-      };
+    .action(async (handle: string, options: { search?: string }) => {
+      const result = await context.developerAssets(handle, options.search);
       if (context.mode.json) return context.write(json(result));
       context.write(
         `${bold(clean(result.developer.name))} ${dim(`@${result.developer.slug}`)}`,
@@ -524,16 +521,26 @@ export function registerCapabilities(
   const github = program
     .command("github")
     .description("Manage GitHub App connections, contributions and mirrors");
-  for (const action of ["auth", "install"] as const)
+  for (const [name, start] of [
+    ["auth", context.githubAuth],
+    ["install", context.githubInstall],
+  ] as const)
     github
-      .command(action)
+      .command(name)
       .option("--no-browser", "Print the URL without opening it")
-      .action((options) => run(`github-${action}`, options));
-  for (const action of ["status", "installations", "list"] as const)
-    github.command(action).action(() => run(`github-${action}`));
-  for (const action of ["connect", "import"] as const) {
-    const command = github
-      .command(`${action} <name>`)
+      .action(async (options: { browser: boolean }) =>
+        print(await start(options)),
+      );
+  for (const [name, read] of [
+    ["status", context.githubStatus],
+    ["installations", context.githubInstallations],
+    ["list", context.githubList],
+  ] as const)
+    github.command(name).action(async () => print(await read()));
+  /** A command that names an asset and the GitHub repository it pairs with. */
+  const repositoryCommand = (name: string) =>
+    github
+      .command(`${name} <name>`)
       .addOption(
         new Option("--kind <kind>", "Git-backed asset kind")
           .choices(["skill", "hook"])
@@ -548,32 +555,48 @@ export function registerCapabilities(
         "--repository <owner/name>",
         "Customer-selected GitHub repository",
       );
-    if (action === "connect")
-      command
-        .addOption(
-          new Option("--mode <mode>", "mirror keeps BarnDog authoritative")
-            .choices(["connect", "transfer", "mirror"])
-            .default("connect"),
-        )
-        .option("--expected-version <id>", "Inspected BarnDog version ID");
-    if (action === "import")
-      command
-        .addOption(
-          new Option(
-            "--authority <authority>",
-            "Copy into BarnDog or keep GitHub authoritative",
-          )
-            .choices(["barndog", "github"])
-            .default("github"),
-        )
-        .option(
-          "--key <key>",
-          "Required for BarnDog-owned copies; retain for exact retries",
-        );
-    command.action((name, options) =>
-      run(`github-${action}`, { ...options, name }),
+  repositoryCommand("connect")
+    .addOption(
+      new Option("--mode <mode>", "mirror keeps BarnDog authoritative")
+        .choices(["connect", "transfer", "mirror"])
+        .default("connect"),
+    )
+    .option("--expected-version <id>", "Inspected BarnDog version ID")
+    .action(async (name: string, options: Omit<GithubConnectOptions, "name">) =>
+      print(await context.githubConnect({ ...options, name })),
     );
-  }
+  repositoryCommand("import")
+    .addOption(
+      new Option(
+        "--authority <authority>",
+        "Copy into BarnDog or keep GitHub authoritative",
+      )
+        .choices(["barndog", "github"])
+        .default("github"),
+    )
+    .option(
+      "--key <key>",
+      "Required for BarnDog-owned copies; retain for exact retries",
+    )
+    .action(
+      async (
+        name: string,
+        {
+          authority,
+          key,
+          ...target
+        }: Omit<GithubRepositoryOptions, "name"> & {
+          authority: "barndog" | "github";
+          key?: string;
+        },
+      ) => {
+        if (authority === "github")
+          return print(await context.githubImport({ ...target, name }));
+        if (!key)
+          throw new Error("Use --key <key> and retain it for exact retries");
+        print(await context.githubImportCopy({ ...target, name, key }));
+      },
+    );
   github
     .command("create-repository <name>")
     .description("Create a GitHub repository and export published history")
@@ -597,13 +620,20 @@ export function registerCapabilities(
         .choices(["private", "public"])
         .default("private"),
     )
-    .action((name, options) =>
-      run("github-create-repository", { ...options, name }),
+    .action(
+      async (
+        name: string,
+        options: Omit<GithubCreateRepositoryOptions, "name">,
+      ) => print(await context.githubCreateRepository({ ...options, name })),
     );
-  for (const action of ["show", "sync", "remote-head"] as const)
+  for (const [name, read] of [
+    ["show", context.githubShow],
+    ["sync", context.githubSync],
+    ["remote-head", context.githubRemoteHead],
+  ] as const)
     github
-      .command(`${action} <id>`)
-      .action((id) => run(`github-${action}`, { id }));
+      .command(`${name} <id>`)
+      .action(async (id: string) => print(await read(id)));
   github
     .command("resolve-mirror <id>")
     .addOption(
@@ -617,15 +647,36 @@ export function registerCapabilities(
       "Inspected remote main SHA or absent",
     )
     .option("--key <key>", "Stable key for exact retries")
-    .action((id, options) => run("github-mirror-resolve", { ...options, id }));
+    .action(
+      async (
+        id: string,
+        {
+          expectedRemote,
+          ...options
+        }: Pick<GithubResolveMirrorOptions, "action" | "expectedVersion"> & {
+          expectedRemote: string;
+          key?: string;
+        },
+      ) =>
+        print(
+          await context.githubResolveMirror({
+            ...options,
+            connectionId: id,
+            expectedRemoteCommit:
+              expectedRemote === "absent" ? null : expectedRemote,
+          }),
+        ),
+    );
   const pulls = github
     .command("pulls")
     .description("Inspect and contribute to externally authoritative assets");
-  pulls.command("list <id>").action((id) => run("github-pulls-list", { id }));
+  pulls
+    .command("list <id>")
+    .action(async (id: string) => print(await context.githubPullsList(id)));
   pulls
     .command("show <id> <number>")
-    .action((id, number) =>
-      run("github-pulls-show", { id, number: positive(number) }),
+    .action(async (id: string, number: string) =>
+      print(await context.githubPullsShow(id, positive(number))),
     );
   pulls
     .command("create <id>")
@@ -635,7 +686,15 @@ export function registerCapabilities(
     .option("--body <text>", "Pull request body")
     .option("--body-file <path>", "Pull request body file")
     .option("--key <key>", "Stable key for exact retries")
-    .action((id, options) => run("github-pulls-create", { ...options, id }));
+    .action(
+      async (
+        id: string,
+        options: Omit<GithubPullsCreateOptions, "connectionId">,
+      ) =>
+        print(
+          await context.githubPullsCreate({ ...options, connectionId: id }),
+        ),
+    );
   pulls
     .command("revise <id> <number>")
     .requiredOption("--expected-commit <sha>", "Inspected pull head commit")
@@ -644,41 +703,82 @@ export function registerCapabilities(
     .option("--body <text>", "Updated body")
     .option("--body-file <file>", "Updated body file")
     .option("--key <key>", "Stable key for exact retries")
-    .action((id, number, options) =>
-      run("github-pulls-revise", { ...options, id, number: positive(number) }),
+    .action(
+      async (
+        id: string,
+        number: string,
+        options: Omit<GithubPullsReviseOptions, "connectionId" | "number">,
+      ) =>
+        print(
+          await context.githubPullsRevise({
+            ...options,
+            connectionId: id,
+            number: positive(number),
+          }),
+        ),
     );
-  for (const action of ["review", "comment", "merge"] as const) {
-    const command = pulls
-      .command(`${action} <id> <number>`)
+  /** A command on one pull request, pinned to the commit that was inspected. */
+  const pullCommand = (name: string) =>
+    pulls
+      .command(`${name} <id> <number>`)
       .requiredOption("--expected-commit <sha>", "Inspected pull head commit");
-    if (action !== "merge")
-      command
-        .option("--body <text>", "Review or comment")
-        .option("--body-file <file>", "Review or comment file");
-    if (action === "review")
-      command.addOption(
-        new Option("--event <event>", "Review decision")
-          .choices(["APPROVE", "REQUEST_CHANGES", "COMMENT"])
-          .makeOptionMandatory(),
-      );
-    if (action === "comment")
-      command
-        .option("--path <file>", "Inline file")
-        .option("--line <number>", "Inline line", positive)
-        .addOption(
-          new Option("--side <side>", "Inline diff side").choices([
-            "LEFT",
-            "RIGHT",
-          ]),
-        );
-    command.action((id, number, options) =>
-      run(`github-pulls-${action}`, {
-        ...options,
-        id,
-        number: positive(number),
-      }),
+  const bodyOptions = (command: Command) =>
+    command
+      .option("--body <text>", "Review or comment")
+      .option("--body-file <file>", "Review or comment file");
+  bodyOptions(pullCommand("review"))
+    .addOption(
+      new Option("--event <event>", "Review decision")
+        .choices(["APPROVE", "REQUEST_CHANGES", "COMMENT"])
+        .makeOptionMandatory(),
+    )
+    .action(
+      async (
+        id: string,
+        number: string,
+        options: Omit<GithubPullsReviewOptions, "connectionId" | "number">,
+      ) =>
+        print(
+          await context.githubPullsReview({
+            ...options,
+            connectionId: id,
+            number: positive(number),
+          }),
+        ),
     );
-  }
+  bodyOptions(pullCommand("comment"))
+    .option("--path <file>", "Inline file")
+    .option("--line <number>", "Inline line", positive)
+    .addOption(
+      new Option("--side <side>", "Inline diff side").choices([
+        "LEFT",
+        "RIGHT",
+      ]),
+    )
+    .action(
+      async (
+        id: string,
+        number: string,
+        options: Omit<GithubPullsCommentOptions, "connectionId" | "number">,
+      ) =>
+        print(
+          await context.githubPullsComment({
+            ...options,
+            connectionId: id,
+            number: positive(number),
+          }),
+        ),
+    );
+  pullCommand("merge").action(
+    async (id: string, number: string, options: { expectedCommit: string }) =>
+      print(
+        await context.githubPullsMerge({
+          ...options,
+          connectionId: id,
+          number: positive(number),
+        }),
+      ),
+  );
   const describe = (parent: Command, descriptions: Record<string, string>) => {
     for (const command of parent.commands)
       if (!command.description() && descriptions[command.name()])

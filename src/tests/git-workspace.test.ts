@@ -29,10 +29,18 @@ import { z } from "zod";
 
 import { CliError, friendlyMessage } from "../errors.js";
 import { updateCredentials } from "../features/auth/credentials.js";
-import { capability } from "../features/capabilities/index.js";
 import { searchCatalog } from "../features/catalog/index.js";
 import { collaborate } from "../features/collaboration/index.js";
+import { developers, promote } from "../features/discovery/index.js";
 import { doctor } from "../features/doctor/index.js";
+import { validateFolder } from "../features/git-workspace/assets.js";
+import { migrate } from "../features/git-workspace/migrate.js";
+import {
+  listLocalAssets,
+  moveLocalAssets,
+} from "../features/git-workspace/move.js";
+import { updateImported } from "../features/imports/local.js";
+import { repoStatus } from "../features/inspection/index.js";
 import { environmentOperation } from "../features/environment/operations.js";
 import { synchronize } from "../features/environment/sync.js";
 import { loadWorkspace, stableId } from "../features/git-workspace/format.js";
@@ -46,7 +54,6 @@ import { knowledgeGet, knowledgeList } from "../features/knowledge/index.js";
 import { inventory } from "../features/inventory/index.js";
 import { initialize } from "../features/onboarding/setup.js";
 import { assertCommandAvailable } from "../commands/availability.js";
-import type { MoveResult } from "../features/git-workspace/move.js";
 import { createProgram } from "../program.js";
 import { renderCollaboration } from "../ui/collaboration.js";
 import { renderMove } from "../ui/move.js";
@@ -311,7 +318,7 @@ test("an admin creates a workspace and a member installs every asset kind", asyn
       h.hooks[0]!.command.includes("git-workspace/startup.js"),
     ),
   ).toBeTruthy();
-  const docs = await knowledgeList(member, true);
+  const docs = await knowledgeList(true, member);
   expect(docs.map((d) => d.name)).toStrictEqual(["architecture"]);
   expect(
     (await knowledgeGet("architecture", member)).version.content.markdown,
@@ -794,12 +801,9 @@ test("repo status answers from barndog.yaml", async (t) => {
   const previous = process.cwd();
   process.chdir(project);
   t.onTestFinished(async () => process.chdir(previous));
-  const status = (await capability("repo-status", {}, member)) as {
-    repository: { slug: string };
-    team: { name: string };
-  };
-  expect(status.repository.slug).toBe("app");
-  expect(status.team.name).toBe("Web");
+  const status = await repoStatus(member);
+  expect(status.repository?.slug).toBe("app");
+  expect(status.team?.name).toBe("Web");
 });
 
 test("a force push is followed like any other update", async (t) => {
@@ -1234,7 +1238,7 @@ test("review commands point to the Git host and cloud-only commands explain why"
   await expect(collaborate("list", {}, root, member)).rejects.toThrow(
     /pull requests on your Git host/,
   );
-  await expect(capability("developers-list", {}, member)).rejects.toSatisfy(
+  await expect(developers(undefined, member)).rejects.toSatisfy(
     (error: CliError) =>
       /Cloud Workspace/.test(error.message) &&
       error.hint === "barndog migrate --to <server>",
@@ -1278,7 +1282,7 @@ test("local mode delivers every kind from a folder and needs no Git", async (t) 
   expect(await readFile(join(home, ".claude.json"), "utf8")).toMatch(
     /DOCS_TOKEN/,
   );
-  expect((await knowledgeList(home)).map((d) => d.name)).toStrictEqual([
+  expect((await knowledgeList(false, home)).map((d) => d.name)).toStrictEqual([
     "architecture",
   ]);
   await write(
@@ -1302,7 +1306,7 @@ test("local mode delivers every kind from a folder and needs no Git", async (t) 
 
 test("validate reports each problem for repo CI", async (t) => {
   const { clone } = await teamRepo(t);
-  expect(await capability("validate", { directory: clone })).toStrictEqual({
+  expect(await validateFolder(clone)).toStrictEqual({
     workspace: "team",
     assets: 4,
     knowledge: 1,
@@ -1310,15 +1314,13 @@ test("validate reports each problem for repo CI", async (t) => {
   await write(clone, "org/skills/Bad_Name/SKILL.md", skill("bad"));
   await write(clone, "org/skills/mismatch/SKILL.md", skill("other"));
   await write(clone, "teams/web/knowledge/x.md", knowledgeMd);
-  await expect(capability("validate", { directory: clone })).rejects.toSatisfy(
-    (error: Error) => {
-      expect(error.message).toMatch(/3 problems/);
-      expect(error.message).toMatch(/Bad_Name/);
-      expect(error.message).toMatch(/must match the folder/);
-      expect(error.message).toMatch(/organization-wide/);
-      return true;
-    },
-  );
+  await expect(validateFolder(clone)).rejects.toSatisfy((error: Error) => {
+    expect(error.message).toMatch(/3 problems/);
+    expect(error.message).toMatch(/Bad_Name/);
+    expect(error.message).toMatch(/must match the folder/);
+    expect(error.message).toMatch(/organization-wide/);
+    return true;
+  });
 });
 
 test("settings allow only one workspace and repo URLs are checked", async (t) => {
@@ -1518,19 +1520,13 @@ test("migrate previews, then moves assets and choices to cloud by scope and name
     };
     file.selectedServer = origin;
   });
-  const preview = (await capability(
-    "migrate",
-    { server: origin, dryRun: true },
-    home,
-  )) as { rows: { name: string; action: string }[] };
+  const preview = await migrate({ server: origin, dryRun: true }, home);
   expect(preview.rows.map((r) => [r.name, r.action])).toStrictEqual([
     ["docs", "publish"],
     ["architecture", "publish"],
   ]);
   expect(requests).not.toContain("POST /v1/mcps");
-  const done = (await capability("migrate", { server: origin }, home)) as {
-    migrated: boolean;
-  };
+  const done = await migrate({ server: origin }, home);
   expect(done.migrated).toBe(true);
   const moved = await readSettings(home);
   assert(moved?.version === 2 && moved.connection);
@@ -1623,10 +1619,9 @@ test("switching keeps local assets active next to the Git workspace", async (t) 
   expect(await installed(home, "skills/code-review/SKILL.md")).toMatch(
     /code-review/,
   );
-  expect((await knowledgeList(home)).map((d) => d.name).sort()).toStrictEqual([
-    "architecture",
-    "notes",
-  ]);
+  expect(
+    (await knowledgeList(false, home)).map((d) => d.name).sort(),
+  ).toStrictEqual(["architecture", "notes"]);
   const items = (await inventory(home)).items;
   expect(items.find((i) => i.name === "mine")?.origin).toBe("local");
   expect(items.find((i) => i.name === "mine")?.via).toStrictEqual(["local"]);
@@ -1718,7 +1713,7 @@ test("moving into a used repo opens a review, lists clashes, and can move them l
   );
   await write(folder, "org/skills/mine/SKILL.md", skill("mine"));
   await setupGit(url, home, "keep");
-  const result = (await capability("local-move", {}, home)) as MoveResult;
+  const result = await moveLocalAssets({}, home);
   expect(result.rows.map((r) => [r.name, r.status]).sort()).toStrictEqual([
     ["code-review", "clash"],
     ["mine", "moved"],
@@ -1741,11 +1736,10 @@ test("moving into a used repo opens a review, lists clashes, and can move them l
   expect(
     (await inventory(home)).items.filter((i) => i.name === "mine").length,
   ).toBe(1);
-  const later = (await capability(
-    "local-move",
+  const later = await moveLocalAssets(
     { names: ["code-review"], as: "my-review" },
     home,
-  )) as MoveResult;
+  );
   expect(later.rows.map((r) => r.status)).toStrictEqual(["moved"]);
   await run(clone, "fetch", "origin");
   expect(
@@ -1755,11 +1749,11 @@ test("moving into a used repo opens a review, lists clashes, and can move them l
       `origin/${later.branch}:org/skills/my-review/SKILL.md`,
     ),
   ).toMatch(/name: my-review/);
+  await expect(moveLocalAssets({ names: ["nope"] }, home)).rejects.toThrow(
+    /No local asset named nope/,
+  );
   await expect(
-    capability("local-move", { names: ["nope"] }, home),
-  ).rejects.toThrow(/No local asset named nope/);
-  await expect(
-    capability("local-move", { names: ["a", "b"], as: "x" }, home),
+    moveLocalAssets({ names: ["a", "b"], as: "x" }, home),
   ).rejects.toThrow(/exactly one/);
 });
 
@@ -1767,20 +1761,18 @@ test("moving from a local-only machine asks for a destination first", async (t) 
   const root = await temp(t);
   const home = join(root, "dev");
   await setupLocal(home);
-  await expect(capability("local-move", {}, home)).rejects.toSatisfy(
+  await expect(moveLocalAssets({}, home)).rejects.toSatisfy(
     (error: CliError) =>
       /nowhere to move/.test(error.message) &&
       Boolean(error.hint?.includes("--repo <url>")) &&
       Boolean(error.hint?.includes("--server <url>")),
   );
   await expect(
-    capability("migrate", { server: "http://127.0.0.1:9" }, home),
+    migrate({ server: "http://127.0.0.1:9" }, home),
   ).rejects.toSatisfy(
     (error: CliError) => error.hint === "barndog init --server <url>",
   );
-  const listed = (await capability("local-list", {}, home)) as {
-    assets: unknown[];
-  };
+  const listed = await listLocalAssets(home);
   expect(listed.assets).toStrictEqual([]);
 });
 
@@ -1876,7 +1868,7 @@ test("moving to cloud defaults to personal and keeps knowledge within permission
   expect(await readFile(join(home, ".claude.json"), "utf8")).toMatch(
     /DOCS_TOKEN/,
   );
-  const result = (await capability("local-move", {}, home)) as MoveResult;
+  const result = await moveLocalAssets({}, home);
   expect(origins).toStrictEqual([{ type: "dev", id: dev }]);
   expect(result.rows.map((r) => [r.name, r.status])).toStrictEqual([
     ["docs", "moved"],
@@ -2161,22 +2153,23 @@ test("a Skill is added from a repo, updated on request and refuses to lose edits
     skill("review", "Upstream."),
   );
   await commit(clone, "Change");
-  const preview = (await capability(
-    "imports-update",
-    { kind: "skill", name: "review", dryRun: true },
+  const preview = await updateImported(
+    "skill",
+    "review",
+    { dryRun: true },
     home,
-  )) as { changes: unknown[] }[];
+  );
   expect(preview[0]!.changes.length).toBe(1);
   expect(
     await readFile(join(folder, "org/skills/review/SKILL.md"), "utf8"),
   ).not.toMatch(/Upstream/);
-  await capability("imports-update", { kind: "skill", name: "review" }, home);
+  await updateImported("skill", "review", {}, home);
   await synchronize(undefined, home);
   expect(await installed(home, "skills/review/SKILL.md")).toMatch(/Upstream/);
   await write(folder, "org/skills/review/SKILL.md", skill("review", "Mine."));
-  await expect(
-    capability("imports-update", { kind: "skill", name: "review" }, home),
-  ).rejects.toThrow(/edited locally/);
+  await expect(updateImported("skill", "review", {}, home)).rejects.toThrow(
+    /edited locally/,
+  );
   await addSkills(
     url,
     { only: ["lint"], updates: "fork", as: "my-lint" },
@@ -2185,9 +2178,9 @@ test("a Skill is added from a repo, updated on request and refuses to lose edits
   expect(
     await readFile(join(folder, "org/skills/my-lint/SKILL.md"), "utf8"),
   ).toMatch(/name: my-lint/);
-  await expect(
-    capability("imports-update", { kind: "skill", name: "my-lint" }, home),
-  ).rejects.toThrow(/nothing to update/);
+  await expect(updateImported("skill", "my-lint", {}, home)).rejects.toThrow(
+    /nothing to update/,
+  );
 });
 
 test("automatic Skills follow their repo at sync", async (t) => {
@@ -2327,7 +2320,7 @@ test("plain scripts go through the picker for each coding tool", async (t) => {
   // Updating keeps the choices made in the picker and takes the new script.
   await write(clone, "tools/check.sh", "#!/bin/sh\necho new\n");
   await commit(clone, "Change");
-  await capability("imports-update", { kind: "hook", name: "check" }, home);
+  await updateImported("hook", "check", {}, home);
   expect(
     await readFile(join(folder, "org/hooks/check/check.sh"), "utf8"),
   ).toMatch(/echo new/);
@@ -2728,11 +2721,10 @@ test("a local-only machine can promote to a repo without switching", async (t) =
   const folder = await setupLocal(home);
   await write(folder, "org/skills/mine/SKILL.md", skill("mine"));
   await synchronize(undefined, home);
-  const result = (await capability(
-    "local-move",
+  const result = await moveLocalAssets(
     { repo: url, to: "team/web", names: ["mine"] },
     home,
-  )) as MoveResult;
+  );
   expect(result.rows.map((r) => r.status)).toStrictEqual(["moved"]);
   await run(clone, "fetch", "origin");
   expect(
@@ -2760,7 +2752,7 @@ test("a local-only machine can promote to a repo without switching", async (t) =
     home,
   );
   await expect(
-    capability("local-move", { server: "http://127.0.0.1:9" }, home),
+    moveLocalAssets({ server: "http://127.0.0.1:9" }, home),
   ).rejects.toSatisfy(
     (error: CliError) =>
       error.hint === "barndog login --server http://127.0.0.1:9",
@@ -2773,8 +2765,7 @@ test("promote from local routes to the same move", async (t) => {
   const folder = await setupLocal(home);
   await write(folder, "org/skills/mine/SKILL.md", skill("mine"));
   await setupGit(url, home, "keep");
-  const result = (await capability(
-    "promote",
+  const result = await promote(
     {
       kind: "skill",
       name: "mine",
@@ -2783,13 +2774,14 @@ test("promote from local routes to the same move", async (t) => {
       newName: "shared-mine",
     },
     home,
-  )) as MoveResult;
+  );
+  assert(result.outcome === "moved");
   await run(clone, "fetch", "origin");
   expect(
     await run(
       clone,
       "show",
-      `origin/${result.branch}:teams/web/skills/shared-mine/SKILL.md`,
+      `origin/${result.move.branch}:teams/web/skills/shared-mine/SKILL.md`,
     ),
   ).toMatch(/name: shared-mine/);
 });
@@ -2858,11 +2850,10 @@ test("a moved asset is used from its new scope once it exists there, and removin
   const folder = await setupLocal(home);
   await write(folder, "org/skills/mine/SKILL.md", skill("mine"));
   await setupGit(url, home, "keep");
-  const result = (await capability(
-    "local-move",
+  const result = await moveLocalAssets(
     { names: ["mine"], to: "team/web" },
     home,
-  )) as MoveResult;
+  );
   await run(clone, "fetch", "origin");
   await run(clone, "merge", "--no-edit", `origin/${result.branch}`);
   await run(clone, "push", "origin", "main");

@@ -11,7 +11,62 @@ import type { CommandContext, Mode } from "./commands/context.js";
 import { settingsPath } from "./config/settings.js";
 import { clashPrompt, synchronize } from "./features/environment/sync.js";
 import { environmentOperation } from "./features/environment/operations.js";
-import { capability } from "./features/capabilities/index.js";
+import { doctor } from "./features/doctor/index.js";
+import { repoStatus, workspaceUrl } from "./features/inspection/index.js";
+import { validateFolder } from "./features/git-workspace/assets.js";
+import { migrate } from "./features/git-workspace/migrate.js";
+import {
+  listLocalAssets,
+  moveLocalAssets,
+} from "./features/git-workspace/move.js";
+import { updateImported } from "./features/imports/local.js";
+import {
+  authenticateMcp,
+  createMcp,
+  mcpVersions,
+  showMcp,
+  updateMcp,
+} from "./features/mcps/index.js";
+import { adaptHook } from "./features/hooks/adapt.js";
+import { hookCompatibility } from "./features/hooks/compatibility.js";
+import { testHook } from "./features/hooks/test.js";
+import {
+  knowledgeGet,
+  knowledgeList,
+  knowledgeProblems,
+} from "./features/knowledge/index.js";
+import {
+  developerAssets,
+  developers,
+  fork,
+  promote,
+} from "./features/discovery/index.js";
+import {
+  githubAuth,
+  githubInstall,
+  githubInstallations,
+  githubStatus,
+} from "./features/github/account.js";
+import {
+  githubConnect,
+  githubCreateRepository,
+  githubImport,
+  githubImportCopy,
+  githubList,
+  githubRemoteHead,
+  githubResolveMirror,
+  githubShow,
+  githubSync,
+} from "./features/github/connections.js";
+import {
+  githubPullsComment,
+  githubPullsCreate,
+  githubPullsList,
+  githubPullsMerge,
+  githubPullsReview,
+  githubPullsRevise,
+  githubPullsShow,
+} from "./features/github/pulls.js";
 import { inventory } from "./features/inventory/index.js";
 import { searchCatalog } from "./features/catalog/index.js";
 import { registerEnvironment } from "./commands/environment.js";
@@ -201,7 +256,51 @@ export function createProgram(options: ProgramOptions = {}): Command {
       ((restart, server, setupOptions) =>
         runSetup({ restart, server, ...setupOptions, write: options.write })),
     environment: options.environment ?? environmentOperation,
-    capability: options.capability ?? capability,
+    doctor: options.doctor ?? (() => doctor()),
+    workspaceUrl: options.workspaceUrl ?? (() => workspaceUrl()),
+    repoStatus: options.repoStatus ?? (() => repoStatus()),
+    listLocalAssets: options.listLocalAssets ?? (() => listLocalAssets()),
+    knowledgeProblems: options.knowledgeProblems ?? (() => knowledgeProblems()),
+    githubStatus: options.githubStatus ?? (() => githubStatus()),
+    githubInstallations:
+      options.githubInstallations ?? (() => githubInstallations()),
+    githubList: options.githubList ?? (() => githubList()),
+    validateFolder: options.validateFolder ?? validateFolder,
+    migrate: options.migrate ?? migrate,
+    moveLocalAssets: options.moveLocalAssets ?? moveLocalAssets,
+    updateImported: options.updateImported ?? updateImported,
+    showMcp: options.showMcp ?? showMcp,
+    createMcp: options.createMcp ?? createMcp,
+    updateMcp: options.updateMcp ?? updateMcp,
+    mcpVersions: options.mcpVersions ?? mcpVersions,
+    authenticateMcp: options.authenticateMcp ?? authenticateMcp,
+    testHook: options.testHook ?? testHook,
+    hookCompatibility: options.hookCompatibility ?? hookCompatibility,
+    adaptHook: options.adaptHook ?? adaptHook,
+    knowledgeGet: options.knowledgeGet ?? knowledgeGet,
+    developers: options.developers ?? developers,
+    developerAssets: options.developerAssets ?? developerAssets,
+    promote: options.promote ?? promote,
+    fork: options.fork ?? fork,
+    githubAuth: options.githubAuth ?? githubAuth,
+    githubInstall: options.githubInstall ?? githubInstall,
+    githubConnect: options.githubConnect ?? githubConnect,
+    githubImport: options.githubImport ?? githubImport,
+    githubImportCopy: options.githubImportCopy ?? githubImportCopy,
+    githubCreateRepository:
+      options.githubCreateRepository ?? githubCreateRepository,
+    githubShow: options.githubShow ?? githubShow,
+    githubSync: options.githubSync ?? githubSync,
+    githubRemoteHead: options.githubRemoteHead ?? githubRemoteHead,
+    githubResolveMirror: options.githubResolveMirror ?? githubResolveMirror,
+    githubPullsList: options.githubPullsList ?? githubPullsList,
+    githubPullsShow: options.githubPullsShow ?? githubPullsShow,
+    githubPullsCreate: options.githubPullsCreate ?? githubPullsCreate,
+    githubPullsRevise: options.githubPullsRevise ?? githubPullsRevise,
+    githubPullsReview: options.githubPullsReview ?? githubPullsReview,
+    githubPullsComment: options.githubPullsComment ?? githubPullsComment,
+    githubPullsMerge: options.githubPullsMerge ?? githubPullsMerge,
+    knowledgeList: options.knowledgeList ?? knowledgeList,
     synchronize:
       options.synchronize ??
       ((path, syncOptions) =>

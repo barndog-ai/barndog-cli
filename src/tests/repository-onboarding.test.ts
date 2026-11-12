@@ -233,9 +233,20 @@ test("connected onboarding loads actual membership without using repository sugg
 test("inspection command routing is separate from working-copy workflows", async () => {
   const calls: string[] = [];
   const program = createProgram({
-    capability: async (action) => {
-      calls.push(action);
-      return {};
+    workspaceUrl: async () => {
+      calls.push("open");
+      return "https://barndog.example.com";
+    },
+    repoStatus: async () => {
+      calls.push("repo-status");
+      return {
+        root: null,
+        remotes: [],
+        repository: null,
+        team: null,
+        ambiguous: false,
+        policyScopes: [],
+      };
     },
     write: () => {},
   });

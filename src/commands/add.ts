@@ -103,12 +103,10 @@ export function registerAdd(program: Command, context: CommandContext) {
           asset: string | undefined,
           options: { force?: boolean; dryRun?: boolean },
         ) => {
-          const results = (await context.capability("imports-update", {
-            kind,
-            name: asset,
+          const results = await context.updateImported(kind, asset, {
             force: options.force,
             dryRun: options.dryRun,
-          })) as { name: string; changes: unknown[] }[];
+          });
           // New files only reach coding tools through the installed copies.
           const applied =
             !options.dryRun && results.some((r) => r.changes.length > 0);

@@ -14,6 +14,12 @@ import { CliError } from "../../errors.js";
 import type { Connection } from "../../config/settings.js";
 import type { AssetKind } from "../asset-selection/types.js";
 
+/**
+ * A caller-chosen idempotency key. Sending the same key again retries the
+ * same write instead of repeating it, so keep it until the write is confirmed.
+ */
+export type RetryKey = string;
+
 export async function request<T>(
   conn: Connection,
   path: string,

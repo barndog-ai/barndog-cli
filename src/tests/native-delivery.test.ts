@@ -291,6 +291,11 @@ test("unified delivery refuses unmanaged links and only unlinks managed Skills",
 
 test("command parsing delegates scope, native and mirror operations", async () => {
   const calls: unknown[] = [];
+  // The command only prints what comes back, so the result's shape isn't under test.
+  const record = (name: string) => async (options: unknown) => {
+    calls.push([name, options]);
+    return { message: "ok" } as never;
+  };
   const make = () =>
     createProgram({
       write: () => undefined,
@@ -298,10 +303,9 @@ test("command parsing delegates scope, native and mirror operations", async () =
         calls.push([action, options]);
         return { status: "applied", events: [] };
       },
-      capability: async (action, options) => {
-        calls.push([action, options]);
-        return { message: "ok" };
-      },
+      githubResolveMirror: record("resolve-mirror"),
+      githubImportCopy: record("import-copy"),
+      githubCreateRepository: record("create-repository"),
     });
   await make().parseAsync(
     [
@@ -371,8 +375,31 @@ test("command parsing delegates scope, native and mirror operations", async () =
     ],
     { from: "user" },
   );
-  expect((calls[3] as [string])[0]).toBe("github-import");
-  expect((calls[4] as [string])[0]).toBe("github-create-repository");
+  expect(calls[3]).toStrictEqual([
+    "import-copy",
+    {
+      kind: "skill",
+      name: "guide",
+      origin: "org",
+      installation: id,
+      repository: "acme/guide",
+      key: "copy-key",
+    },
+  ]);
+  expect(calls[4]).toStrictEqual([
+    "create-repository",
+    {
+      kind: "skill",
+      name: "guide",
+      origin: "org",
+      installation: id,
+      repository: "acme/new-guide",
+      expectedVersion: id,
+      key: "create-key",
+      mode: "mirror",
+      visibility: "public",
+    },
+  ]);
   expect(calls[0]).toStrictEqual([
     "switch",
     { origin: "team/platform", mode: "all", overrides: "preserve" },
@@ -381,7 +408,15 @@ test("command parsing delegates scope, native and mirror operations", async () =
     "install",
     { kind: "mcp", name: "docs", origin: "team/platform" },
   ]);
-  expect((calls[2] as [string])[0]).toBe("github-mirror-resolve");
+  expect(calls[2]).toStrictEqual([
+    "resolve-mirror",
+    {
+      connectionId: id,
+      action: "disconnect",
+      expectedVersion: id,
+      expectedRemoteCommit: null,
+    },
+  ]);
 });
 
 test("owned Hook removal retains adjacent unmanaged comments and trailing-comma JSONC", () => {

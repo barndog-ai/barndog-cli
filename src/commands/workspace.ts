@@ -10,8 +10,6 @@ import {
   table,
   warn,
 } from "../ui/format.js";
-import type { MigrationRow } from "../features/git-workspace/migrate.js";
-import type { MoveResult } from "../features/git-workspace/move.js";
 import { renderMove } from "../ui/move.js";
 import type { CommandContext } from "./context.js";
 
@@ -20,11 +18,7 @@ export function registerWorkspace(program: Command, context: CommandContext) {
     .command("validate [directory]")
     .description("Check a BarnDog workspace folder, for example in a repo's CI")
     .action(async (directory?: string) => {
-      const result = (await context.capability("validate", { directory })) as {
-        workspace: string;
-        assets: number;
-        knowledge: number;
-      };
+      const result = await context.validateFolder(directory ?? ".");
       if (context.mode.json) return context.write(json(result));
       context.write(
         `${ok("✔")} ${bold(result.workspace)} is valid · ${plural(result.assets, "asset")}, ${plural(result.knowledge, "knowledge document")}`,
@@ -37,10 +31,7 @@ export function registerWorkspace(program: Command, context: CommandContext) {
     .command("list")
     .description("List local assets and whether they've been moved")
     .action(async () => {
-      const result = (await context.capability("local-list", {})) as {
-        folder: string;
-        assets: { kind: string; name: string; path: string; state: string }[];
-      };
+      const result = await context.listLocalAssets();
       if (context.mode.json) return context.write(json(result));
       context.write(dim(result.folder));
       if (!result.assets.length) return context.write(dim("No local assets."));
@@ -76,13 +67,13 @@ export function registerWorkspace(program: Command, context: CommandContext) {
         names: string[],
         options: { to?: string; as?: string; repo?: string; server?: string },
       ) => {
-        const result = (await context.capability("local-move", {
+        const result = await context.moveLocalAssets({
           names,
           to: options.to,
           as: options.as,
           repo: options.repo,
           server: options.server,
-        })) as MoveResult;
+        });
         if (context.mode.json) return context.write(json(result));
         for (const line of renderMove(result)) context.write(line);
       },
@@ -95,15 +86,10 @@ export function registerWorkspace(program: Command, context: CommandContext) {
     .requiredOption("--to <server>", "Cloud or self-hosted server URL")
     .option("--dry-run", "Show what would move without changing anything")
     .action(async (options: { to: string; dryRun?: boolean }) => {
-      const result = (await context.capability("migrate", {
+      const result = await context.migrate({
         server: options.to,
         dryRun: options.dryRun,
-      })) as {
-        server: string;
-        dryRun: boolean;
-        rows: MigrationRow[];
-        migrated: boolean;
-      };
+      });
       if (context.mode.json) return context.write(json(result));
       context.write(
         `\n${heading(options.dryRun ? "migrate --dry-run" : "migrate")}\n`,

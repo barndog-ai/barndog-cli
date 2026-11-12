@@ -106,7 +106,7 @@ export async function knowledgeProblems(home = homedir()) {
   ];
 }
 
-export async function knowledgeList(home = homedir(), always = false) {
+export async function knowledgeList(always = false, home = homedir()) {
   const settings = await readSettings(home);
   const listing = settings?.version !== 2 || settings.knowledge !== false;
   const shared = await sharedKnowledge(home, always);

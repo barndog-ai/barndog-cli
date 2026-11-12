@@ -71,7 +71,7 @@ export async function repoHookCompatibility(asset: RepoAsset) {
         const implementation = manifest.implementations[harness] ?? null;
         return {
           harness,
-          status: implementation?.compatibility ?? "unsupported",
+          status: implementation?.compatibility ?? ("unsupported" as const),
           declared: true,
           implementation,
           runtimeIssue: implementation

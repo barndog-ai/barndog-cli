@@ -1,9 +1,6 @@
-import { LOCAL_ORIGIN } from "../features/git-workspace/overlay.js";
-import type { MoveResult } from "../features/git-workspace/move.js";
 import { renderMove } from "../ui/move.js";
 import input from "@inquirer/input";
 import { Option, type Command } from "commander";
-import { z } from "zod";
 import type { CommandContext } from "./context.js";
 import type { AssetKind } from "../features/asset-selection/types.js";
 import type { InventoryItem } from "../features/inventory/index.js";
@@ -476,27 +473,27 @@ export function registerEnvironment(program: Command, context: CommandContext) {
               "--name",
               name,
             );
-            const outcome = await context.capability(action, {
+            const input = {
               kind,
               name,
               origin,
               target,
               newName,
               key: options.key,
-            });
-            if (origin === LOCAL_ORIGIN) {
-              if (context.mode.json) return context.write(json(outcome));
-              for (const line of renderMove(outcome as MoveResult))
-                context.write(line);
+            };
+            const outcome =
+              action === "fork"
+                ? ({
+                    outcome: "promoted",
+                    promotion: await context.fork(input),
+                  } as const)
+                : await context.promote(input);
+            if (outcome.outcome === "moved") {
+              if (context.mode.json) return context.write(json(outcome.move));
+              for (const line of renderMove(outcome.move)) context.write(line);
               return;
             }
-            const result = z
-              .object({
-                kind: z.string(),
-                id: z.string(),
-                changeId: z.string().optional(),
-              })
-              .parse(outcome);
+            const result = outcome.promotion;
             if (context.mode.json) return context.write(json(result));
             context.write(
               result.changeId

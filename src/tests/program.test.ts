@@ -357,7 +357,9 @@ test("a failed Hook test sets the exit code with or without --json", async (t) =
       write: (line) => lines.push(line),
       writeError: () => {},
       interactive: false,
-      capability: async () => ({
+      testHook: async () => ({
+        harness: "claude",
+        event: "PreToolUse",
         stdout: "",
         stderr: "boom",
         exitCode: 7,
@@ -461,7 +463,7 @@ test("lookup commands infer --origin when one scope has the name", async () => {
       row("lint", "org", "acme"),
       row("lint", "team", "web"),
     ],
-    capability: async (...args) => {
+    hookCompatibility: async (...args) => {
       calls.push(args);
       return { version: 1, compatibility: [] };
     },
@@ -469,18 +471,12 @@ test("lookup commands infer --origin when one scope has the name", async () => {
   await program.parseAsync(["hooks", "compatibility", "guard"], {
     from: "user",
   });
-  expect(calls.pop()).toStrictEqual([
-    "hooks-compatibility",
-    { name: "guard", origin: "local" },
-  ]);
+  expect(calls.pop()).toStrictEqual(["guard", "local"]);
   await program.parseAsync(
     ["hooks", "compatibility", "lint", "--origin", "team/web"],
     { from: "user" },
   );
-  expect(calls.pop()).toStrictEqual([
-    "hooks-compatibility",
-    { origin: "team/web", name: "lint" },
-  ]);
+  expect(calls.pop()).toStrictEqual(["lint", "team/web"]);
   await expect(
     program.parseAsync(["hooks", "compatibility", "lint"], { from: "user" }),
   ).rejects.toSatisfy(
@@ -515,29 +511,31 @@ test("Hook compatibility shows support and readiness with a short version", asyn
     await createProgram({
       write: (line) => lines.push(line),
       interactive: false,
-      capability: async () => ({
-        version,
-        compatibility: [
-          {
-            harness: "claude",
-            status: "supported",
-            declared: true,
-            runtimeIssue: null,
-          },
-          {
-            harness: "codex",
-            status: "partial",
-            declared: true,
-            runtimeIssue: "Missing runtime: jq",
-          },
-          {
-            harness: "cursor",
-            status: "unsupported",
-            declared: true,
-            runtimeIssue: "No implementation for this harness",
-          },
-        ],
-      }),
+      // Only the fields the table reads; a real result also carries each implementation.
+      hookCompatibility: async () =>
+        ({
+          version,
+          compatibility: [
+            {
+              harness: "claude",
+              status: "supported",
+              declared: true,
+              runtimeIssue: null,
+            },
+            {
+              harness: "codex",
+              status: "partial",
+              declared: true,
+              runtimeIssue: "Missing runtime: jq",
+            },
+            {
+              harness: "cursor",
+              status: "unsupported",
+              declared: true,
+              runtimeIssue: "No implementation for this harness",
+            },
+          ],
+        }) as never,
     }).parseAsync(["hooks", "compatibility", "guard", "--origin", "org"], {
       from: "user",
     });

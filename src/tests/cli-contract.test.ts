@@ -113,9 +113,7 @@ test("mcp add takes JSON through --config, leaving --json as the output flag", a
   await expect(addMcp('{"command":"node"}', {}, quiet(home))).rejects.toThrow(
     /looks like the configuration/,
   );
-  const { instance } = program({
-    capability: async () => undefined,
-  });
+  const { instance } = program({});
   const add = instance.commands
     .find((c) => c.name() === "mcp")!
     .commands.find((c) => c.name() === "add")!;
@@ -207,7 +205,7 @@ test("a change ID from the other list points there", async () => {
 test("skills update installs what it changed", async () => {
   let synced = 0;
   const { instance, output } = program({
-    capability: async () => [{ name: "a", changes: [] }],
+    updateImported: async () => [{ name: "a", commit: "c1", changes: [] }],
     synchronize: async () => {
       synced += 1;
       return [];
@@ -216,8 +214,21 @@ test("skills update installs what it changed", async () => {
   await instance.parseAsync(["skills", "update"], { from: "user" });
   expect(synced, "nothing changed, so nothing to install").toBe(0);
   const changed = program({
-    capability: async () => [
-      { name: "a", changes: [{ kind: "modified", path: "x", patch: "" }] },
+    updateImported: async () => [
+      {
+        name: "a",
+        commit: "c1",
+        changes: [
+          {
+            kind: "modified",
+            path: "x",
+            patch: "",
+            binary: false,
+            oldExecutable: false,
+            newExecutable: false,
+          },
+        ],
+      },
     ],
     synchronize: async () => {
       synced += 1;
@@ -274,7 +285,7 @@ test("knowledge list reflects whether session-start listing is on", async (t) =>
     join(folder, "org/knowledge/guide.md"),
     "---\ndescription: Guide\naccessMode: always\n---\nBody\n",
   );
-  expect((await knowledgeList(home))[0]?.listedAtStart).toBe(true);
+  expect((await knowledgeList(false, home))[0]?.listedAtStart).toBe(true);
   const path = join(home, ".barndog/config.yaml");
   await writeFile(path, `${await readFile(path, "utf8")}\nknowledge: false\n`);
   const text = await readFile(path, "utf8");
@@ -282,19 +293,21 @@ test("knowledge list reflects whether session-start listing is on", async (t) =>
     path,
     `${text.replace(/^knowledge: true\n/m, "").trimEnd()}\n`,
   );
-  expect((await knowledgeList(home))[0]?.listedAtStart).toBe(false);
+  expect((await knowledgeList(false, home))[0]?.listedAtStart).toBe(false);
   const { instance, output } = program({
-    capability: async (action) =>
-      action === "knowledge-list"
-        ? [
-            {
-              name: "guide",
-              description: "Guide",
-              accessMode: "always",
-              listedAtStart: false,
-            },
-          ]
-        : [],
+    knowledgeList: async () => [
+      {
+        id: "guide",
+        name: "guide",
+        description: "Guide",
+        tags: [],
+        accessMode: "always",
+        versionId: "v1",
+        version: 1,
+        listedAtStart: false,
+      },
+    ],
+    knowledgeProblems: async () => [],
   });
   await instance.parseAsync(["knowledge", "list"], { from: "user" });
   expect(plain(output)).not.toMatch(/every session/);

@@ -7,7 +7,7 @@ import { repositoryContext, localRepository } from "../repositories/context.js";
 import { openRepoSource } from "../environment/workspace-source.js";
 
 /** The barndog.yaml answer to "which repository scope is this folder?". */
-async function repoStatus(model: WorkspaceModel, cwd: string) {
+async function declaredRepository(model: WorkspaceModel, cwd: string) {
   const local = await localRepository(cwd);
   const matches = Object.entries(model.config.repositories).filter(
     ([, repository]) =>
@@ -35,19 +35,15 @@ async function repoStatus(model: WorkspaceModel, cwd: string) {
   };
 }
 
-export async function inspect(
-  action: string,
-  home = homedir(),
-  cwd = process.cwd(),
-) {
-  if (action === "whoami") return authStatus(home);
-  if (action === "open") return { url: (await authStatus(home)).server };
-  if (action === "repo-status") {
-    const settings = await readSettings(home);
-    const repo =
-      settings && openRepoSource(settings, home, { refresh: "auto" });
-    if (repo) return repoStatus(await repo.model(), cwd);
-    return repositoryContext(home, cwd);
-  }
-  throw new Error(`Unknown inspection: ${action}`);
+/** The workspace's web address: the server this machine is signed in to. */
+export async function workspaceUrl(home = homedir()) {
+  return (await authStatus(home)).server;
+}
+
+/** How the Git repository in `cwd` maps to a BarnDog repository and its team. */
+export async function repoStatus(home = homedir(), cwd = process.cwd()) {
+  const settings = await readSettings(home);
+  const repo = settings && openRepoSource(settings, home, { refresh: "auto" });
+  if (repo) return declaredRepository(await repo.model(), cwd);
+  return repositoryContext(home, cwd);
 }

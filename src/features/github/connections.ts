@@ -1,0 +1,244 @@
+/**
+ * Connections between a Skill or Hook and a GitHub repository: connecting,
+ * importing, mirroring and syncing. Every call goes to the BarnDog server,
+ * never to GitHub itself.
+ */
+import { homedir } from "node:os";
+import { randomUUID } from "node:crypto";
+import { z } from "zod";
+import {
+  gitCopyImportSchema,
+  gitCopyImportResultSchema,
+  gitCreateRepositorySchema,
+  gitRemoteHeadSchema,
+  gitConnectionSchema,
+  gitConnectSchema,
+  gitImportSchema,
+  gitMirrorResolutionSchema,
+  okSchema,
+} from "@barndog-ai/api-contract";
+import { connection, selectOrigin } from "../collaboration/remote.js";
+import { request, selectAsset, type RetryKey } from "../environment/remote.js";
+
+/** An asset and the GitHub repository it pairs with. */
+export type GithubRepositoryOptions = {
+  kind?: "skill" | "hook";
+  name: string;
+  origin: string;
+  /** BarnDog's installation binding UUID, not GitHub's installation number. */
+  installation: string;
+  /** `<owner>/<name>` on GitHub. */
+  repository: string;
+};
+
+export type GithubConnectOptions = GithubRepositoryOptions & {
+  /** `mirror` keeps BarnDog authoritative; the others hand authority to GitHub. */
+  mode?: "connect" | "transfer" | "mirror";
+  /** Defaults to the asset's current version. */
+  expectedVersion?: string;
+};
+
+export type GithubImportCopyOptions = GithubRepositoryOptions & {
+  key: RetryKey;
+};
+
+export type GithubCreateRepositoryOptions = GithubRepositoryOptions & {
+  key: RetryKey;
+  /** Defaults to the asset's current version. */
+  expectedVersion?: string;
+  mode?: "mirror" | "transfer";
+  visibility?: "private" | "public";
+};
+
+export type GithubResolveMirrorOptions = {
+  connectionId: string;
+  action: "use-barndog" | "use-mirror" | "disconnect";
+  expectedVersion: string;
+  /** Null when the remote main branch was inspected and is gone. */
+  expectedRemoteCommit: string | null;
+  key?: RetryKey;
+};
+
+/** The server route of one connection; only a UUID may reach the URL. */
+export const connectionPath = (connectionId: string) =>
+  `/v1/git-connections/${z.uuidv4().parse(connectionId)}`;
+
+function repositoryTarget(options: GithubRepositoryOptions) {
+  const [owner, repository, ...rest] = options.repository.split("/");
+  if (!owner || !repository || rest.length)
+    throw new Error("Use --repository <owner/name>");
+  return {
+    kind: options.kind ?? "skill",
+    installationId: options.installation,
+    owner,
+    repository,
+  };
+}
+
+export async function githubList(home = homedir()) {
+  const conn = await connection(home);
+  return request(
+    conn,
+    "/v1/git-connections",
+    z.array(gitConnectionSchema),
+    home,
+  );
+}
+
+/** Connects a published Skill or Hook to an existing GitHub repository. */
+export async function githubConnect(
+  options: GithubConnectOptions,
+  home = homedir(),
+) {
+  const conn = await connection(home);
+  const target = repositoryTarget(options);
+  const selected = await selectAsset(
+    target.kind,
+    options.name,
+    options.origin,
+    home,
+  );
+  const body = gitConnectSchema.parse({
+    ...target,
+    assetId: selected.reference.id,
+    expectedVersionId: options.expectedVersion ?? selected.asset.version.id,
+    mode: options.mode ?? "connect",
+  });
+  return request(
+    conn,
+    "/v1/git-connections",
+    gitConnectionSchema,
+    home,
+    "POST",
+    body,
+  );
+}
+
+/** Creates a Skill or Hook from a GitHub repository, which stays authoritative. */
+export async function githubImport(
+  options: GithubRepositoryOptions,
+  home = homedir(),
+) {
+  const conn = await connection(home);
+  const target = repositoryTarget(options);
+  const scope = await selectOrigin(options.origin, conn, home);
+  const body = gitImportSchema.parse({
+    ...target,
+    name: options.name,
+    origin: { type: scope.type, id: scope.id },
+  });
+  return request(
+    conn,
+    "/v1/git-connections/import",
+    gitConnectionSchema,
+    home,
+    "POST",
+    body,
+  );
+}
+
+/** Copies a GitHub repository into a BarnDog-owned asset with no connection left behind. */
+export async function githubImportCopy(
+  options: GithubImportCopyOptions,
+  home = homedir(),
+) {
+  const conn = await connection(home);
+  const target = repositoryTarget(options);
+  const scope = await selectOrigin(options.origin, conn, home);
+  const body = gitCopyImportSchema.parse({
+    ...target,
+    name: options.name,
+    origin: { type: scope.type, id: scope.id },
+    idempotencyKey: options.key,
+  });
+  return request(
+    conn,
+    "/v1/git-connections/import-copy",
+    gitCopyImportResultSchema,
+    home,
+    "POST",
+    body,
+  );
+}
+
+/** Creates a GitHub repository for a published asset and exports its history. */
+export async function githubCreateRepository(
+  options: GithubCreateRepositoryOptions,
+  home = homedir(),
+) {
+  const conn = await connection(home);
+  const target = repositoryTarget(options);
+  const selected = await selectAsset(
+    target.kind,
+    options.name,
+    options.origin,
+    home,
+  );
+  const body = gitCreateRepositorySchema.parse({
+    ...target,
+    assetId: selected.reference.id,
+    expectedVersionId: options.expectedVersion ?? selected.asset.version.id,
+    mode: options.mode ?? "mirror",
+    visibility: options.visibility ?? "private",
+    idempotencyKey: options.key,
+  });
+  return request(
+    conn,
+    "/v1/git-connections/create-repository",
+    gitConnectionSchema,
+    home,
+    "POST",
+    body,
+  );
+}
+
+export async function githubShow(connectionId: string, home = homedir()) {
+  const conn = await connection(home);
+  return request(conn, connectionPath(connectionId), gitConnectionSchema, home);
+}
+
+/** Syncs now instead of waiting for the server's next scheduled sync. */
+export async function githubSync(connectionId: string, home = homedir()) {
+  const conn = await connection(home);
+  return request(
+    conn,
+    `${connectionPath(connectionId)}/sync`,
+    gitConnectionSchema,
+    home,
+    "POST",
+  );
+}
+
+/** The repository's main commit as GitHub reports it now, not as last synced. */
+export async function githubRemoteHead(connectionId: string, home = homedir()) {
+  const conn = await connection(home);
+  return request(
+    conn,
+    `${connectionPath(connectionId)}/remote-head`,
+    gitRemoteHeadSchema,
+    home,
+  );
+}
+
+/** Settles a mirror that diverged from BarnDog; refused if either side moved since it was inspected. */
+export async function githubResolveMirror(
+  options: GithubResolveMirrorOptions,
+  home = homedir(),
+) {
+  const conn = await connection(home);
+  const path = connectionPath(options.connectionId);
+  const body = gitMirrorResolutionSchema.parse({
+    action: options.action,
+    expectedVersionId: options.expectedVersion,
+    expectedRemoteCommit: options.expectedRemoteCommit,
+    idempotencyKey: options.key ?? randomUUID(),
+  });
+  return request(
+    conn,
+    `${path}/mirror-resolution`,
+    okSchema,
+    home,
+    "POST",
+    body,
+  );
+}
