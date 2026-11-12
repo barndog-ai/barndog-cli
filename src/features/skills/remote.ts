@@ -36,6 +36,7 @@ import {
   type SkillSelection,
 } from "../../config/settings.js";
 import { resolveAssets } from "../asset-selection/index.js";
+import type { CatalogAsset } from "../catalog/index.js";
 
 export { normalizeServer } from "../auth/transport.js";
 
@@ -118,6 +119,22 @@ export async function catalog(
   if (new Set(skills.map((skill) => skill.id)).size !== skills.length)
     throw new Error("Duplicate catalog Skill");
   return skills;
+}
+
+export async function skillCatalog(
+  connection: Connection,
+  home: string,
+): Promise<CatalogAsset[]> {
+  return (await catalog(connection, home)).map((skill) => ({
+    id: skill.id,
+    kind: "skill",
+    name: skill.name,
+    origin: skill.origin,
+    version: {
+      number: skill.version.number,
+      description: skill.version.description,
+    },
+  }));
 }
 
 export async function listSkills(home = homedir()) {

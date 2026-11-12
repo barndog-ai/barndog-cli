@@ -1,9 +1,9 @@
 import { homedir } from "node:os";
-import { mcpListSchema } from "@barndog-ai/api-contract";
 import { readSettings, type Connection } from "../../config/settings.js";
 import { CliError } from "../../errors.js";
-import { packageCatalogs } from "../collaboration/remote.js";
-import { request } from "../environment/remote.js";
+import { hookCatalog } from "../hooks/catalog.js";
+import { mcpCatalog } from "../mcps/catalog.js";
+import { skillCatalog } from "../skills/remote.js";
 import { openRepoSource } from "../environment/workspace-source.js";
 import { activeLocal, localOverlay } from "../git-workspace/overlay.js";
 import type { AssetKind } from "../asset-selection/types.js";
@@ -17,38 +17,17 @@ export type CatalogAsset = {
   version: { number: number; description: string; label?: string };
 };
 
-async function mcpCatalog(conn: Connection, home: string) {
-  const rows: CatalogAsset[] = [];
-  const seen = new Set<string>();
-  let cursor: string | undefined;
-  do {
-    const page = await request(
-      conn,
-      `/v1/mcps?limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
-      mcpListSchema,
-      home,
-    );
-    for (const mcp of page.mcps) {
-      if (mcp.organizationId !== conn.organizationId)
-        throw new Error("Invalid catalog organization");
-      rows.push({
-        id: mcp.id,
-        kind: "mcp",
-        name: mcp.name,
-        origin: mcp.origin,
-        version: {
-          number: mcp.version.number,
-          description: mcp.version.definition.description,
-        },
-      });
-    }
-    if (page.nextCursor && seen.has(page.nextCursor))
-      throw new Error("Invalid catalog pagination");
-    if (page.nextCursor) seen.add(page.nextCursor);
-    cursor = page.nextCursor ?? undefined;
-  } while (cursor);
-  return rows;
-}
+type CatalogFetcher = (
+  conn: Connection,
+  home: string,
+) => Promise<CatalogAsset[]>;
+
+/** Beside the code that calls them, because each imports a network module. */
+const catalogFetchers: Record<AssetKind, CatalogFetcher> = {
+  skill: skillCatalog,
+  mcp: mcpCatalog,
+  hook: hookCatalog,
+};
 
 export async function searchCatalog(
   kind: AssetKind,
@@ -107,17 +86,5 @@ async function sharedCatalog(
       "This machine isn't connected to a BarnDog workspace.",
       "barndog init",
     );
-  const conn = settings.connection;
-  if (kind === "mcp") return mcpCatalog(conn, home);
-  const packages = await packageCatalogs[kind](conn, home);
-  return packages.map((item) => ({
-    id: item.id,
-    kind,
-    name: item.name,
-    origin: item.origin,
-    version: {
-      number: item.version.number,
-      description: item.version.description,
-    },
-  }));
+  return catalogFetchers[kind](settings.connection, home);
 }

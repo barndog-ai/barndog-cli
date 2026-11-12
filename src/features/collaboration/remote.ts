@@ -5,12 +5,12 @@ import {
   contextSchema,
   memberSchema,
   scopeSchema,
-  listOutputSchema,
   type Change,
   type Skill,
 } from "@barndog-ai/api-contract";
 import { parsePackage, defaultLimits } from "@barndog-ai/api-contract/package";
 import { apiClient, catalog } from "../skills/remote.js";
+import { publishedHooks, type Hook } from "../hooks/catalog.js";
 import { serverFetch } from "../auth/transport.js";
 import { collaborationClient, packagePath } from "./domain.js";
 import {
@@ -180,35 +180,8 @@ export async function getChange(
   );
 }
 
-export async function hookCatalog(
-  conn: Connection,
-  home: string,
-): Promise<Skill[]> {
-  const client = collaborationClient(conn.server, home, "hook"),
-    values: Skill[] = [],
-    seen = new Set<string>();
-  let cursor: string | undefined;
-  do {
-    const page: z.infer<typeof listOutputSchema> = listOutputSchema.parse(
-      (
-        await client.GET("/v1/skills", {
-          params: { query: { limit: 100, cursor } },
-        })
-      ).data,
-    );
-    if (page.skills.some((s) => s.organizationId !== conn.organizationId))
-      throw new Error("Invalid catalog organization");
-    values.push(...page.skills);
-    if (page.nextCursor && seen.has(page.nextCursor))
-      throw new Error("Invalid catalog pagination");
-    if (page.nextCursor) seen.add(page.nextCursor);
-    cursor = page.nextCursor ?? undefined;
-  } while (cursor);
-  return values;
-}
-
 /** Every published package of a kind that you can see. */
 export const packageCatalogs: Record<
   PackageKind,
-  (conn: Connection, home: string) => Promise<Skill[]>
-> = { skill: catalog, hook: hookCatalog };
+  (conn: Connection, home: string) => Promise<(Skill | Hook)[]>
+> = { skill: catalog, hook: publishedHooks };
