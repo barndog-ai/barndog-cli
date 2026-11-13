@@ -59,7 +59,10 @@ import {
 import { checkboxTheme, promptTheme, selected } from "./theme.js";
 import { bold, dim, fields, heading, originLabel, table } from "./format.js";
 
-const chooseHarnesses = (choices: HarnessChoice[]): Promise<Harness[]> => {
+/** Asks which coding tools to manage; tests pass their own answer. */
+type ChooseHarnesses = (choices: HarnessChoice[]) => Promise<Harness[]>;
+
+const chooseHarnesses: ChooseHarnesses = (choices) => {
   const width = Math.max(...choices.map((choice) => choice.name.length));
 
   return checkbox<Harness>({
@@ -75,8 +78,6 @@ const chooseHarnesses = (choices: HarnessChoice[]): Promise<Harness[]> => {
     theme: checkboxTheme,
   });
 };
-
-type Choose = typeof chooseHarnesses;
 
 /** The source setup was last run with, offered as the default. */
 function savedChoice(
@@ -144,7 +145,7 @@ export async function runSetup(
     interactive?: boolean;
     write?: (message: string) => void;
     confirmRestart?: () => Promise<boolean>;
-    choose?: Choose;
+    choose?: ChooseHarnesses;
     chooseEnvironment?: ChooseEnvironment;
     cwd?: string;
     detected?: DetectedHarness[];

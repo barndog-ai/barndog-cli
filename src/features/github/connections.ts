@@ -16,9 +16,19 @@ import {
   gitImportSchema,
   gitMirrorResolutionSchema,
   okSchema,
+  type GitConnection,
 } from "@barndog-ai/api-contract";
 import { connection, selectOrigin } from "../collaboration/remote.js";
 import { request, selectAsset, type RetryKey } from "../environment/remote.js";
+
+/** A BarnDog-owned copy of a repository, with no connection left behind. */
+export type GitCopyImportResult = z.infer<typeof gitCopyImportResultSchema>;
+
+/** The repository's main commit as GitHub reports it, and when that was observed. */
+export type GitRemoteHead = z.infer<typeof gitRemoteHeadSchema>;
+
+/** The server's acknowledgement that a diverged mirror was settled. */
+export type MirrorResolved = z.infer<typeof okSchema>;
 
 /** An asset and the GitHub repository it pairs with. */
 export type GithubRepositoryOptions = {
@@ -77,7 +87,7 @@ function repositoryTarget(options: GithubRepositoryOptions) {
   };
 }
 
-export async function githubList(home = homedir()) {
+export async function githubList(home = homedir()): Promise<GitConnection[]> {
   const conn = await connection(home);
 
   return request(conn, "/v1/git-connections", z.array(gitConnectionSchema), {
@@ -89,7 +99,7 @@ export async function githubList(home = homedir()) {
 export async function githubConnect(
   options: GithubConnectOptions,
   home = homedir(),
-) {
+): Promise<GitConnection> {
   const conn = await connection(home);
   const target = repositoryTarget(options);
   const selected = await selectAsset(
@@ -117,7 +127,7 @@ export async function githubConnect(
 export async function githubImport(
   options: GithubRepositoryOptions,
   home = homedir(),
-) {
+): Promise<GitConnection> {
   const conn = await connection(home);
   const target = repositoryTarget(options);
   const scope = await selectOrigin(options.origin, conn, home);
@@ -138,7 +148,7 @@ export async function githubImport(
 export async function githubImportCopy(
   options: GithubImportCopyOptions,
   home = homedir(),
-) {
+): Promise<GitCopyImportResult> {
   const conn = await connection(home);
   const target = repositoryTarget(options);
   const scope = await selectOrigin(options.origin, conn, home);
@@ -161,7 +171,7 @@ export async function githubImportCopy(
 export async function githubCreateRepository(
   options: GithubCreateRepositoryOptions,
   home = homedir(),
-) {
+): Promise<GitConnection> {
   const conn = await connection(home);
   const target = repositoryTarget(options);
   const selected = await selectAsset(
@@ -188,7 +198,10 @@ export async function githubCreateRepository(
   );
 }
 
-export async function githubShow(connectionId: string, home = homedir()) {
+export async function githubShow(
+  connectionId: string,
+  home = homedir(),
+): Promise<GitConnection> {
   const conn = await connection(home);
 
   return request(conn, connectionPath(connectionId), gitConnectionSchema, {
@@ -197,7 +210,10 @@ export async function githubShow(connectionId: string, home = homedir()) {
 }
 
 /** Syncs now instead of waiting for the server's next scheduled sync. */
-export async function githubSync(connectionId: string, home = homedir()) {
+export async function githubSync(
+  connectionId: string,
+  home = homedir(),
+): Promise<GitConnection> {
   const conn = await connection(home);
 
   return request(
@@ -209,7 +225,10 @@ export async function githubSync(connectionId: string, home = homedir()) {
 }
 
 /** The repository's main commit as GitHub reports it now, not as last synced. */
-export async function githubRemoteHead(connectionId: string, home = homedir()) {
+export async function githubRemoteHead(
+  connectionId: string,
+  home = homedir(),
+): Promise<GitRemoteHead> {
   const conn = await connection(home);
 
   return request(
@@ -224,7 +243,7 @@ export async function githubRemoteHead(connectionId: string, home = homedir()) {
 export async function githubResolveMirror(
   options: GithubResolveMirrorOptions,
   home = homedir(),
-) {
+): Promise<MirrorResolved> {
   const conn = await connection(home);
   const path = connectionPath(options.connectionId);
   const body = gitMirrorResolutionSchema.parse({

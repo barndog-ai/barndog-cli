@@ -10,6 +10,7 @@ import {
 import {
   diffEntries,
   readDirectory,
+  type FileDiff,
 } from "@barndog-ai/api-contract/collaboration";
 
 import { selectionState, withSelection } from "../../config/environment.js";
@@ -246,12 +247,19 @@ function latestEntries(
   return all;
 }
 
+/** An imported asset brought up to its repository's latest commit. */
+export type ImportUpdate = {
+  name: string;
+  commit: string;
+  changes: FileDiff[];
+};
+
 async function applyUpdate(
   folder: string,
   sources: Sources,
   record: ImportRecord,
   options: { force?: boolean; dryRun?: boolean; allowPrompt: boolean },
-) {
+): Promise<ImportUpdate> {
   const target = join(folder, folderFor(record.kind, record.name));
   const current = await readDirectory(target);
   if (packageFingerprint(current) !== record.fingerprint && !options.force) {
@@ -286,7 +294,7 @@ export async function updateImported(
   name: string | undefined,
   options: { force?: boolean; dryRun?: boolean },
   home = homedir(),
-) {
+): Promise<ImportUpdate[]> {
   const settings = await readSettings(home);
   if (!settings || !settings.localWorkspace) {
     throw new CliError("This machine has no assets added from a repo.");
@@ -307,7 +315,7 @@ export async function updateImported(
     );
   }
 
-  const results = [];
+  const results: ImportUpdate[] = [];
   for (const record of records) {
     results.push(
       await applyUpdate(folder, sources, record, {

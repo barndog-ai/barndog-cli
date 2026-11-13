@@ -143,9 +143,12 @@ export type WorkspaceModel = {
     }[];
   };
   invalid: ReadonlyMap<string, string>;
-  invalidKnowledge: readonly { path: string; reason: string }[];
+  invalidKnowledge: readonly InvalidKnowledge[];
   problems: Problem[];
 };
+
+/** A knowledge file that couldn't be read, and why. */
+export type InvalidKnowledge = { path: string; reason: string };
 
 const hidden = (name: string) => name.startsWith(".");
 
@@ -264,7 +267,7 @@ export async function loadWorkspace(
   const problems: Problem[] = [];
   const assets: RepoAsset[] = [];
   const knowledge: RepoKnowledge[] = [];
-  const invalidKnowledge: { path: string; reason: string }[] = [];
+  const invalidKnowledge: InvalidKnowledge[] = [];
   const named = (path: string, name: string) => {
     if (validAssetName(name)) {
       return true;

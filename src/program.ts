@@ -119,7 +119,7 @@ import { primary } from "./ui/theme.js";
 import { versionReport } from "./version.js";
 import { defined } from "./shared/lookup.js";
 
-type ProgramOptions = Partial<Omit<CommandContext, "mode">> & {
+export type ProgramOptions = Partial<Omit<CommandContext, "mode">> & {
   writeError?: (message: string) => void;
   /** Tests pin terminal detection; the CLI detects a TTY. */
   interactive?: boolean;

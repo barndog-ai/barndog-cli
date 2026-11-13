@@ -13,6 +13,7 @@ import {
   diffEntries,
   mergeEntries,
   readDirectory,
+  type FileDiff,
 } from "@barndog-ai/api-contract/collaboration";
 
 import type { GitWorkspace } from "../../config/settings.js";
@@ -59,6 +60,17 @@ import {
 } from "./workspace-store.js";
 import { defined, only } from "../../shared/lookup.js";
 import { NAME, splitOrigin } from "../../shared/patterns.js";
+
+import type {
+  ConflictResolution,
+  CreatedPackage,
+  GitPushResult,
+  GitWorkingCopyStatus,
+  PackageVersion,
+  PulledPackage,
+  UpdatedGitWorkingCopy,
+  VersionFiles,
+} from "./results.js";
 
 async function latest(workspace: GitWorkspace, home: string) {
   const model = await gitRepoSource(workspace, home).model();
@@ -176,7 +188,7 @@ export function pullGitAsset(
   },
   cwd: string,
   home = homedir(),
-) {
+): Promise<PulledPackage> {
   const kind = options.kind ?? "skill";
 
   return locked(home, async () => {
@@ -213,7 +225,7 @@ export function createGitAsset(
   },
   cwd: string,
   home = homedir(),
-) {
+): Promise<CreatedPackage> {
   const kind = options.kind ?? "skill";
 
   return locked(home, async () => {
@@ -235,7 +247,10 @@ export function createGitAsset(
   });
 }
 
-export function gitWorkingStatus(cwd: string, home = homedir()) {
+export function gitWorkingStatus(
+  cwd: string,
+  home = homedir(),
+): Promise<GitWorkingCopyStatus> {
   return locked(home, async () => {
     const work = await findGit(cwd, home);
 
@@ -289,7 +304,10 @@ async function branchFiles(work: GitWorkingCopy, head: string, home: string) {
   return usable(asset).entries;
 }
 
-export function updateGitWorkingCopy(cwd: string, home = homedir()) {
+export function updateGitWorkingCopy(
+  cwd: string,
+  home = homedir(),
+): Promise<UpdatedGitWorkingCopy> {
   return locked(home, async () => {
     const work = await findGit(cwd, home);
     const previous = structuredClone(work);
@@ -354,7 +372,7 @@ export function resolveGitConflict(
   path: string,
   cwd: string,
   home = homedir(),
-) {
+): Promise<ConflictResolution> {
   return locked(home, async () =>
     markResolved(await findGit(cwd, home), path, cwd, home),
   );
@@ -372,7 +390,7 @@ export function pushGitWorkingCopy(
   },
   cwd: string,
   home = homedir(),
-) {
+): Promise<GitPushResult> {
   return locked(home, async () => {
     const { model, commit: tip } = await latest(workspace, home);
     let work: GitWorkingCopy;
@@ -616,7 +634,7 @@ export async function gitVersions(
   workspace: GitWorkspace,
   target: HistoryTarget,
   home = homedir(),
-) {
+): Promise<PackageVersion[]> {
   return (await history(workspace, target, home)).versions;
 }
 
@@ -624,7 +642,7 @@ export async function gitVersionFiles(
   workspace: GitWorkspace,
   target: HistoryTarget & { version?: number },
   home = homedir(),
-) {
+): Promise<VersionFiles> {
   const { filesOf } = await history(workspace, target, home);
 
   return { files: encodeFiles(await filesOf(target.version)) };
@@ -634,7 +652,7 @@ export async function gitVersionDiff(
   workspace: GitWorkspace,
   target: HistoryTarget & { from: number; to: number },
   home = homedir(),
-) {
+): Promise<FileDiff[]> {
   const { filesOf } = await history(workspace, target, home);
 
   return diffEntries(await filesOf(target.from), await filesOf(target.to));

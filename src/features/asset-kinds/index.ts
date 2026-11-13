@@ -1,10 +1,22 @@
-import { hookSchema, mcpSchema, skillSchema } from "@barndog-ai/api-contract";
+import {
+  hookSchema,
+  mcpSchema,
+  skillSchema,
+  type Skill,
+} from "@barndog-ai/api-contract";
 import type { PackageEntry } from "@barndog-ai/api-contract/package";
-import type { ZodType } from "zod";
+import type { z, ZodType } from "zod";
 import type { AssetKind } from "../asset-selection/types.js";
 import { CliError } from "../../errors.js";
+import type { Hook } from "../hooks/catalog.js";
 
 export type { AssetKind };
+
+/** An MCP configuration as the server describes it. */
+export type McpServer = z.infer<typeof mcpSchema>;
+
+/** A published asset as the server describes it, of any kind. */
+export type PublishedAsset = Skill | McpServer | Hook;
 
 /** Kinds published as a folder of files; MCP configurations are a single definition. */
 export type PackageKind = Exclude<AssetKind, "mcp">;

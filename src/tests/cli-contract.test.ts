@@ -29,7 +29,7 @@ import {
 } from "../features/knowledge/index.js";
 import { doctor } from "../features/doctor/index.js";
 import { mcpEntry } from "../features/native/adapters.js";
-import { createProgram } from "../program.js";
+import { createProgram, type ProgramOptions } from "../program.js";
 import { addMcp, addSkills, type AddContext } from "../ui/add-asset.js";
 import { renderCollaboration } from "../ui/collaboration.js";
 import { renderValue } from "../ui/format.js";
@@ -81,7 +81,7 @@ const quiet = (home: string): AddContext => ({
   prompts: {} as AddContext["prompts"],
 });
 
-function program(overrides: Parameters<typeof createProgram>[0] = {}) {
+function program(overrides: ProgramOptions = {}) {
   const output: string[] = [];
   const instance = createProgram({
     interactive: false,

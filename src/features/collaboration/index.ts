@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { z } from "zod";
 import { changeSchema, type Change } from "@barndog-ai/api-contract";
+import type { FileDiff } from "@barndog-ai/api-contract/collaboration";
 import { collaborationClient, responseData } from "./domain.js";
 import type { PackageKind } from "../asset-kinds/index.js";
 import { connection, download, getChange, selectSkill } from "./remote.js";
@@ -31,6 +32,18 @@ import {
   resolveConflict,
   pushWorkspace,
 } from "./workspace.js";
+
+import type {
+  ChangeDetails,
+  ConflictResolution,
+  CreatedPackage,
+  PackageVersion,
+  PulledPackage,
+  PushResult,
+  UpdatedWorkingCopy,
+  VersionFiles,
+  WorkingCopyStatus,
+} from "./results.js";
 
 /** Who an ID is, when the server will say; IDs still print if it won't. */
 const developerNames = (home: string): Promise<Record<string, string>> =>
@@ -79,6 +92,25 @@ export type ChangeRevision = {
 };
 
 export type ThreadRevision = ChangeRevision & { thread: string };
+
+export type ThreadResolution = ThreadRevision & { resolved: boolean };
+
+/** A published version; the newest when `version` is left out. */
+export type VersionTarget = PackageTarget & { version?: number };
+
+export type VersionRange = PackageTarget & { from: number; to: number };
+
+export type ChangeListOptions = { kind?: PackageKind };
+
+export type ChangeTarget = { kind?: PackageKind; id: string };
+
+/** A proposal's diff at a revision (the newest by default), from `fromRevision` or its base. */
+export type ChangeDiffTarget = ChangeTarget & {
+  revision?: number;
+  fromRevision?: number;
+};
+
+export type ReviewDecision = "approve" | "request-changes";
 
 export type CommentOptions = ChangeRevision & {
   body?: string;
@@ -155,7 +187,7 @@ export async function createPackage(
   target: WorkingCopyTarget,
   cwd = process.cwd(),
   home = homedir(),
-) {
+): Promise<CreatedPackage> {
   const where = await backend(home, target.origin);
   if (where.type === "local") {
     throw noLocalReview(where.path);
@@ -180,7 +212,7 @@ export async function pullPackage(
   target: WorkingCopyTarget,
   cwd = process.cwd(),
   home = homedir(),
-) {
+): Promise<PulledPackage> {
   const where = await backend(home, target.origin);
   if (where.type === "local") {
     throw noLocalReview(where.path);
@@ -201,7 +233,10 @@ export async function pullPackage(
   );
 }
 
-export async function updateWorkingCopy(cwd = process.cwd(), home = homedir()) {
+export async function updateWorkingCopy(
+  cwd = process.cwd(),
+  home = homedir(),
+): Promise<UpdatedWorkingCopy> {
   const where = await backend(home);
   if (where.type === "local") {
     throw noLocalReview(where.path);
@@ -215,11 +250,7 @@ export async function updateWorkingCopy(cwd = process.cwd(), home = homedir()) {
 export async function workingStatus(
   cwd = process.cwd(),
   home = homedir(),
-): Promise<
-  | Awaited<ReturnType<typeof gitWorkingStatus>>
-  | Awaited<ReturnType<typeof workspaceStatus>>
-  | EnvironmentStatus
-> {
+): Promise<WorkingCopyStatus | EnvironmentStatus> {
   const where = await backend(home);
   if (where.type === "local") {
     return { mode: "environment" };
@@ -241,10 +272,7 @@ export async function workingStatus(
 export async function workingDiff(
   cwd = process.cwd(),
   home = homedir(),
-): Promise<
-  // Git and Cloud working copies report changes in the same shape.
-  Awaited<ReturnType<typeof workspaceStatus>>["changes"] | EnvironmentPreview
-> {
+): Promise<FileDiff[] | EnvironmentPreview> {
   const status = await workingStatus(cwd, home);
   if ("changes" in status) {
     return status.changes;
@@ -260,7 +288,7 @@ export async function pushWorkingCopy(
   options: PushOptions,
   cwd = process.cwd(),
   home = homedir(),
-) {
+): Promise<PushResult> {
   const where = await backend(home, options.origin);
   if (where.type === "local") {
     throw noLocalReview(where.path);
@@ -275,7 +303,7 @@ export async function resolveFile(
   path: string,
   cwd = process.cwd(),
   home = homedir(),
-) {
+): Promise<ConflictResolution> {
   const where = await backend(home);
   if (where.type === "local") {
     throw noLocalReview(where.path);
@@ -310,7 +338,10 @@ async function publishedPackage(target: PackageTarget, home: string) {
 }
 
 /** Newest last. */
-export async function packageVersions(target: PackageTarget, home = homedir()) {
+export async function packageVersions(
+  target: PackageTarget,
+  home = homedir(),
+): Promise<PackageVersion[]> {
   const where = await publishedPackage(target, home);
   if (where.type === "git") {
     return gitVersions(where.workspace, target, home);
@@ -330,9 +361,9 @@ export async function packageVersions(target: PackageTarget, home = homedir()) {
 }
 
 export async function versionFiles(
-  target: PackageTarget & { version?: number },
+  target: VersionTarget,
   home = homedir(),
-) {
+): Promise<VersionFiles> {
   const where = await publishedPackage(target, home);
   if (where.type === "git") {
     return gitVersionFiles(where.workspace, target, home);
@@ -349,9 +380,9 @@ export async function versionFiles(
 }
 
 export async function diffVersions(
-  target: PackageTarget & { from: number; to: number },
+  target: VersionRange,
   home = homedir(),
-) {
+): Promise<FileDiff[]> {
   const where = await publishedPackage(target, home);
   if (where.type === "git") {
     return gitVersionDiff(where.workspace, target, home);
@@ -368,9 +399,9 @@ export async function diffVersions(
 }
 
 export async function listChanges(
-  { kind }: { kind?: PackageKind } = {},
+  { kind }: ChangeListOptions = {},
   home = homedir(),
-) {
+): Promise<Change[]> {
   const client = collaborationClient(
     (await cloudConnection(home)).server,
     home,
@@ -401,9 +432,9 @@ export async function listChanges(
 }
 
 export async function showChange(
-  target: { kind?: PackageKind; id: string },
+  target: ChangeTarget,
   home = homedir(),
-) {
+): Promise<ChangeDetails> {
   const conn = await cloudConnection(home);
   const id = z.uuid().parse(target.id);
   const client = collaborationClient(conn.server, home, target.kind);
@@ -441,14 +472,9 @@ export async function showChange(
 }
 
 export async function changeDiff(
-  target: {
-    kind?: PackageKind;
-    id: string;
-    revision?: number;
-    fromRevision?: number;
-  },
+  target: ChangeDiffTarget,
   home = homedir(),
-) {
+): Promise<FileDiff[]> {
   const client = collaborationClient(
     (await cloudConnection(home)).server,
     home,
@@ -483,10 +509,10 @@ async function changeAtRevision(target: ChangeRevision, home: string) {
 }
 
 export async function reviewChange(
-  decision: "approve" | "request-changes",
+  decision: ReviewDecision,
   target: ChangeRevision,
   home = homedir(),
-) {
+): Promise<Change> {
   const { client, id, body } = await changeAtRevision(target, home);
 
   return responseData(
@@ -500,7 +526,10 @@ export async function reviewChange(
   );
 }
 
-export async function rejectChange(target: ChangeRevision, home = homedir()) {
+export async function rejectChange(
+  target: ChangeRevision,
+  home = homedir(),
+): Promise<Change> {
   const { client, id, body } = await changeAtRevision(target, home);
 
   return responseData(
@@ -511,7 +540,10 @@ export async function rejectChange(target: ChangeRevision, home = homedir()) {
   );
 }
 
-export async function mergeChange(target: ChangeRevision, home = homedir()) {
+export async function mergeChange(
+  target: ChangeRevision,
+  home = homedir(),
+): Promise<Change> {
   const { client, id, body } = await changeAtRevision(target, home);
 
   return responseData(
@@ -525,7 +557,7 @@ export async function mergeChange(target: ChangeRevision, home = homedir()) {
 export async function commentOnChange(
   options: CommentOptions,
   home = homedir(),
-) {
+): Promise<Change> {
   const { client, id, body } = await changeAtRevision(options, home);
   const text = options.bodyFile
     ? await readFile(options.bodyFile, "utf8")
@@ -577,7 +609,7 @@ export async function commentOnChange(
 export async function applySuggestion(
   target: ThreadRevision,
   home = homedir(),
-) {
+): Promise<Change> {
   const { client, id, body } = await changeAtRevision(target, home);
 
   return responseData(
@@ -589,9 +621,9 @@ export async function applySuggestion(
 }
 
 export async function setDiscussionResolved(
-  target: ThreadRevision & { resolved: boolean },
+  target: ThreadResolution,
   home = homedir(),
-) {
+): Promise<Change> {
   const { client, id, body } = await changeAtRevision(target, home);
 
   return responseData(

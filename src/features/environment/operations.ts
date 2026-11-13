@@ -25,7 +25,7 @@ import type {
   Subscription,
 } from "../asset-selection/types.js";
 import type { SyncEvent } from "./events.js";
-import { environmentCatalog, request } from "./remote.js";
+import { environmentCatalog, request, type ApiScope } from "./remote.js";
 import { matchesOrigin } from "../collaboration/remote.js";
 import { locked } from "./transaction.js";
 import { installedNames, synchronize } from "./sync.js";
@@ -59,6 +59,23 @@ export type AssetIds = { kind: AssetKind; ids: string[] };
 
 export type AssetChange = "install" | "remove" | "enable" | "disable";
 
+export type AssetRename = AssetTarget & {
+  /** The new installed name. */
+  as?: string;
+  /** Drop the saved name and go back to the published one. */
+  reset?: boolean;
+};
+
+/** A set to install or switch to, and which of its assets to take. */
+export type SetSelection = { origin: string; mode?: SelectionMode } & Overrides;
+
+/** Assets picked from one set, each recorded as an individual selection. */
+export type SetAssets = { origin: string; assetIds: string[] };
+
+export type SetChange = "remove" | "enable" | "disable";
+
+export type SetTarget = { origin: string } & Overrides;
+
 export type Applied = {
   status: "applied";
   events: SyncEvent[];
@@ -73,7 +90,7 @@ export type DecisionRequired = {
 export type SelectionOutcome = Applied | DecisionRequired;
 
 export type SetsList = {
-  available: z.infer<typeof scopeSchema>[];
+  available: ApiScope[];
   subscriptions: readonly Subscription[];
   diagnostics: readonly SelectionDiagnostic[];
 };
@@ -138,7 +155,7 @@ type Workspace = {
   catalog: AssetCatalog;
   source?: WorkspaceSource;
   current: SelectionState;
-  scopes: () => Promise<z.infer<typeof scopeSchema>[]>;
+  scopes: () => Promise<ApiScope[]>;
 };
 
 /** Cloud answers these through its API; repo workspaces answer them from files. */
@@ -346,7 +363,7 @@ export function changeAssets(
 
 /** `reset`, or `as` set to the published name, drops the local name. */
 export function renameAsset(
-  target: AssetTarget & { as?: string; reset?: boolean },
+  target: AssetRename,
   home = homedir(),
 ): Promise<Applied> {
   return withLockedWorkspace(home, async (workspace) => {
@@ -465,7 +482,7 @@ export function previewSet(
 }
 
 export function installSet(
-  options: { origin: string; mode?: SelectionMode } & Overrides,
+  options: SetSelection,
   home = homedir(),
 ): Promise<SelectionOutcome> {
   return withLockedWorkspace(home, async (workspace) =>
@@ -487,7 +504,7 @@ export function installSet(
  * selection doesn't follow later additions to the scope.
  */
 export function installSetAssets(
-  options: { origin: string; assetIds: string[] },
+  options: SetAssets,
   home = homedir(),
 ): Promise<Applied> {
   return withLockedWorkspace(home, async (workspace) => {
@@ -532,8 +549,8 @@ export function installSetAssets(
 }
 
 export function changeSet(
-  change: "remove" | "enable" | "disable",
-  options: { origin: string } & Overrides,
+  change: SetChange,
+  options: SetTarget,
   home = homedir(),
 ): Promise<SelectionOutcome> {
   return withLockedWorkspace(home, async (workspace) => {
@@ -554,7 +571,7 @@ export function changeSet(
 
 /** Replaces the subscriptions of the same type (team or repository). */
 export function switchSet(
-  options: { origin: string; mode?: SelectionMode } & Overrides,
+  options: SetSelection,
   home = homedir(),
 ): Promise<SelectionOutcome> {
   return withLockedWorkspace(home, async (workspace) => {

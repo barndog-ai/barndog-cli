@@ -6,6 +6,7 @@ import {
   contextSchema,
   loginPollSchema,
   loginStartSchema,
+  type ActorContext,
 } from "@barndog-ai/api-contract";
 import { readSettings } from "../../config/settings.js";
 import { readCredentials, updateCredentials } from "./credentials.js";
@@ -160,7 +161,13 @@ export async function logout(home = homedir()) {
   return { server, revoked };
 }
 
-export async function authStatus(home = homedir(), explicitServer?: string) {
+/** Who this machine is signed in as, and on which server. */
+export type AuthStatus = { server: string; context: ActorContext };
+
+export async function authStatus(
+  home = homedir(),
+  explicitServer?: string,
+): Promise<AuthStatus> {
   let server;
   try {
     server = await selectedServer(explicitServer, home);

@@ -7,8 +7,27 @@ import { repositoryContext, localRepository } from "../repositories/context.js";
 import { openRepoSource } from "../environment/workspace-source.js";
 import { only } from "../../shared/lookup.js";
 
+type NamedScope = { id: string; slug: string; name: string };
+
+/** How a folder's Git repository maps to a BarnDog repository and its team. */
+export type RepositoryStatus = {
+  /** The Git repository root; null outside one. */
+  root: string | null;
+  /** Normalized fetch remotes, without credentials. */
+  remotes: string[];
+  repository: NamedScope | null;
+  team: NamedScope | null;
+  /** More than one BarnDog repository matches the remotes. */
+  ambiguous: boolean;
+  /** The organization, and the team when known: the scopes whose review policies apply. */
+  policyScopes: { type: "org" | "team"; id: string }[];
+};
+
 /** The barndog.yaml answer to "which repository scope is this folder?". */
-async function declaredRepository(model: WorkspaceModel, cwd: string) {
+async function declaredRepository(
+  model: WorkspaceModel,
+  cwd: string,
+): Promise<RepositoryStatus> {
   const local = await localRepository(cwd);
   const matches = Object.entries(model.config.repositories).filter(
     ([, repository]) =>
@@ -40,12 +59,15 @@ async function declaredRepository(model: WorkspaceModel, cwd: string) {
 }
 
 /** The workspace's web address: the server this machine is signed in to. */
-export async function workspaceUrl(home = homedir()) {
+export async function workspaceUrl(home = homedir()): Promise<string> {
   return (await authStatus(home)).server;
 }
 
 /** How the Git repository in `cwd` maps to a BarnDog repository and its team. */
-export async function repoStatus(home = homedir(), cwd = process.cwd()) {
+export async function repoStatus(
+  home = homedir(),
+  cwd = process.cwd(),
+): Promise<RepositoryStatus> {
   const settings = await readSettings(home);
   const repo = settings && openRepoSource(settings, home, { refresh: "auto" });
   if (repo) {

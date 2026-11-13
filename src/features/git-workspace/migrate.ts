@@ -27,7 +27,11 @@ import { collaborationClient } from "../collaboration/domain.js";
 import { archive } from "../collaboration/workspace.js";
 import { encodeFiles } from "../collaboration/workspace-store.js";
 import { originLabel } from "../environment/names.js";
-import { environmentCatalog, request } from "../environment/remote.js";
+import {
+  environmentCatalog,
+  request,
+  type ApiScope,
+} from "../environment/remote.js";
 import { synchronize } from "../environment/sync.js";
 import { locked } from "../environment/transaction.js";
 import { openRepoSource } from "../environment/workspace-source.js";
@@ -49,20 +53,18 @@ export type MigrationRow = {
   detail?: string;
 };
 
-type CloudScope = z.infer<typeof scopeSchema>;
-
 export type PublishableAsset = Pick<
   RepoAsset,
   "id" | "kind" | "name" | "publishedVersion" | "entries" | "definition"
 >;
 
-const sameScope = (cloud: CloudScope, local: RepoScope) =>
+const sameScope = (cloud: ApiScope, local: RepoScope) =>
   cloud.type === local.type &&
   (local.type === "org" || cloud.slug === local.slug);
 
 export async function publishPackage(
   asset: PublishableAsset & { kind: PackageKind },
-  scope: CloudScope,
+  scope: ApiScope,
   conn: Connection,
   home: string,
 ) {
@@ -92,7 +94,7 @@ export async function publishPackage(
 
 export const publishMcp = (
   asset: PublishableAsset,
-  scope: CloudScope,
+  scope: ApiScope,
   conn: Connection,
   home: string,
 ) =>
@@ -125,7 +127,7 @@ export const publishKnowledge = (
 /** Carries each choice over by scope and name, because cloud assigns new IDs. */
 function translateSelection(
   state: SelectionState,
-  scopes: { local: RepoScope; cloud: CloudScope }[],
+  scopes: { local: RepoScope; cloud: ApiScope }[],
   assets: readonly RepoAsset[],
   target: readonly AssetReference[],
 ): SelectionState {
@@ -198,15 +200,19 @@ function keepLocalChoices(
 }
 
 /** Publishes current content to a cloud workspace; Git history stays in the repo. */
-export async function migrate(
-  options: { server: string; dryRun?: boolean },
-  home = homedir(),
-): Promise<{
+export type MigrateOptions = { server: string; dryRun?: boolean };
+
+export type MigrationReport = {
   server: string;
   dryRun: boolean;
   rows: MigrationRow[];
   migrated: boolean;
-}> {
+};
+
+export async function migrate(
+  options: MigrateOptions,
+  home = homedir(),
+): Promise<MigrationReport> {
   return locked(home, async () => {
     const settings = await readSettings(home);
     if (!settings) {

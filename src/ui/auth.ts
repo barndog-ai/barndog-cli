@@ -1,7 +1,12 @@
 import { browserCommand } from "../shared/browser.js";
 import { spawn } from "node:child_process";
 import { homedir } from "node:os";
-import { login, logout, authStatus } from "../features/auth/session.js";
+import {
+  login,
+  logout,
+  authStatus,
+  type AuthStatus,
+} from "../features/auth/session.js";
 import { configuredServer } from "../features/auth/session.js";
 import { readCredentials } from "../features/auth/credentials.js";
 import { LoginRequiredError } from "../features/auth/transport.js";
@@ -148,7 +153,7 @@ export async function showAuthStatus(
   home = homedir(),
 ): Promise<void> {
   const { write } = output;
-  let result: Awaited<ReturnType<typeof authStatus>>;
+  let result: AuthStatus;
   try {
     result = await authStatus(home);
   } catch (error) {

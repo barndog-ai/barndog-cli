@@ -5,11 +5,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { coerce, satisfies, validRange } from "semver";
-import {
-  hookManifestSchema,
-  mcpDefinitionSchema,
-} from "@barndog-ai/api-contract";
-import type { z } from "zod";
+import type { HookManifest, McpDefinition } from "@barndog-ai/api-contract";
 import { adapters } from "../../harnesses/registry.js";
 import type { Harness } from "../../harnesses/types.js";
 import { nativeFile, type NativeEntry } from "./configuration.js";
@@ -88,7 +84,7 @@ export async function runtimeRequirements(
 export function mcpEntry(
   harness: Harness,
   asset: { id: string; name: string },
-  definition: z.infer<typeof mcpDefinitionSchema>,
+  definition: McpDefinition,
   home: string,
 ): NativeEntry {
   const refs =
@@ -166,11 +162,7 @@ export function mcpEntry(
 
 export function hookEntries(
   harness: Harness,
-  {
-    id,
-    root,
-    manifest,
-  }: { id: string; root: string; manifest: z.infer<typeof hookManifestSchema> },
+  { id, root, manifest }: { id: string; root: string; manifest: HookManifest },
   home: string,
 ): NativeEntry[] {
   const implementation = manifest.implementations[harness];

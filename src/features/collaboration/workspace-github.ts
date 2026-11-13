@@ -6,6 +6,7 @@ import {
   ApiError,
   gitConnectionSchema,
   gitPullSchema,
+  type GitConnection,
   gitPullDetailsSchema,
 } from "@barndog-ai/api-contract";
 import {
@@ -27,6 +28,8 @@ import {
   type Workspace,
 } from "./workspace-store.js";
 import { defined } from "../../shared/lookup.js";
+
+import type { CloudPushResult, UpdatedCloudWorkingCopy } from "./results.js";
 
 const publishedId = (work: { skillId?: string | null }) =>
   defined(work.skillId, "This working copy isn't published yet");
@@ -71,17 +74,15 @@ export async function externalSource(work: Workspace, home: string) {
   return source;
 }
 
-type ExternalSource = z.infer<typeof gitConnectionSchema>;
-
 export async function pullExternal(
   work: Workspace,
   {
     source,
     entries,
     previous,
-  }: { source: ExternalSource; entries: PackageEntry[]; previous: Workspace },
+  }: { source: GitConnection; entries: PackageEntry[]; previous: Workspace },
   home: string,
-) {
+): Promise<UpdatedCloudWorkingCopy> {
   work.external ??= { id: source.id };
   const conflicts = new Set<string>();
   const external = work.external;
@@ -160,10 +161,10 @@ export async function pullExternal(
 
 export async function pushExternal(
   work: Workspace,
-  source: ExternalSource,
+  source: GitConnection,
   options: { publish?: boolean; new?: boolean; title?: string },
   home: string,
-) {
+): Promise<CloudPushResult> {
   work.external ??= { id: source.id };
   const external = work.external;
   const path = `/v1/git-connections/${source.id}`;

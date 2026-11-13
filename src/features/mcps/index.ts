@@ -12,12 +12,15 @@ import {
 import { connection, selectOrigin } from "../collaboration/remote.js";
 import { request, selectAsset, type RetryKey } from "../environment/remote.js";
 import { readSettings } from "../../config/settings.js";
+import type { McpServer, PublishedAsset } from "../asset-kinds/index.js";
 import {
   repoForOrigin,
   selectRepoAsset,
   showRepoAsset,
+  type RepoAssetView,
 } from "../git-workspace/assets.js";
 import { gitVersions } from "../collaboration/workspace-git.js";
+import type { PackageVersion } from "../collaboration/results.js";
 import type { Harness } from "../../harnesses/types.js";
 import {
   patchNative,
@@ -35,12 +38,26 @@ export type McpWriteInput = {
   key?: RetryKey;
 };
 
+/** One published revision of an MCP configuration. */
+export type McpVersion = z.infer<typeof mcpVersionSchema>;
+
+/** What to do, or what was done, to sign in to an MCP server. */
+export type McpAuthentication = { message: string };
+
+export type McpUpdateInput = McpWriteInput & {
+  /** The version ID that was inspected; the update is refused if another landed since. */
+  expectedVersion: string;
+};
+
 async function readDefinition(file: string) {
   return mcpDefinitionSchema.parse(JSON.parse(await readFile(file, "utf8")));
 }
 
 /** Publishes a new MCP configuration in a scope. */
-export async function createMcp(input: McpWriteInput, home = homedir()) {
+export async function createMcp(
+  input: McpWriteInput,
+  home = homedir(),
+): Promise<McpServer> {
   const conn = await connection(home);
   const scope = await selectOrigin(input.origin, conn, home);
 
@@ -60,9 +77,9 @@ export async function createMcp(input: McpWriteInput, home = homedir()) {
 
 /** Publishes a new revision of an MCP configuration, against the inspected version. */
 export async function updateMcp(
-  input: McpWriteInput & { expectedVersion: string },
+  input: McpUpdateInput,
   home = homedir(),
-) {
+): Promise<McpServer> {
   const conn = await connection(home);
   await selectOrigin(input.origin, conn, home);
   const definition = await readDefinition(input.file);
@@ -85,7 +102,11 @@ export async function updateMcp(
 }
 
 /** One MCP configuration with its definition, from the repo or the server. */
-export async function showMcp(name: string, origin: string, home = homedir()) {
+export async function showMcp(
+  name: string,
+  origin: string,
+  home = homedir(),
+): Promise<RepoAssetView | PublishedAsset> {
   const settings = await readSettings(home);
   const repo = settings && repoForOrigin(settings, home, origin);
   if (repo) {
@@ -101,7 +122,7 @@ export async function mcpVersions(
   name: string,
   origin: string,
   home = homedir(),
-) {
+): Promise<PackageVersion[] | McpVersion[]> {
   const settings = await readSettings(home);
   if (settings?.gitWorkspace) {
     return gitVersions(
@@ -142,7 +163,7 @@ export async function authenticateMcp(
   origin: string,
   harness: Harness,
   home = homedir(),
-) {
+): Promise<McpAuthentication> {
   const settings = await readSettings(home);
   const repo = settings && repoForOrigin(settings, home, origin);
   const asset = repo

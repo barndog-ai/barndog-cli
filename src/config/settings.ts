@@ -94,8 +94,10 @@ const settingsSchema = z.looseObject({
 const invalidSettings =
   "Invalid user settings: expected a unique harnesses list (claude, codex, cursor)";
 
+type SettingsField = keyof z.infer<typeof settingsSchema>;
+
 /** What to say about an invalid part, keyed by the field Zod reports it under. */
-const invalidPart = {
+const invalidPart: Partial<Record<SettingsField, string>> = {
   harnesses: invalidSettings,
   connection: "Invalid user settings: invalid server connection",
   gitWorkspace: "Invalid user settings: invalid Git workspace",
@@ -104,9 +106,9 @@ const invalidPart = {
   knowledge: "Invalid knowledge integration setting",
   localNames:
     "Invalid user settings: localNames maps asset IDs to lowercase hyphenated names",
-} satisfies Partial<Record<keyof typeof settingsSchema.shape, string>>;
+};
 
-const isInvalidPart = (key: unknown): key is keyof typeof invalidPart =>
+const isInvalidPart = (key: unknown): key is SettingsField =>
   typeof key === "string" && Object.hasOwn(invalidPart, key);
 
 function validate(value: unknown): Settings {
@@ -114,7 +116,7 @@ function validate(value: unknown): Settings {
   if (!result.success) {
     const field = result.error.issues[0]?.path[0];
     throw new Error(
-      isInvalidPart(field) ? invalidPart[field] : invalidSettings,
+      (isInvalidPart(field) && invalidPart[field]) || invalidSettings,
     );
   }
 

@@ -56,6 +56,15 @@ import { NoWorkingCopyError } from "./workspace-store.js";
 import { defined } from "../../shared/lookup.js";
 import { NAME } from "../../shared/patterns.js";
 
+import type {
+  CloudPushResult,
+  CloudWorkingCopyStatus,
+  ConflictResolution,
+  CreatedPackage,
+  PulledPackage,
+  UpdatedCloudWorkingCopy,
+} from "./results.js";
+
 const publishedId = (work: { skillId?: string | null }) =>
   defined(work.skillId, "This working copy isn't published yet");
 
@@ -89,7 +98,7 @@ export async function pullSkill(
     kind = "skill",
   }: { name: string; origin: string; kind?: PackageKind },
   { target, cwd = process.cwd(), home = homedir() }: WorkingFolderOptions = {},
-) {
+): Promise<PulledPackage> {
   return locked(home, async () => {
     const conn = await connection(home);
     const skill = await selectSkill(
@@ -135,7 +144,10 @@ export async function pullSkill(
   });
 }
 
-export async function workspaceStatus(cwd = process.cwd(), home = homedir()) {
+export async function workspaceStatus(
+  cwd = process.cwd(),
+  home = homedir(),
+): Promise<CloudWorkingCopyStatus> {
   return locked(home, async () => {
     const work = await find(cwd, home);
     const local = await readDirectory(work.root);
@@ -165,7 +177,10 @@ export async function workspaceStatus(cwd = process.cwd(), home = homedir()) {
   });
 }
 
-export async function updateWorkspace(cwd = process.cwd(), home = homedir()) {
+export async function updateWorkspace(
+  cwd = process.cwd(),
+  home = homedir(),
+): Promise<UpdatedCloudWorkingCopy> {
   return locked(home, async () => {
     const work = await find(cwd, home);
     const previous = structuredClone(work);
@@ -318,7 +333,7 @@ export async function resolveConflict(
   path: string,
   cwd = process.cwd(),
   home = homedir(),
-) {
+): Promise<ConflictResolution> {
   return locked(home, async () => {
     const work = await find(cwd, home);
 
@@ -405,7 +420,7 @@ export async function pushWorkspace(
   } = {},
   cwd = process.cwd(),
   home = homedir(),
-) {
+): Promise<CloudPushResult> {
   return locked(home, async () => {
     let work: Workspace;
     try {
@@ -657,7 +672,7 @@ export async function createWorkspace(
     kind = "skill",
   }: { name: string; origin: string; kind?: PackageKind },
   { target, cwd = process.cwd(), home = homedir() }: WorkingFolderOptions = {},
-) {
+): Promise<CreatedPackage> {
   return locked(home, async () => {
     if (!NAME.test(name)) {
       throw new Error("Use a lowercase hyphenated package name");

@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import { assetPage } from "../ui/asset-list.js";
 import { renderCatalog } from "../ui/assets.js";
+import type { CatalogAsset } from "../features/catalog/index.js";
 import { table } from "../ui/format.js";
 import { createProgram } from "../program.js";
 import { CommanderError } from "commander";
@@ -62,7 +63,7 @@ test("a truncated cell keeps its styling", () => {
 
 test("the version column only appears when something has a version number", () => {
   const options = { page: 1, limit: 20 };
-  const render = (list: typeof rows) =>
+  const render = (list: CatalogAsset[]) =>
     renderCatalog(list, options, "barndog skills search", new Set()).join("\n");
 
   const hashed = {
@@ -128,7 +129,7 @@ test("list shows installed, then disabled, then available, and filters each", as
 
   const run = async (
     args: string[],
-    catalog: () => Promise<ReturnType<typeof catalogRow>[]> = async () => [
+    catalog: () => Promise<CatalogAsset[]> = async () => [
       catalogRow("zeta"),
       catalogRow("on"),
       catalogRow("alpha"),

@@ -16,9 +16,25 @@ import { LOCAL_ORIGIN } from "../git-workspace/overlay.js";
 import { assetKindList } from "../asset-kinds/index.js";
 import { only } from "../../shared/lookup.js";
 
-export async function developers(search?: string, home = homedir()) {
+type DeveloperList = z.infer<typeof developerListSchema>;
+
+export type Developer = DeveloperList["developers"][number];
+
+/** One page of a developer's published assets. */
+type DeveloperAssetPage = z.infer<typeof developerAssetsSchema>;
+
+/** A developer and every asset they published. */
+export type DeveloperAssets = {
+  developer: Developer;
+  assets: DeveloperAssetPage["assets"];
+};
+
+export async function developers(
+  search?: string,
+  home = homedir(),
+): Promise<Developer[]> {
   const conn = await connection(home);
-  const people: typeof developerListSchema._output.developers = [];
+  const people: Developer[] = [];
   const seen = new Set<string>();
   let cursor: string | null = null;
   do {
@@ -28,7 +44,7 @@ export async function developers(search?: string, home = homedir()) {
       ...(cursor ? { cursor } : {}),
     });
 
-    const page: typeof developerListSchema._output = await request(
+    const page: DeveloperList = await request(
       conn,
       `/v1/developers?${query}`,
       developerListSchema,
@@ -54,7 +70,7 @@ export async function developerAssets(
   selector: string,
   search?: string,
   home = homedir(),
-) {
+): Promise<DeveloperAssets> {
   const people = await developers(undefined, home);
   const matches = people.filter(
     (p) => p.id === selector || p.slug === selector,
@@ -69,7 +85,7 @@ export async function developerAssets(
   }
 
   const conn = await connection(home);
-  const assets: typeof developerAssetsSchema._output.assets = [];
+  const assets: DeveloperAssets["assets"] = [];
   const seen = new Set<string>();
   let cursor: string | null = null;
   do {
@@ -79,7 +95,7 @@ export async function developerAssets(
       ...(cursor ? { cursor } : {}),
     });
 
-    const page: typeof developerAssetsSchema._output = await request(
+    const page: DeveloperAssetPage = await request(
       conn,
       `/v1/developers/${developer.id}/assets?${query}`,
       developerAssetsSchema,
@@ -128,7 +144,7 @@ async function copyToScope(
   action: "promote" | "fork",
   input: PromoteInput,
   home: string,
-) {
+): Promise<Promotion> {
   const selected = await selectAsset(
     input.kind,
     input.name,
@@ -183,6 +199,9 @@ export async function promote(
 }
 
 /** Copies an asset into a scope the developer owns; a change ID means it needs review. */
-export async function fork(input: PromoteInput, home = homedir()) {
+export async function fork(
+  input: PromoteInput,
+  home = homedir(),
+): Promise<Promotion> {
   return copyToScope("fork", input, home);
 }

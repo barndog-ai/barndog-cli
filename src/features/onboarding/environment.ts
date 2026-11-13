@@ -1,10 +1,11 @@
 import { z } from "zod";
+import { scopeSchema, teamMemberSchema } from "@barndog-ai/api-contract";
 import {
-  environmentCatalogSchema,
-  scopeSchema,
-  teamMemberSchema,
-} from "@barndog-ai/api-contract";
-import { environmentCatalog, request } from "../environment/remote.js";
+  environmentCatalog,
+  request,
+  type EnvironmentCatalog,
+  type ApiScope,
+} from "../environment/remote.js";
 import { openRepoSource } from "../environment/workspace-source.js";
 import {
   selectionState,
@@ -19,8 +20,8 @@ import type {
 } from "../asset-selection/types.js";
 
 export type OnboardingChoices = {
-  catalog: z.infer<typeof environmentCatalogSchema>;
-  scopes: z.infer<typeof scopeSchema>[];
+  catalog: EnvironmentCatalog;
+  scopes: ApiScope[];
   memberTeamIds: string[];
   /** Null when the workspace has no personal scope, as in a Git repo. */
   developerId: string | null;
@@ -149,7 +150,7 @@ export function onboardingSources(choices: EnvironmentChoices): SetupSource[] {
   const scopes = choices.scopes.filter(
     (
       scope,
-    ): scope is (typeof choices.scopes)[number] & {
+    ): scope is ApiScope & {
       type: "org" | "team" | "repo";
     } =>
       scope.type === "org" ||

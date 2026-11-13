@@ -13,6 +13,8 @@ import { openRepoSource } from "../environment/workspace-source.js";
 import { LOCAL_ORIGIN, localOverlay } from "./overlay.js";
 import { assetNotFound } from "../asset-kinds/index.js";
 import { only } from "../../shared/lookup.js";
+import type { HookManifest, McpDefinition } from "@barndog-ai/api-contract";
+import type { HookCompatibility } from "../hooks/compatibility.js";
 
 /** The repo-backed source that answers for an origin, if any. */
 export function repoForOrigin(
@@ -53,7 +55,21 @@ export function selectRepoAsset(
   return asset;
 }
 
-export function showRepoAsset(asset: RepoAsset) {
+/** A Git or local workspace asset as `show` prints it. */
+export type RepoAssetView = {
+  id: string;
+  kind: AssetKind;
+  name: string;
+  /** The origin selector, such as `team/<slug>`. */
+  origin: string;
+  path: string;
+  version: string;
+  description: string;
+  definition?: McpDefinition;
+  manifest?: HookManifest;
+};
+
+export function showRepoAsset(asset: RepoAsset): RepoAssetView {
   return {
     id: asset.id,
     kind: asset.kind,
@@ -67,7 +83,9 @@ export function showRepoAsset(asset: RepoAsset) {
   };
 }
 
-export async function repoHookCompatibility(asset: RepoAsset) {
+export async function repoHookCompatibility(
+  asset: RepoAsset,
+): Promise<HookCompatibility> {
   const manifest = hookMetadata(asset.entries);
 
   return {
@@ -90,8 +108,17 @@ export async function repoHookCompatibility(asset: RepoAsset) {
   };
 }
 
+/** What a valid workspace folder holds. */
+export type FolderSummary = {
+  workspace: string;
+  assets: number;
+  knowledge: number;
+};
+
 /** Checks a workspace folder without installing anything, for use in repo CI. */
-export async function validateFolder(directory: string) {
+export async function validateFolder(
+  directory: string,
+): Promise<FolderSummary> {
   const model = await loadWorkspace(await folderSnapshot(resolve(directory)));
   if (model.problems.length) {
     throw new CliError(

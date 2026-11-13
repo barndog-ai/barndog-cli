@@ -1,102 +1,123 @@
+import type { Change, GitConnection } from "@barndog-ai/api-contract";
+import type { FileDiff } from "@barndog-ai/api-contract/collaboration";
 import type {
-  applySuggestion,
-  changeDiff,
-  commentOnChange,
-  createPackage,
-  diffVersions,
-  listChanges,
-  mergeChange,
-  packageVersions,
-  pullPackage,
-  pushWorkingCopy,
-  rejectChange,
-  resolveFile,
-  reviewChange,
-  setDiscussionResolved,
-  showChange,
-  updateWorkingCopy,
-  versionFiles,
-  workingDiff,
-  workingStatus,
+  ChangeDiffTarget,
+  ChangeListOptions,
+  ChangeRevision,
+  ChangeTarget,
+  CommentOptions,
+  EnvironmentPreview,
+  EnvironmentStatus,
+  PackageTarget,
+  PushOptions,
+  ReviewDecision,
+  ThreadResolution,
+  ThreadRevision,
+  VersionRange,
+  VersionTarget,
+  WorkingCopyTarget,
 } from "../features/collaboration/index.js";
+import type {
+  ChangeDetails,
+  ConflictResolution,
+  CreatedPackage,
+  PackageVersion,
+  PulledPackage,
+  PushResult,
+  UpdatedWorkingCopy,
+  VersionFiles,
+  WorkingCopyStatus,
+} from "../features/collaboration/results.js";
 import type { SyncEvent } from "../features/environment/events.js";
 import type { SyncOptions } from "../features/environment/sync.js";
 import type {
-  changeAsset,
-  changeAssets,
-  changeSet,
-  installSet,
-  installSetAssets,
-  listSets,
-  previewSet,
-  renameAsset,
-  setKnowledge,
-  switchSet,
+  Applied,
+  AssetChange,
+  AssetIds,
+  AssetRename,
+  AssetTarget,
+  Overrides,
+  SelectionOutcome,
+  SetAssets,
+  SetChange,
+  SetPreview,
+  SetSelection,
+  SetsList,
+  SetTarget,
 } from "../features/environment/operations.js";
 import type { Inventory } from "../features/inventory/index.js";
 import type { CatalogAsset } from "../features/catalog/index.js";
+import type {
+  McpServer,
+  PublishedAsset,
+} from "../features/asset-kinds/index.js";
 import type { AssetKind } from "../features/asset-selection/types.js";
 import type { Harness } from "../harnesses/types.js";
-import type { doctor } from "../features/doctor/index.js";
-import type { repoStatus, workspaceUrl } from "../features/inspection/index.js";
-import type { validateFolder } from "../features/git-workspace/assets.js";
-import type { migrate } from "../features/git-workspace/migrate.js";
+import type { Check } from "../features/doctor/index.js";
+import type { RepositoryStatus } from "../features/inspection/index.js";
 import type {
-  listLocalAssets,
-  moveLocalAssets,
+  FolderSummary,
+  RepoAssetView,
+} from "../features/git-workspace/assets.js";
+import type {
+  MigrateOptions,
+  MigrationReport,
+} from "../features/git-workspace/migrate.js";
+import type {
+  LocalAssets,
+  MoveOptions,
+  MoveResult,
 } from "../features/git-workspace/move.js";
-import type { updateImported } from "../features/imports/local.js";
+import type { ImportUpdate } from "../features/imports/local.js";
 import type {
-  authenticateMcp,
-  createMcp,
-  mcpVersions,
-  showMcp,
-  updateMcp,
+  McpAuthentication,
+  McpUpdateInput,
+  McpVersion,
+  McpWriteInput,
 } from "../features/mcps/index.js";
-import type { adaptHook } from "../features/hooks/adapt.js";
-import type { hookCompatibility } from "../features/hooks/compatibility.js";
-import type { testHook } from "../features/hooks/test.js";
+import type { Adaptation } from "../features/hooks/adapt.js";
+import type { HookCompatibility } from "../features/hooks/compatibility.js";
 import type {
-  knowledgeGet,
-  knowledgeList,
-  knowledgeProblems,
+  HookTestOptions,
+  HookTestResult,
+} from "../features/hooks/test.js";
+import type {
+  KnowledgeDocument,
+  KnowledgeListing,
 } from "../features/knowledge/index.js";
+import type { InvalidKnowledge } from "../features/git-workspace/format.js";
 import type {
-  developerAssets,
-  developers,
-  fork,
-  promote,
+  Developer,
+  DeveloperAssets,
+  Promotion,
   PromoteInput,
+  PromoteResult,
 } from "../features/discovery/index.js";
 import type {
-  githubAuth,
-  githubInstall,
-  githubInstallations,
-  githubStatus,
+  BrowserStep,
+  GithubBrowserOptions,
+  GithubInstallation,
+  GithubStatus,
 } from "../features/github/account.js";
 import type {
-  githubConnect,
-  githubCreateRepository,
-  githubImport,
-  githubImportCopy,
-  githubList,
-  githubRemoteHead,
-  githubResolveMirror,
-  githubShow,
-  githubSync,
+  GitCopyImportResult,
+  GithubConnectOptions,
+  GithubCreateRepositoryOptions,
+  GithubImportCopyOptions,
+  GithubRepositoryOptions,
+  GithubResolveMirrorOptions,
+  GitRemoteHead,
+  MirrorResolved,
 } from "../features/github/connections.js";
 import type {
-  githubPullsComment,
-  githubPullsCreate,
-  githubPullsList,
-  githubPullsMerge,
-  githubPullsReview,
-  githubPullsRevise,
-  githubPullsShow,
+  GithubPullsCommentOptions,
+  GithubPullsCreateOptions,
+  GithubPullsMergeOptions,
+  GithubPullsReviewOptions,
+  GithubPullsReviseOptions,
+  GitPull,
+  GitPullDetails,
 } from "../features/github/pulls.js";
-
-/** The first argument of a feature function: its options. */
-type Options<F extends (...args: never[]) => unknown> = Parameters<F>[0];
 
 /** Output and prompting preferences resolved from global flags and the terminal. */
 export type Mode = { json: boolean; interactive: boolean };
@@ -130,186 +151,140 @@ export type CommandContext = {
  */
 type FeatureFunctions = {
   changeAsset: (
-    change: Parameters<typeof changeAsset>[0],
-    target: Parameters<typeof changeAsset>[1],
-  ) => ReturnType<typeof changeAsset>;
+    change: AssetChange,
+    target: AssetTarget & Overrides,
+  ) => Promise<SelectionOutcome>;
   changeAssets: (
-    change: Parameters<typeof changeAssets>[0],
-    target: Parameters<typeof changeAssets>[1],
-  ) => ReturnType<typeof changeAssets>;
-  renameAsset: (
-    target: Options<typeof renameAsset>,
-  ) => ReturnType<typeof renameAsset>;
-  listSets: () => ReturnType<typeof listSets>;
-  previewSet: (origin: string) => ReturnType<typeof previewSet>;
-  installSet: (
-    options: Options<typeof installSet>,
-  ) => ReturnType<typeof installSet>;
-  installSetAssets: (
-    options: Options<typeof installSetAssets>,
-  ) => ReturnType<typeof installSetAssets>;
+    change: AssetChange,
+    target: AssetIds & Overrides,
+  ) => Promise<SelectionOutcome>;
+  renameAsset: (target: AssetRename) => Promise<Applied>;
+  listSets: () => Promise<SetsList>;
+  previewSet: (origin: string) => Promise<SetPreview>;
+  installSet: (options: SetSelection) => Promise<SelectionOutcome>;
+  installSetAssets: (options: SetAssets) => Promise<Applied>;
   changeSet: (
-    change: Parameters<typeof changeSet>[0],
-    options: Parameters<typeof changeSet>[1],
-  ) => ReturnType<typeof changeSet>;
-  switchSet: (
-    options: Options<typeof switchSet>,
-  ) => ReturnType<typeof switchSet>;
-  setKnowledge: (enabled: boolean) => ReturnType<typeof setKnowledge>;
+    change: SetChange,
+    options: SetTarget,
+  ) => Promise<SelectionOutcome>;
+  switchSet: (options: SetSelection) => Promise<SelectionOutcome>;
+  setKnowledge: (enabled: boolean) => Promise<Applied>;
 
-  doctor: () => ReturnType<typeof doctor>;
-  workspaceUrl: () => ReturnType<typeof workspaceUrl>;
-  repoStatus: () => ReturnType<typeof repoStatus>;
-  validateFolder: (directory: string) => ReturnType<typeof validateFolder>;
-  migrate: (options: Options<typeof migrate>) => ReturnType<typeof migrate>;
+  doctor: () => Promise<Check[]>;
+  workspaceUrl: () => Promise<string>;
+  repoStatus: () => Promise<RepositoryStatus>;
+  validateFolder: (directory: string) => Promise<FolderSummary>;
+  migrate: (options: MigrateOptions) => Promise<MigrationReport>;
 
-  listLocalAssets: () => ReturnType<typeof listLocalAssets>;
-  moveLocalAssets: (
-    options: Options<typeof moveLocalAssets>,
-  ) => ReturnType<typeof moveLocalAssets>;
+  listLocalAssets: () => Promise<LocalAssets>;
+  moveLocalAssets: (options: MoveOptions) => Promise<MoveResult>;
   updateImported: (
     kind: "skill" | "hook",
     name: string | undefined,
     options: { force?: boolean; dryRun?: boolean },
-  ) => ReturnType<typeof updateImported>;
+  ) => Promise<ImportUpdate[]>;
 
-  showMcp: (name: string, origin: string) => ReturnType<typeof showMcp>;
-  createMcp: (input: Options<typeof createMcp>) => ReturnType<typeof createMcp>;
-  updateMcp: (input: Options<typeof updateMcp>) => ReturnType<typeof updateMcp>;
-  mcpVersions: (name: string, origin: string) => ReturnType<typeof mcpVersions>;
+  showMcp: (
+    name: string,
+    origin: string,
+  ) => Promise<RepoAssetView | PublishedAsset>;
+  createMcp: (input: McpWriteInput) => Promise<McpServer>;
+  updateMcp: (input: McpUpdateInput) => Promise<McpServer>;
+  mcpVersions: (
+    name: string,
+    origin: string,
+  ) => Promise<PackageVersion[] | McpVersion[]>;
   authenticateMcp: (
     name: string,
     origin: string,
     harness: Harness,
-  ) => ReturnType<typeof authenticateMcp>;
+  ) => Promise<McpAuthentication>;
 
   testHook: (
     name: string,
     origin: string,
-    options: Parameters<typeof testHook>[2],
-  ) => ReturnType<typeof testHook>;
+    options: HookTestOptions,
+  ) => Promise<HookTestResult>;
   hookCompatibility: (
     name: string,
     origin: string,
-  ) => ReturnType<typeof hookCompatibility>;
+  ) => Promise<HookCompatibility>;
   adaptHook: (
     name: string,
     origin: string,
     targets?: readonly Harness[],
-  ) => ReturnType<typeof adaptHook>;
+  ) => Promise<Adaptation>;
 
-  knowledgeList: (always?: boolean) => ReturnType<typeof knowledgeList>;
-  knowledgeProblems: () => ReturnType<typeof knowledgeProblems>;
-  knowledgeGet: (name: string) => ReturnType<typeof knowledgeGet>;
+  knowledgeList: (always?: boolean) => Promise<KnowledgeListing[]>;
+  knowledgeProblems: () => Promise<InvalidKnowledge[]>;
+  knowledgeGet: (name: string) => Promise<KnowledgeDocument>;
 
-  developers: (search?: string) => ReturnType<typeof developers>;
+  developers: (search?: string) => Promise<Developer[]>;
   developerAssets: (
     handle: string,
     search?: string,
-  ) => ReturnType<typeof developerAssets>;
-  promote: (input: PromoteInput) => ReturnType<typeof promote>;
-  fork: (input: PromoteInput) => ReturnType<typeof fork>;
+  ) => Promise<DeveloperAssets>;
+  promote: (input: PromoteInput) => Promise<PromoteResult>;
+  fork: (input: PromoteInput) => Promise<Promotion>;
 
-  createPackage: (
-    target: Options<typeof createPackage>,
-  ) => ReturnType<typeof createPackage>;
-  pullPackage: (
-    target: Options<typeof pullPackage>,
-  ) => ReturnType<typeof pullPackage>;
-  updateWorkingCopy: () => ReturnType<typeof updateWorkingCopy>;
-  workingStatus: () => ReturnType<typeof workingStatus>;
-  workingDiff: () => ReturnType<typeof workingDiff>;
-  pushWorkingCopy: (
-    options: Options<typeof pushWorkingCopy>,
-  ) => ReturnType<typeof pushWorkingCopy>;
-  resolveFile: (path: string) => ReturnType<typeof resolveFile>;
-  packageVersions: (
-    target: Options<typeof packageVersions>,
-  ) => ReturnType<typeof packageVersions>;
-  versionFiles: (
-    target: Options<typeof versionFiles>,
-  ) => ReturnType<typeof versionFiles>;
-  diffVersions: (
-    target: Options<typeof diffVersions>,
-  ) => ReturnType<typeof diffVersions>;
-  listChanges: (
-    options: Options<typeof listChanges>,
-  ) => ReturnType<typeof listChanges>;
-  showChange: (
-    target: Options<typeof showChange>,
-  ) => ReturnType<typeof showChange>;
-  changeDiff: (
-    target: Options<typeof changeDiff>,
-  ) => ReturnType<typeof changeDiff>;
+  createPackage: (target: WorkingCopyTarget) => Promise<CreatedPackage>;
+  pullPackage: (target: WorkingCopyTarget) => Promise<PulledPackage>;
+  updateWorkingCopy: () => Promise<UpdatedWorkingCopy>;
+  workingStatus: () => Promise<WorkingCopyStatus | EnvironmentStatus>;
+  workingDiff: () => Promise<FileDiff[] | EnvironmentPreview>;
+  pushWorkingCopy: (options: PushOptions) => Promise<PushResult>;
+  resolveFile: (path: string) => Promise<ConflictResolution>;
+  packageVersions: (target: PackageTarget) => Promise<PackageVersion[]>;
+  versionFiles: (target: VersionTarget) => Promise<VersionFiles>;
+  diffVersions: (target: VersionRange) => Promise<FileDiff[]>;
+  listChanges: (options: ChangeListOptions) => Promise<Change[]>;
+  showChange: (target: ChangeTarget) => Promise<ChangeDetails>;
+  changeDiff: (target: ChangeDiffTarget) => Promise<FileDiff[]>;
   reviewChange: (
-    decision: Parameters<typeof reviewChange>[0],
-    target: Parameters<typeof reviewChange>[1],
-  ) => ReturnType<typeof reviewChange>;
-  rejectChange: (
-    target: Options<typeof rejectChange>,
-  ) => ReturnType<typeof rejectChange>;
-  mergeChange: (
-    target: Options<typeof mergeChange>,
-  ) => ReturnType<typeof mergeChange>;
-  commentOnChange: (
-    options: Options<typeof commentOnChange>,
-  ) => ReturnType<typeof commentOnChange>;
-  applySuggestion: (
-    target: Options<typeof applySuggestion>,
-  ) => ReturnType<typeof applySuggestion>;
-  setDiscussionResolved: (
-    target: Options<typeof setDiscussionResolved>,
-  ) => ReturnType<typeof setDiscussionResolved>;
+    decision: ReviewDecision,
+    target: ChangeRevision,
+  ) => Promise<Change>;
+  rejectChange: (target: ChangeRevision) => Promise<Change>;
+  mergeChange: (target: ChangeRevision) => Promise<Change>;
+  commentOnChange: (options: CommentOptions) => Promise<Change>;
+  applySuggestion: (target: ThreadRevision) => Promise<Change>;
+  setDiscussionResolved: (target: ThreadResolution) => Promise<Change>;
 
-  githubStatus: () => ReturnType<typeof githubStatus>;
-  githubAuth: (
-    options: Options<typeof githubAuth>,
-  ) => ReturnType<typeof githubAuth>;
-  githubInstall: (
-    options: Options<typeof githubInstall>,
-  ) => ReturnType<typeof githubInstall>;
-  githubInstallations: () => ReturnType<typeof githubInstallations>;
+  githubStatus: () => Promise<GithubStatus>;
+  githubAuth: (options: GithubBrowserOptions) => Promise<BrowserStep>;
+  githubInstall: (options: GithubBrowserOptions) => Promise<BrowserStep>;
+  githubInstallations: () => Promise<GithubInstallation[]>;
 
-  githubList: () => ReturnType<typeof githubList>;
-  githubConnect: (
-    options: Options<typeof githubConnect>,
-  ) => ReturnType<typeof githubConnect>;
-  githubImport: (
-    options: Options<typeof githubImport>,
-  ) => ReturnType<typeof githubImport>;
+  githubList: () => Promise<GitConnection[]>;
+  githubConnect: (options: GithubConnectOptions) => Promise<GitConnection>;
+  githubImport: (options: GithubRepositoryOptions) => Promise<GitConnection>;
   githubImportCopy: (
-    options: Options<typeof githubImportCopy>,
-  ) => ReturnType<typeof githubImportCopy>;
+    options: GithubImportCopyOptions,
+  ) => Promise<GitCopyImportResult>;
   githubCreateRepository: (
-    options: Options<typeof githubCreateRepository>,
-  ) => ReturnType<typeof githubCreateRepository>;
-  githubShow: (connectionId: string) => ReturnType<typeof githubShow>;
-  githubSync: (connectionId: string) => ReturnType<typeof githubSync>;
-  githubRemoteHead: (
-    connectionId: string,
-  ) => ReturnType<typeof githubRemoteHead>;
+    options: GithubCreateRepositoryOptions,
+  ) => Promise<GitConnection>;
+  githubShow: (connectionId: string) => Promise<GitConnection>;
+  githubSync: (connectionId: string) => Promise<GitConnection>;
+  githubRemoteHead: (connectionId: string) => Promise<GitRemoteHead>;
   githubResolveMirror: (
-    options: Options<typeof githubResolveMirror>,
-  ) => ReturnType<typeof githubResolveMirror>;
+    options: GithubResolveMirrorOptions,
+  ) => Promise<MirrorResolved>;
 
-  githubPullsList: (connectionId: string) => ReturnType<typeof githubPullsList>;
+  githubPullsList: (connectionId: string) => Promise<GitPull[]>;
   githubPullsShow: (
     connectionId: string,
     number: number,
-  ) => ReturnType<typeof githubPullsShow>;
-  githubPullsCreate: (
-    options: Options<typeof githubPullsCreate>,
-  ) => ReturnType<typeof githubPullsCreate>;
-  githubPullsRevise: (
-    options: Options<typeof githubPullsRevise>,
-  ) => ReturnType<typeof githubPullsRevise>;
+  ) => Promise<GitPullDetails>;
+  githubPullsCreate: (options: GithubPullsCreateOptions) => Promise<GitPull>;
+  githubPullsRevise: (options: GithubPullsReviseOptions) => Promise<GitPull>;
   githubPullsReview: (
-    options: Options<typeof githubPullsReview>,
-  ) => ReturnType<typeof githubPullsReview>;
+    options: GithubPullsReviewOptions,
+  ) => Promise<GitPullDetails>;
   githubPullsComment: (
-    options: Options<typeof githubPullsComment>,
-  ) => ReturnType<typeof githubPullsComment>;
+    options: GithubPullsCommentOptions,
+  ) => Promise<GitPullDetails>;
   githubPullsMerge: (
-    options: Options<typeof githubPullsMerge>,
-  ) => ReturnType<typeof githubPullsMerge>;
+    options: GithubPullsMergeOptions,
+  ) => Promise<GitConnection>;
 };

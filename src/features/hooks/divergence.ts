@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import {
   divergentHookTools,
   hookManifestSchema,
+  type HookManifest,
 } from "@barndog-ai/api-contract";
 import { parse } from "yaml";
 
@@ -15,7 +16,7 @@ import { adapters, harnesses } from "../../harnesses/registry.js";
  * tool's scripts leaves the others as they were. Null when all share one set.
  */
 export function divergenceWarning(
-  implementations: Parameters<typeof divergentHookTools>[0],
+  implementations: HookManifest["implementations"],
 ) {
   const divergent = divergentHookTools(implementations);
   if (!divergent.length) {

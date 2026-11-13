@@ -16,6 +16,8 @@ import { parse as parseJson } from "jsonc-parser";
 import {
   findClash,
   hookFolders,
+  type ClashResolver,
+  type HookPlacement,
   prefixedName,
   resolveClashes,
   restoreNames,
@@ -91,7 +93,7 @@ test("without a terminal the newcomer is skipped and nothing is persisted", asyn
 test("each clash choice persists as a rename or a disable", async () => {
   const kept = asset("review", "dev", "john", true);
   const incoming = asset("review", "team", "web");
-  const run = (choice: Parameters<typeof resolveClashes>[2]) =>
+  const run = (choice: ClashResolver) =>
     resolveClashes([kept, incoming], {}, choice);
 
   expect((await run(async () => "rename-incoming")).localNames).toStrictEqual({
@@ -238,7 +240,7 @@ test("every Hook gets its own folder", () => {
     extra: { kept?: string; current?: string } = {},
   ) => ({ id, name, origin: { type: "team", slug }, ...extra });
 
-  const folders = (...hooks: ReturnType<typeof hook>[]) => {
+  const folders = (...hooks: HookPlacement[]) => {
     const result = hookFolders(hooks, {});
 
     return hooks.map((item) => result.get(item.id));

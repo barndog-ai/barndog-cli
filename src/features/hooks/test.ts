@@ -26,21 +26,35 @@ async function hookPackage(name: string, origin: string, home: string) {
   return cachedPackage("hook", asset, selected.connection, home);
 }
 
+export type HookTestOptions = {
+  harness: Harness;
+  /** The native JSON input, as text. */
+  input: string;
+  event?: string;
+  /** Which command, when the event has several. */
+  handler?: number;
+  timeout?: number;
+};
+
+/** How a Hook's script ran on the supplied input. */
+export type HookTestResult = {
+  harness: Harness;
+  event: string;
+  exitCode: number;
+  timedOut: boolean;
+  stdout: string;
+  stderr: string;
+};
+
 export async function testHook(
   name: string,
   origin: string,
-  options: {
-    harness: Harness;
-    input: string;
-    event?: string;
-    handler?: number;
-    timeout?: number;
-  },
+  options: HookTestOptions,
   {
     home = homedir(),
     cwd = process.cwd(),
   }: { home?: string; cwd?: string } = {},
-) {
+): Promise<HookTestResult> {
   if (process.platform === "win32") {
     throw new Error("Command Hook testing currently requires a POSIX shell");
   }

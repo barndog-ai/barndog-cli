@@ -82,38 +82,43 @@ const COPY_NUMBER = /^(.*)-\d+$/;
 export const withoutCopyNumber = (folder: string) =>
   COPY_NUMBER.exec(folder)?.[1];
 
+/** A Hook that needs an installed folder. */
+export type HookPlacement = {
+  id: string;
+  name: string;
+  origin: NamedAsset["origin"];
+  /** A folder that must not move, such as an invalid Hook left in place. */
+  kept?: string;
+  /** Where this Hook is installed today. */
+  current?: string;
+};
+
 /**
  * Origin prefixes are ambiguous: team a's b-c and team a-b's c read the same. Each
  * Hook gets its own folder: kept and already-installed folders stay put, a name only
  * one Hook wants stays plain, and the rest take an ID suffix.
  */
 export function hookFolders(
-  hooks: readonly {
-    id: string;
-    name: string;
-    origin: NamedAsset["origin"];
-    /** A folder that must not move, such as an invalid Hook left in place. */
-    kept?: string;
-    /** Where this Hook is installed today. */
-    current?: string;
-  }[],
+  hooks: readonly HookPlacement[],
   localNames: Record<string, string>,
 ) {
-  type Hook = (typeof hooks)[number];
-
   const folders = new Map<string, string>();
   const used = new Set<string>();
-  const claim = (hook: Hook, folder: string) => {
+  const claim = (hook: HookPlacement, folder: string) => {
     folders.set(hook.id, folder);
     used.add(folder);
   };
 
-  const plain = (hook: Hook) => localNames[hook.id] ?? prefixedName(hook);
-  const idText = (hook: Hook) =>
+  const plain = (hook: HookPlacement) =>
+    localNames[hook.id] ?? prefixedName(hook);
+
+  const idText = (hook: HookPlacement) =>
     hook.id.replace(/[^a-z0-9]/gi, "").toLowerCase();
 
-  const suffixed = (hook: Hook) => `${plain(hook)}-${idText(hook).slice(0, 8)}`;
-  const whole = (hook: Hook) => `${plain(hook)}-${idText(hook)}`;
+  const suffixed = (hook: HookPlacement) =>
+    `${plain(hook)}-${idText(hook).slice(0, 8)}`;
+
+  const whole = (hook: HookPlacement) => `${plain(hook)}-${idText(hook)}`;
   const ordered = [...hooks].sort((a, b) => a.id.localeCompare(b.id));
   const open = () => ordered.filter((hook) => !folders.has(hook.id));
   for (const hook of ordered) {

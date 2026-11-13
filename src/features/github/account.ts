@@ -17,6 +17,15 @@ import { connection } from "../collaboration/remote.js";
 import { request } from "../environment/remote.js";
 import { browserCommand } from "../../shared/browser.js";
 
+/** The developer's GitHub account link and what the BarnDog GitHub App allows. */
+export type GithubStatus = z.infer<typeof githubStatusSchema>;
+
+/** One account or organization the BarnDog GitHub App is installed on. */
+export type GithubInstallation = z.infer<typeof gitInstallationSchema>;
+
+/** A step the developer finishes in the browser, with the URL to open. */
+export type BrowserStep = { message: string };
+
 export type GithubBrowserOptions = {
   /** `false` returns the URL without opening a browser. */
   browser?: boolean;
@@ -36,7 +45,7 @@ async function startInBrowser(
   step: string,
   options: GithubBrowserOptions,
   home: string,
-) {
+): Promise<BrowserStep> {
   const conn = await connection(home);
   const result = await request(conn, path, gitAuthorizationSchema, {
     home,
@@ -52,7 +61,7 @@ async function startInBrowser(
   };
 }
 
-export async function githubStatus(home = homedir()) {
+export async function githubStatus(home = homedir()): Promise<GithubStatus> {
   const conn = await connection(home);
 
   return request(conn, "/v1/github/status", githubStatusSchema, { home });
@@ -62,7 +71,7 @@ export async function githubStatus(home = homedir()) {
 export function githubAuth(
   options: GithubBrowserOptions = {},
   home = homedir(),
-) {
+): Promise<BrowserStep> {
   return startInBrowser("/v1/github/authorize", "authorization", options, home);
 }
 
@@ -70,7 +79,7 @@ export function githubAuth(
 export function githubInstall(
   options: GithubBrowserOptions = {},
   home = homedir(),
-) {
+): Promise<BrowserStep> {
   return startInBrowser(
     "/v1/github/install",
     "App installation",
@@ -79,7 +88,9 @@ export function githubInstall(
   );
 }
 
-export async function githubInstallations(home = homedir()) {
+export async function githubInstallations(
+  home = homedir(),
+): Promise<GithubInstallation[]> {
   const conn = await connection(home);
 
   return request(

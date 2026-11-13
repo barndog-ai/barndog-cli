@@ -4,6 +4,7 @@ import { basename } from "node:path";
 
 import type { KnowledgeContent, McpDefinition } from "@barndog-ai/api-contract";
 import type { PackageEntry } from "@barndog-ai/api-contract/package";
+import type { AssetKind } from "../asset-kinds/index.js";
 import { knowledgeIndexSchema, scopeSchema } from "@barndog-ai/api-contract";
 import { stringify } from "yaml";
 import { z } from "zod";
@@ -55,6 +56,16 @@ export type MoveRow = {
   name: string;
   status: "moved" | "clash" | "skipped" | "failed";
   detail?: string;
+};
+
+/** Which local assets to move, and where. */
+export type MoveOptions = {
+  names?: string[];
+  to?: string;
+  as?: string;
+  repo?: string;
+  server?: string;
+  kind?: string;
 };
 
 export type MoveResult = {
@@ -448,14 +459,7 @@ async function moveToCloud(
 
 /** Copies local assets into the shared workspace; the local folder is never deleted. */
 export function moveLocalAssets(
-  options: {
-    names?: string[];
-    to?: string;
-    as?: string;
-    repo?: string;
-    server?: string;
-    kind?: string;
-  },
+  options: MoveOptions,
   home = homedir(),
 ): Promise<MoveResult> {
   return locked(home, async () => {
@@ -546,7 +550,20 @@ export function moveLocalAssets(
   });
 }
 
-export async function listLocalAssets(home = homedir()) {
+export type LocalAssetState = "active" | "moved" | "invalid";
+
+/** The local folder and every asset and knowledge document in it. */
+export type LocalAssets = {
+  folder: string;
+  assets: {
+    kind: AssetKind | "knowledge";
+    name: string;
+    path: string;
+    state: LocalAssetState;
+  }[];
+};
+
+export async function listLocalAssets(home = homedir()): Promise<LocalAssets> {
   const settings = await readSettings(home);
   if (!settings || !settings.localWorkspace) {
     throw new CliError(
@@ -558,7 +575,7 @@ export async function listLocalAssets(home = homedir()) {
   const source = localRepoSource(settings.localWorkspace, home);
   const model = await source.model();
   const moved = await readMoved(source.label);
-  const state = (path: string, invalid?: string) => {
+  const state = (path: string, invalid?: string): LocalAssetState => {
     if (invalid) {
       return "invalid";
     }
@@ -576,7 +593,7 @@ export async function listLocalAssets(home = homedir()) {
         state: state(asset.path, asset.invalid),
       })),
       ...model.knowledge.map((doc) => ({
-        kind: "knowledge",
+        kind: "knowledge" as const,
         name: doc.content.name,
         path: doc.path,
         state: state(doc.path),

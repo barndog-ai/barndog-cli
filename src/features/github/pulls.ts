@@ -17,11 +17,17 @@ import {
   gitReviewSchema,
   gitCommentSchema,
   gitMergeSchema,
+  type GitConnection,
 } from "@barndog-ai/api-contract";
 import { readDirectory } from "@barndog-ai/api-contract/collaboration";
 import { connection } from "../collaboration/remote.js";
 import { request, type RetryKey } from "../environment/remote.js";
 import { connectionPath } from "./connections.js";
+
+export type GitPull = z.infer<typeof gitPullSchema>;
+
+/** A pull request with its diff, reviews and comments. */
+export type GitPullDetails = z.infer<typeof gitPullDetailsSchema>;
 
 /** Text given directly or in a file; the file wins. */
 type PullText = { body?: string; bodyFile?: string };
@@ -85,7 +91,10 @@ async function packageFiles(directory: string | undefined) {
   }));
 }
 
-export async function githubPullsList(connectionId: string, home = homedir()) {
+export async function githubPullsList(
+  connectionId: string,
+  home = homedir(),
+): Promise<GitPull[]> {
   const conn = await connection(home);
 
   return request(
@@ -101,7 +110,7 @@ export async function githubPullsShow(
   connectionId: string,
   number: number,
   home = homedir(),
-) {
+): Promise<GitPullDetails> {
   const conn = await connection(home);
 
   return request(
@@ -116,7 +125,7 @@ export async function githubPullsShow(
 export async function githubPullsCreate(
   options: GithubPullsCreateOptions,
   home = homedir(),
-) {
+): Promise<GitPull> {
   const conn = await connection(home);
   const path = connectionPath(options.connectionId);
   const body = await bodyText(options);
@@ -139,7 +148,7 @@ export async function githubPullsCreate(
 export async function githubPullsRevise(
   options: GithubPullsReviseOptions,
   home = homedir(),
-) {
+): Promise<GitPull> {
   const conn = await connection(home);
   const path = connectionPath(options.connectionId);
   const body = await bodyText(options);
@@ -162,7 +171,7 @@ export async function githubPullsRevise(
 export async function githubPullsReview(
   options: GithubPullsReviewOptions,
   home = homedir(),
-) {
+): Promise<GitPullDetails> {
   const conn = await connection(home);
   const path = connectionPath(options.connectionId);
   const body = await bodyText(options);
@@ -187,7 +196,7 @@ export async function githubPullsReview(
 export async function githubPullsComment(
   options: GithubPullsCommentOptions,
   home = homedir(),
-) {
+): Promise<GitPullDetails> {
   const conn = await connection(home);
   const path = connectionPath(options.connectionId);
   const body = await bodyText(options);
@@ -214,7 +223,7 @@ export async function githubPullsComment(
 export async function githubPullsMerge(
   options: GithubPullsMergeOptions,
   home = homedir(),
-) {
+): Promise<GitConnection> {
   const conn = await connection(home);
   const path = connectionPath(options.connectionId);
 

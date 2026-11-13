@@ -1,7 +1,9 @@
 import { homedir } from "node:os";
+import { z } from "zod";
 import {
   knowledgeDocumentSchema,
   knowledgeIndexSchema,
+  type KnowledgeContent,
 } from "@barndog-ai/api-contract";
 import { connection } from "../collaboration/remote.js";
 import { request } from "../environment/remote.js";
@@ -9,6 +11,23 @@ import { openRepoSource } from "../environment/workspace-source.js";
 import { activeLocal, localOverlay } from "../git-workspace/overlay.js";
 import { readSettings } from "../../config/settings.js";
 import { CliError } from "../../errors.js";
+import type { InvalidKnowledge } from "../git-workspace/format.js";
+
+type KnowledgeIndex = z.infer<typeof knowledgeIndexSchema>;
+
+/** A knowledge document's name and description, without its content. */
+export type KnowledgeSummary = KnowledgeIndex["documents"][number];
+
+export type KnowledgeListing = KnowledgeSummary & {
+  /** Whether session start lists it: an `always` document while listing is on. */
+  listedAtStart: boolean;
+};
+
+/** A document's current content; a repository or local document has no more to say. */
+export type KnowledgeDocument = {
+  id: string;
+  version: { id: string; content: KnowledgeContent };
+};
 
 /** Session start must stay fast, so reading knowledge never contacts the Git host. */
 async function repoKnowledge(home: string) {
@@ -18,7 +37,10 @@ async function repoKnowledge(home: string) {
   return repo ? (await repo.model()).knowledge : undefined;
 }
 
-async function sharedKnowledge(home: string, always: boolean) {
+async function sharedKnowledge(
+  home: string,
+  always: boolean,
+): Promise<KnowledgeSummary[]> {
   const local = await repoKnowledge(home);
   if (local) {
     return local
@@ -35,7 +57,7 @@ async function sharedKnowledge(home: string, always: boolean) {
   }
 
   const conn = await connection(home);
-  const documents: typeof knowledgeIndexSchema._output.documents = [];
+  const documents: KnowledgeSummary[] = [];
 
   const seen = new Set<string>();
   let cursor: string | null = null;
@@ -46,7 +68,7 @@ async function sharedKnowledge(home: string, always: boolean) {
       ...(cursor ? { cursor } : {}),
     });
 
-    const page: typeof knowledgeIndexSchema._output = await request(
+    const page: KnowledgeIndex = await request(
       conn,
       `/v1/knowledge?${params}`,
       knowledgeIndexSchema,
@@ -68,7 +90,10 @@ async function sharedKnowledge(home: string, always: boolean) {
   return documents;
 }
 
-async function sharedDocument(name: string, home: string) {
+async function sharedDocument(
+  name: string,
+  home: string,
+): Promise<KnowledgeDocument> {
   const local = await repoKnowledge(home);
   if (local) {
     const doc = local.find((d) => d.content.name === name);
@@ -92,9 +117,7 @@ async function sharedDocument(name: string, home: string) {
   );
 }
 
-type KnowledgeRow = Awaited<ReturnType<typeof sharedKnowledge>>[number];
-
-async function keptLocal(home: string, shared: KnowledgeRow[]) {
+async function keptLocal(home: string, shared: KnowledgeSummary[]) {
   const settings = await readSettings(home);
   const overlay = settings && localOverlay(settings, home);
   if (!overlay) {
@@ -110,7 +133,9 @@ async function keptLocal(home: string, shared: KnowledgeRow[]) {
 }
 
 /** Knowledge files that can't be read, so they don't vanish without a word. */
-export async function knowledgeProblems(home = homedir()) {
+export async function knowledgeProblems(
+  home = homedir(),
+): Promise<InvalidKnowledge[]> {
   const settings = await readSettings(home);
   if (!settings) {
     return [];
@@ -130,7 +155,10 @@ export async function knowledgeProblems(home = homedir()) {
   ];
 }
 
-export async function knowledgeList(always = false, home = homedir()) {
+export async function knowledgeList(
+  always = false,
+  home = homedir(),
+): Promise<KnowledgeListing[]> {
   const settings = await readSettings(home);
   const listing = settings?.knowledge !== false;
   const shared = await sharedKnowledge(home, always);
@@ -152,7 +180,10 @@ export async function knowledgeList(always = false, home = homedir()) {
   }));
 }
 
-export async function knowledgeGet(name: string, home = homedir()) {
+export async function knowledgeGet(
+  name: string,
+  home = homedir(),
+): Promise<KnowledgeDocument> {
   try {
     return await sharedDocument(name, home);
   } catch (error) {
@@ -168,9 +199,7 @@ export async function knowledgeGet(name: string, home = homedir()) {
   }
 }
 
-export function knowledgeIndexText(
-  documents: Awaited<ReturnType<typeof knowledgeList>>,
-) {
+export function knowledgeIndexText(documents: KnowledgeListing[]) {
   if (!documents.length) {
     return "";
   }

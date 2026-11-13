@@ -8,6 +8,19 @@ import {
   selectRepoAsset,
 } from "../git-workspace/assets.js";
 import { runtimeRequirements } from "../native/adapters.js";
+import type { Hook } from "./catalog.js";
+
+/** What a Hook declares for one coding tool, and what this machine lacks to run it. */
+export type HarnessCompatibility = Hook["compatibility"][number] & {
+  /** Null when every requirement is met. */
+  runtimeIssue: string | null;
+};
+
+export type HookCompatibility = {
+  /** A version number in Cloud, a Git object name in a Git or local workspace. */
+  version: number | string;
+  compatibility: HarnessCompatibility[];
+};
 
 /**
  * What a Hook's current version declares for each coding tool, and whether
@@ -17,7 +30,7 @@ export async function hookCompatibility(
   name: string,
   origin: string,
   home = homedir(),
-) {
+): Promise<HookCompatibility> {
   const settings = await readSettings(home);
   const repo = settings && repoForOrigin(settings, home, origin);
   if (repo) {

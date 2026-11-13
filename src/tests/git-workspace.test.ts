@@ -93,7 +93,11 @@ import { saveImported } from "../features/imports/local.js";
 import { adaptHook, adaptPrompt } from "../features/hooks/adapt.js";
 import { folderDivergence } from "../features/hooks/divergence.js";
 import { hookCommand } from "../features/native/adapters.js";
-import { fetchRemote, parseLocation } from "../features/imports/remote.js";
+import {
+  fetchRemote,
+  parseLocation,
+  type RemoteRepo,
+} from "../features/imports/remote.js";
 import { runSetup } from "../ui/onboarding.js";
 
 const execute = promisify(execFile);
@@ -2550,7 +2554,7 @@ test("a link to a folder reads only that folder", async (t) => {
 
   const at = <T>(
     path: string,
-    use: Parameters<typeof fetchRemote<T>>[2],
+    use: (remote: RemoteRepo) => Promise<T>,
   ): Promise<T> =>
     fetchRemote(
       { url, rest: null, ref: null, path },

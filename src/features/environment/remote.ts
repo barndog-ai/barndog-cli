@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { environmentCatalogSchema, ApiError } from "@barndog-ai/api-contract";
+import {
+  environmentCatalogSchema,
+  scopeSchema,
+  ApiError,
+} from "@barndog-ai/api-contract";
 import { serverFetch } from "../auth/transport.js";
 import { connection } from "../collaboration/remote.js";
 import { connectionContext } from "../skills/remote.js";
@@ -9,8 +13,24 @@ import {
   assetKinds,
   assetNotFound,
   type AssetKind,
+  type PublishedAsset,
 } from "../asset-kinds/index.js";
 import { only } from "../../shared/lookup.js";
+
+/** Every asset this developer can install, as the server lists them. */
+export type EnvironmentCatalog = z.infer<typeof environmentCatalogSchema>;
+
+/** A scope as the server describes it, with its name and whether you can publish there. */
+export type ApiScope = z.infer<typeof scopeSchema>;
+
+export type CatalogEntry = EnvironmentCatalog["assets"][number];
+
+/** An asset picked from the catalog by name and origin, with its full description. */
+export type SelectedAsset = {
+  connection: Connection;
+  reference: CatalogEntry;
+  asset: PublishedAsset;
+};
 
 /**
  * A caller-chosen idempotency key. Sending the same key again retries the
@@ -79,10 +99,7 @@ export async function request<T>(
 export async function environmentCatalog(
   home = homedir(),
   expected?: Connection,
-): Promise<{
-  connection: Connection;
-  catalog: z.infer<typeof environmentCatalogSchema>;
-}> {
+): Promise<{ connection: Connection; catalog: EnvironmentCatalog }> {
   const conn = expected
     ? await connectionContext(expected.server, home)
     : await connection(home);
@@ -113,7 +130,7 @@ export async function getAsset(
   id: string,
   conn: Connection,
   home = homedir(),
-) {
+): Promise<PublishedAsset> {
   const path = `/v1/${assetKinds[kind].route}/${z.uuidv4().parse(id)}`;
 
   return assetKinds[kind].schema.parse(
@@ -126,7 +143,7 @@ export async function selectAsset(
   name: string,
   origin: string,
   home = homedir(),
-) {
+): Promise<SelectedAsset> {
   const { connection: conn, catalog } = await environmentCatalog(home);
   const { matchesOrigin } = await import("../collaboration/remote.js");
   const matches = catalog.assets.filter(
