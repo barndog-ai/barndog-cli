@@ -14,7 +14,12 @@ export type HookEvent = {
 export type HookProfile = {
   /** From the tool's hook reference. Setup also accepts names not listed here. */
   events: readonly HookEvent[];
-  /** Files in a repository that hold this tool's hook settings. */
+  /**
+   * Repository paths that hold this tool's hook settings, matched against the
+   * whole path from the repository root (`.claude/settings.json`,
+   * `plugins/x/hooks/hooks.json`). `hookSettingsOwner()` in `registry.ts` reads
+   * them and `src/tests/patterns.test.ts` covers them.
+   */
   settings: readonly RegExp[];
   /** Variables the tool gives its own plugin hooks to find their files. */
   rootVariables: readonly string[];

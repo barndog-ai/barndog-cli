@@ -13,11 +13,9 @@ import type { z } from "zod";
 import { adapters } from "../../harnesses/registry.js";
 import type { Harness } from "../../harnesses/types.js";
 import { nativeFile, type NativeEntry } from "./configuration.js";
+import { shellQuote } from "../../shared/shell.js";
 
 const execute = promisify(execFile);
-
-export const shellQuote = (value: string) =>
-  "'" + value.replaceAll("'", "'\\''") + "'";
 
 /**
  * Also sets the tool's own root variables, so a script written for the tool

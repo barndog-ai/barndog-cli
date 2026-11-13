@@ -3,7 +3,7 @@ import { lstat, readFile, readdir, readlink } from "node:fs/promises";
 import { join } from "node:path";
 
 import { git } from "./git.js";
-import { defined } from "../../lookup.js";
+import { defined } from "../../shared/lookup.js";
 
 export type SnapshotEntry = { path: string; mode: string; hash: string };
 

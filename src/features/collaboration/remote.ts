@@ -20,6 +20,8 @@ import {
 } from "../asset-kinds/index.js";
 import { readSettings, type Connection } from "../../config/settings.js";
 import { CliError } from "../../errors.js";
+import { only } from "../../shared/lookup.js";
+import { splitOrigin } from "../../shared/patterns.js";
 
 export async function connection(home = homedir(), expected?: Connection) {
   const settings = await readSettings(home);
@@ -72,8 +74,7 @@ export function matchesOrigin(
     return origin.type === "org" && origin.id === conn.organizationId;
   if (selector === "me")
     return origin.type === "dev" && origin.id === conn.developerId;
-  const [type, ...rest] = selector.split(/[/:]/);
-  const value = rest.join("/");
+  const { type, value = "" } = splitOrigin(selector);
   return origin.type === type && [origin.id, origin.slug].includes(value);
 }
 
@@ -88,8 +89,9 @@ export async function selectSkill(
   const matches = values.filter(
     (s) => s.name === name && matchesOrigin(s.origin, selector, conn),
   );
-  if (matches.length !== 1) throw assetNotFound(kind, name, selector);
-  return matches[0]!;
+  const match = only(matches);
+  if (!match) throw assetNotFound(kind, name, selector);
+  return match;
 }
 
 export async function selectOrigin(
@@ -101,7 +103,12 @@ export async function selectOrigin(
     .array(scopeSchema)
     .parse((await apiClient(conn.server, home).GET("/v1/scopes")).data);
   const matches = scopes.filter((s) => matchesOrigin(s, selector, conn));
-  if (!matches.length && /^dev[/:]/.test(selector)) {
+  const personal = splitOrigin(selector);
+  if (
+    !matches.length &&
+    personal.type === "dev" &&
+    personal.value !== undefined
+  ) {
     const actor = contextSchema.parse(
       (await apiClient(conn.server, home).GET("/v1/context")).data,
     );
@@ -124,12 +131,13 @@ export async function selectOrigin(
       }
     }
   }
-  if (matches.length !== 1)
+  const match = only(matches);
+  if (!match)
     throw new CliError(
       `No scope named ${selector} that you can use.`,
       "barndog sets list",
     );
-  return matches[0]!;
+  return match;
 }
 
 export async function download(

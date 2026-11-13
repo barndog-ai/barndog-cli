@@ -1,6 +1,8 @@
 import { ApiError } from "@barndog-ai/api-contract";
 import { z } from "zod";
 
+import { CONSTANT_CASE } from "./shared/patterns.js";
+
 /** A user-facing failure with an optional command that fixes it. */
 export class CliError extends Error {
   readonly hint?: string;
@@ -10,6 +12,15 @@ export class CliError extends Error {
     this.name = "CliError";
     this.hint = hint;
   }
+}
+
+/** The `code` of a Node.js system error, such as `ENOENT`. */
+export function errorCode(error: unknown): string | undefined {
+  return error instanceof Error &&
+    "code" in error &&
+    typeof error.code === "string"
+    ? error.code
+    : undefined;
 }
 
 /** Ends a command early when there is nothing to choose; not a failure. */
@@ -138,24 +149,31 @@ export function friendlyMessage(error: unknown): string {
         return issue.path.length ? `${issue.path.join(".")}: ${text}` : text;
       })
       .join("; ");
-  if (error instanceof ApiError && serverProblems[error.message])
-    return `${serverProblems[error.message]!.message}.`;
-  const code = (error as NodeJS.ErrnoException).code;
-  const path = (error as NodeJS.ErrnoException).path;
+  const problem =
+    error instanceof ApiError ? serverProblems[error.message] : undefined;
+  if (problem) return `${problem.message}.`;
+  const code = errorCode(error);
+  const path =
+    "path" in error && typeof error.path === "string" ? error.path : undefined;
   if (code === "ENOENT" && path) return `Can't find ${path}.`;
   if (code === "EACCES" && path) return `No permission to read ${path}.`;
   if (code === "EISDIR" && path) return `${path} is a folder, not a file.`;
   if (code === "EEXIST" && path)
     return `${path} already exists. Choose another folder or remove it first.`;
-  const [prefix, detail] = error.message.split(/: (.*)/s);
+  const separator = error.message.indexOf(": ");
+  const [prefix, detail] =
+    separator < 0
+      ? [error.message, undefined]
+      : [error.message.slice(0, separator), error.message.slice(separator + 2)];
   if (prefix === "MISSING_HOOK_SCRIPT")
     return `hook.yaml declares a script that isn't in the folder: ${detail}`;
   if (prefix === "MISSING_PACKAGE_MANIFEST")
     return `This folder has no ${detail}`;
   if (prefix === "UNSAFE_PACKAGE_ENTRY" && detail) return detail;
-  if (packageMessages[prefix!]) return packageMessages[prefix!]!;
+  const packaged = packageMessages[prefix];
+  if (packaged) return packaged;
   // Server codes such as KNOWLEDGE_NOT_FOUND still read as a sentence.
-  if (/^[A-Z][A-Z0-9_]+$/.test(error.message))
-    return `${error.message[0]}${error.message.slice(1).toLowerCase().replace(/_/g, " ")}.`;
+  if (CONSTANT_CASE.test(error.message))
+    return `${error.message[0]}${error.message.slice(1).toLowerCase().replaceAll("_", " ")}.`;
   return error.message;
 }

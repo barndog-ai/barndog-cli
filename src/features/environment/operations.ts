@@ -40,6 +40,8 @@ import {
 import { CliError } from "../../errors.js";
 import { originLabel, validInstalledName } from "./names.js";
 import { assetKinds } from "../asset-kinds/index.js";
+import { only } from "../../shared/lookup.js";
+import { splitOrigin } from "../../shared/patterns.js";
 
 /** How to treat exclusions and disabled assets that a change would undo. */
 export type Overrides = {
@@ -150,7 +152,7 @@ async function workspaceAccess(settings: Settings, home: string) {
       identity: model,
       catalog: await merge(model.catalog),
       source: overlay ? withOverlay(source, overlay) : source,
-      scopes: async () => model.scopes,
+      scopes: () => Promise.resolve(model.scopes),
     };
   }
   const { connection: conn, catalog } = await environmentCatalog(home);
@@ -214,7 +216,10 @@ async function applyChange(
         resolution,
       );
     } catch (error) {
-      if ((error as Error).message.startsWith("Scope is not selected"))
+      if (
+        error instanceof Error &&
+        error.message.startsWith("Scope is not selected")
+      )
         throw new CliError(
           `${origin} isn't in your sets yet.`,
           `barndog sets install ${origin}`,
@@ -246,18 +251,20 @@ function assetId(
         a.name === target.name ||
         localNames[a.id] === target.name),
   );
-  const matches = target.origin
-    ? named.filter((a) => matchesOrigin(a.origin, target.origin!, identity))
+  const { origin } = target;
+  const matches = origin
+    ? named.filter((a) => matchesOrigin(a.origin, origin, identity))
     : named;
   const staleId =
     change !== "install" && z.uuidv4().safeParse(target.name).success
       ? target.name
       : undefined;
-  const id = matches.length === 1 ? matches[0]!.id : staleId;
-  if (!id && matches.length > 1)
+  const id = only(matches)?.id ?? staleId;
+  const [first] = matches;
+  if (!id && first && matches.length > 1)
     throw new CliError(
       `${target.name} exists in several scopes: ${matches.map((a) => originLabel(a.origin)).join(", ")}. Choose one with --origin.`,
-      `${command} ${target.name} --origin ${originLabel(matches[0]!.origin)}`,
+      `${command} ${target.name} --origin ${originLabel(first.origin)}`,
     );
   if (!id)
     throw new CliError(
@@ -368,17 +375,18 @@ async function findScope(
   const [match] = matches;
   if (matches.length === 1 && match && match.type !== "dev")
     return { type: match.type, id: match.id };
-  const [type, id] = selector.split(/[/:]/);
+  const { type, value: id } = splitOrigin(selector);
   if (
     !forRemoval ||
     (type !== "org" && type !== "team" && type !== "repo") ||
+    id === undefined ||
     !z.uuidv4().safeParse(id).success
   )
     throw new CliError(
       `No scope named ${selector} is available to you. To remove an unavailable subscription, pass its UUID, such as team/<uuid>.`,
       "barndog sets list",
     );
-  return { type, id: id! };
+  return { type, id };
 }
 
 function scopeAssets(workspace: Workspace, scope: Scope) {

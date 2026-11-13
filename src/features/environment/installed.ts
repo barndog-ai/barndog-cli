@@ -16,6 +16,8 @@ import {
   type PackageEntry,
 } from "@barndog-ai/api-contract/package";
 import { assetKinds, type PackageKind } from "../asset-kinds/index.js";
+import { errorCode } from "../../errors.js";
+import { setYamlName, splitFrontMatter } from "../../shared/patterns.js";
 
 /** Readable, stable folders that harnesses resolve; the commit-pinned cache stays internal. */
 export function installedRoot(home: string, kind: PackageKind) {
@@ -54,7 +56,7 @@ export async function treeFingerprint(directory: string) {
     const info = await lstat(directory);
     if (!info.isDirectory()) return `not-a-directory:${info.mode}`;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    if (errorCode(error) === "ENOENT") return null;
     throw error;
   }
   try {
@@ -64,8 +66,6 @@ export async function treeFingerprint(directory: string) {
   }
 }
 
-const frontmatter = /^(\uFEFF?---\r?\n)([\s\S]*?)(\r?\n---(?:\r?\n|$))/;
-
 /** Points SKILL.md's name at the installed folder name; harnesses require them to match. */
 export function renameSkillEntries(
   entries: PackageEntry[],
@@ -73,17 +73,12 @@ export function renameSkillEntries(
 ): PackageEntry[] {
   return entries.map((entry) => {
     if (entry.path !== "SKILL.md") return entry;
-    const text = entry.data.toString("utf8");
-    const match = frontmatter.exec(text);
-    if (!match) return entry;
-    const body = /^name\s*:.*$/m.test(match[2]!)
-      ? match[2]!.replace(/^name\s*:.*$/m, `name: ${name}`)
-      : `name: ${name}\n${match[2]}`;
+    const parts = splitFrontMatter(entry.data.toString("utf8"));
+    if (!parts) return entry;
+    const { open, yaml, close, body } = parts;
     return {
       ...entry,
-      data: Buffer.from(
-        `${match[1]}${body}${match[3]}${text.slice(match[0].length)}`,
-      ),
+      data: Buffer.from(`${open}${setYamlName(yaml, name)}${close}${body}`),
     };
   });
 }

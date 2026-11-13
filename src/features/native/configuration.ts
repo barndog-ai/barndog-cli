@@ -13,7 +13,7 @@ import { parseForESLint } from "toml-eslint-parser";
 import { isDeepStrictEqual } from "node:util";
 import { join } from "node:path";
 import type { Harness } from "../../harnesses/types.js";
-import { isRecord } from "../skills/validation.js";
+import { isRecord } from "../../shared/values.js";
 
 export type NativeEntry = {
   id: string;

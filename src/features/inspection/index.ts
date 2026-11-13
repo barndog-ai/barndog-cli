@@ -5,7 +5,7 @@ import { authStatus } from "../auth/session.js";
 import { readSettings } from "../../config/settings.js";
 import { repositoryContext, localRepository } from "../repositories/context.js";
 import { openRepoSource } from "../environment/workspace-source.js";
-import { only } from "../../lookup.js";
+import { only } from "../../shared/lookup.js";
 
 /** The barndog.yaml answer to "which repository scope is this folder?". */
 async function declaredRepository(model: WorkspaceModel, cwd: string) {

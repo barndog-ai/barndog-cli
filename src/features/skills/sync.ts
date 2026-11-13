@@ -11,11 +11,8 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { skillDirectory } from "../../harnesses/registry.js";
 import { readState, saveState, type Link } from "../../config/state.js";
-import {
-  validateSelection,
-  validateSkillSource,
-  isRecord,
-} from "./validation.js";
+import { validateSelection, validateSkillSource } from "./validation.js";
+import { isRecord } from "../../shared/values.js";
 import {
   readSettings,
   settingsPath,

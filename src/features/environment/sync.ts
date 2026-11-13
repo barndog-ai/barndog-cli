@@ -58,8 +58,8 @@ import {
   hookEntries,
   mcpEntry,
   runtimeRequirements,
-  shellQuote,
 } from "../native/adapters.js";
+import { shellQuote } from "../../shared/shell.js";
 import {
   atomicFile,
   fileText,
@@ -74,7 +74,7 @@ import {
   packageKindList,
   type PackageKind,
 } from "../asset-kinds/index.js";
-import { defined } from "../../lookup.js";
+import { defined } from "../../shared/lookup.js";
 
 const nativeSchema = z.array(
   z

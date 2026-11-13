@@ -3,7 +3,7 @@ import { assetKinds, type AssetKind } from "../features/asset-kinds/index.js";
 import { CliError } from "../errors.js";
 import { pickOne } from "../ui/pick.js";
 import { clean, originLabel } from "../ui/format.js";
-import { only } from "../lookup.js";
+import { only } from "../shared/lookup.js";
 
 /**
  * Names are unique only within a scope, so `--origin` picks between scopes

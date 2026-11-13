@@ -14,7 +14,7 @@ import { randomUUID } from "node:crypto";
 import { moveLocalAssets, type MoveResult } from "../git-workspace/move.js";
 import { LOCAL_ORIGIN } from "../git-workspace/overlay.js";
 import { assetKindList } from "../asset-kinds/index.js";
-import { only } from "../../lookup.js";
+import { only } from "../../shared/lookup.js";
 
 export async function developers(search?: string, home = homedir()) {
   const conn = await connection(home);

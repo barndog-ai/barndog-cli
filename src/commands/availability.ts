@@ -5,21 +5,30 @@ import { CliError } from "../errors.js";
 import { readCredentials } from "../features/auth/credentials.js";
 import { LOCAL_ORIGIN } from "../features/git-workspace/overlay.js";
 
-const cloudOnly = [
+/** Every `barndog changes …`, `skills changes …` and `hooks changes …` command. */
+const CHANGES_COMMANDS = /^(?:skills |hooks )?changes(?: |$)/;
+
+/**
+ * Commands that need a BarnDog server, matched against the command's words
+ * without the program name: `auth status`, `skills fork`, `github pulls list`.
+ * `src/tests/patterns.test.ts` checks that each still matches a real command.
+ */
+export const cloudOnlyCommands = [
   /^login$/,
   /^auth status$/,
   /^whoami$/,
   /^open$/,
-  /^people( |$)/,
-  /^github( |$)/,
-  /^(skills |hooks )?changes( |$)/,
-  /^(skills|mcp|hooks) (fork|promote)$/,
-  /^mcp (create|update)$/,
+  /^people(?: |$)/,
+  /^github(?: |$)/,
+  CHANGES_COMMANDS,
+  /^(?:skills|mcp|hooks) (?:fork|promote)$/,
+  /^mcp (?:create|update)$/,
 ];
 
-const needsReview = [
-  /^(pull|push|resolve)$/,
-  /^(skills|hooks) (pull|push|create|versions|show|diff)$/,
+/** Commands that need published versions and reviews, which a local folder lacks. */
+export const reviewCommands = [
+  /^(?:pull|push|resolve)$/,
+  /^(?:skills|hooks) (?:pull|push|create|versions|show|diff)$/,
   /^mcp versions$/,
 ];
 
@@ -35,18 +44,23 @@ export async function currentSetupMode(
   return settings.localWorkspace ? "local" : undefined;
 }
 
+/** What a command needs that this setup lacks: a server, or shared versions and reviews. */
+export type CommandNeed = "cloud" | "shared";
+
 /** What a command needs that this setup lacks; undefined when it can run. */
 export function commandNeeds(
   command: string,
   mode: SetupMode,
-): "cloud" | "shared" | undefined {
-  if (cloudOnly.some((pattern) => pattern.test(command))) return "cloud";
-  if (mode === "local" && needsReview.some((pattern) => pattern.test(command)))
+): CommandNeed | undefined {
+  if (cloudOnlyCommands.some((pattern) => pattern.test(command)))
+    return "cloud";
+  if (
+    mode === "local" &&
+    reviewCommands.some((pattern) => pattern.test(command))
+  )
     return "shared";
   return undefined;
 }
-
-export type CommandNeed = NonNullable<ReturnType<typeof commandNeeds>>;
 
 export const needText = (need: CommandNeed) =>
   need === "cloud" ? "a Cloud Workspace" : "a Git repo or Cloud Workspace";
@@ -93,14 +107,14 @@ export async function assertCommandAvailable(
       );
     return;
   }
-  if (git && /^(skills |hooks )?changes( |$)/.test(command))
+  if (git && CHANGES_COMMANDS.test(command))
     throw new CliError(
       `Reviews happen as pull requests on your Git host, because this machine keeps its assets in ${where}.`,
       "barndog status",
     );
   // An explicit server is how local assets get promoted without switching.
   if (command === "login" && options.server) return;
-  if (/ promote$/.test(command) && options.origin === LOCAL_ORIGIN) return;
+  if (command.endsWith(" promote") && options.origin === LOCAL_ORIGIN) return;
   const needs = commandNeeds(command, git ? "git" : "local");
   if (needs === "cloud") {
     const action = why[command] ?? "needs a BarnDog Cloud Workspace";

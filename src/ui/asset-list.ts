@@ -1,6 +1,7 @@
 import { InvalidArgumentError, type Command } from "commander";
 
 import { originLabel } from "../features/environment/names.js";
+import { POSITIVE_INTEGER } from "../shared/patterns.js";
 
 export type ListOptions = {
   search?: string;
@@ -17,7 +18,7 @@ export type ListAsset = {
 };
 
 function positive(value: string) {
-  if (!/^[1-9]\d*$/.test(value) || !Number.isSafeInteger(Number(value)))
+  if (!POSITIVE_INTEGER.test(value) || !Number.isSafeInteger(Number(value)))
     throw new InvalidArgumentError("Use a positive integer");
   return Number(value);
 }

@@ -7,7 +7,7 @@ import { parse } from "yaml";
 import { serverFetch, normalizeServer } from "../auth/transport.js";
 import { homedir } from "node:os";
 import { assetKinds, type PackageKind } from "../asset-kinds/index.js";
-import { defined } from "../../lookup.js";
+import { defined } from "../../shared/lookup.js";
 
 /** The typed client speaks Skill routes; other package kinds swap in their own. */
 export function packagePath(path: string, kind: PackageKind) {

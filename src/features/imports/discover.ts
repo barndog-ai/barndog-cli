@@ -13,10 +13,12 @@ import { parse as parseToml } from "smol-toml";
 import { stringify } from "yaml";
 
 import { friendlyMessage } from "../../errors.js";
-import { adapters, harnesses } from "../../harnesses/registry.js";
+import { harnesses, hookSettingsOwner } from "../../harnesses/registry.js";
 import type { Harness } from "../../harnesses/types.js";
 import { isBlob, type SnapshotEntry } from "../git-workspace/snapshot.js";
 import type { RemoteRepo } from "./remote.js";
+import { defined } from "../../shared/lookup.js";
+import { asRecord, isRecord } from "../../shared/values.js";
 
 export const ROOT_TOKEN = "${BARNDOG_HOOK_ROOT}";
 
@@ -38,10 +40,14 @@ export function folderEntries(
     .filter((entry) => entry.path.startsWith(prefix) && isBlob(entry.mode))
     .map((entry) => ({
       path: entry.path.slice(prefix.length),
-      data: remote.blobs.get(entry.hash)!,
+      data: blobOf(remote, entry),
       executable: entry.mode === "100755",
     }));
 }
+
+/** Every blob in a fetched snapshot was read with it. */
+export const blobOf = (remote: RemoteRepo, entry: SnapshotEntry) =>
+  defined(remote.blobs.get(entry.hash), `Git object ${entry.hash} wasn't read`);
 
 const hasLink = (remote: RemoteRepo, root: string) =>
   remote.snapshot.entries.some(
@@ -66,7 +72,7 @@ export function discoverSkills(remote: RemoteRepo) {
   const skills: SkillCandidate[] = [];
   const skipped: Skipped[] = [];
   for (const entry of remote.snapshot.entries) {
-    if (!/(^|\/)SKILL\.md$/.test(entry.path) || !isBlob(entry.mode)) continue;
+    if (fileName(entry.path) !== "SKILL.md" || !isBlob(entry.mode)) continue;
     const root = parentOf(entry.path);
     if (!inScope(remote, root) && !inScope(remote, entry.path)) continue;
     try {
@@ -106,40 +112,67 @@ export type HookCandidate =
       skipped: Skipped[];
     };
 
-const scriptLike = /\.(sh|bash|zsh|py|js|mjs|cjs|ts|rb|pl)$/;
+/** The last segment of a repository path: `hooks/lint/hook.yaml` → `hook.yaml`. */
+const fileName = (path: string) => path.slice(path.lastIndexOf("/") + 1);
 
-const interpreter = (script: string) =>
-  /\.py$/.test(script)
-    ? "python3 "
-    : /\.(m|c)?js$/.test(script)
-      ? "node "
-      : /\.rb$/.test(script)
-        ? "ruby "
-        : /\.pl$/.test(script)
-          ? "perl "
-          : "";
+/** `.py` from `hooks/check.py`; "" when the file name has no extension. */
+const extensionOf = (path: string) => {
+  const name = fileName(path);
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? name.slice(dot) : "";
+};
 
+/** What a script without its executable bit is run with, by extension. */
+const interpreters: Record<string, string> = {
+  ".py": "python3 ",
+  ".js": "node ",
+  ".mjs": "node ",
+  ".cjs": "node ",
+  ".rb": "ruby ",
+  ".pl": "perl ",
+};
+
+const scriptExtensions = new Set([
+  ".sh",
+  ".bash",
+  ".zsh",
+  ".ts",
+  ...Object.keys(interpreters),
+]);
+
+/** Whether a repository file looks like a hook script: `hooks/check.sh`, `lint.mjs`. */
+export const scriptLike = (path: string) =>
+  scriptExtensions.has(extensionOf(path));
+
+/**
+ * A command that runs `script` from the package: `@@check.sh` when it is
+ * executable, else through its interpreter, `python3 @@check.py`.
+ */
 export function plainCommand(script: string, executable: boolean) {
-  return `${executable ? "" : interpreter(script)}@@${script}`;
+  const interpreter = executable
+    ? ""
+    : (interpreters[extensionOf(script)] ?? "");
+  return `${interpreter}@@${script}`;
 }
 
 type NativeHook = { event: string; matcher?: string; command: string };
 
 function nativeHooks(entry: SnapshotEntry, text: string) {
-  const parsed = entry.path.endsWith(".toml")
-    ? (parseToml(text) as Record<string, unknown>)
-    : (parseJsonc(text) as Record<string, unknown> | undefined);
-  const hooks = parsed?.hooks as Record<string, unknown> | undefined;
+  const parsed: unknown = entry.path.endsWith(".toml")
+    ? parseToml(text)
+    : parseJsonc(text);
   const found: NativeHook[] = [];
-  for (const [event, groups] of Object.entries(hooks ?? {})) {
+  for (const [event, groups] of Object.entries(
+    asRecord(asRecord(parsed).hooks),
+  )) {
     if (!Array.isArray(groups)) continue;
-    for (const group of groups as Record<string, unknown>[]) {
+    for (const group of groups.filter(isRecord)) {
       const matcher =
         typeof group.matcher === "string" && group.matcher
           ? group.matcher
           : undefined;
       const handlers = Array.isArray(group.hooks)
-        ? (group.hooks as Record<string, unknown>[])
+        ? group.hooks.filter(isRecord)
         : [group];
       for (const handler of handlers)
         if (
@@ -152,26 +185,36 @@ function nativeHooks(entry: SnapshotEntry, text: string) {
   return found;
 }
 
-const settingsOwner = (path: string) =>
-  harnesses.find((harness) =>
-    adapters[harness].hooks.settings.some((pattern) => pattern.test(path)),
-  );
+/**
+ * Leading folders a native command uses to find its repository, which don't
+ * exist in the package: `$CLAUDE_PROJECT_DIR/`, `${CLAUDE_PLUGIN_ROOT}/`,
+ * `$(git rev-parse --show-toplevel)/`, `~/` and `./`, in any combination.
+ */
+const ROOT_PREFIXES =
+  /^(?:\$\{?[A-Z_]+\}?\/|\$\(git rev-parse --show-toplevel\)\/|~\/|\.\/)+/;
 
-const pathNoise =
-  /^(\$\{?[A-Z_]+\}?\/|\$\(git rev-parse --show-toplevel\)\/|~\/|\.\/)+/;
+/** Surrounding quotes on one word of a command: `"./run.sh"` → `./run.sh`. */
+const QUOTES = /^["']|["']$/g;
+
+/**
+ * The repository-relative path one word of a native hook command may name:
+ * `"$CLAUDE_PROJECT_DIR/.claude/hooks/check.sh"` → `.claude/hooks/check.sh`.
+ */
+export function scriptPath(token: string) {
+  return token.replace(QUOTES, "").replace(ROOT_PREFIXES, "");
+}
 
 /** Points a native command at the repo's script, or says why it can't be carried over. */
 function rewriteCommand(command: string, blobs: string[], scope: string) {
   for (const token of command.split(/\s+/)) {
-    const clean = token.replace(/^["']|["']$/g, "");
-    const relative = clean.replace(pathNoise, "");
+    const relative = scriptPath(token);
     if (!relative || !relative.includes(".")) continue;
     const script =
       blobs.find((path) => path === relative) ??
       blobs.find((path) => scope && path === `${scope}/${relative}`) ??
       blobs.find((path) => path.endsWith(`/${relative}`));
     if (script)
-      return { script, command: command.replace(token, `@@${script}`) };
+      return { script, command: command.replace(token, () => `@@${script}`) };
   }
   return null;
 }
@@ -180,7 +223,7 @@ export function discoverHooks(remote: RemoteRepo, fallbackName: string) {
   const packages: HookCandidate[] = [];
   const skipped: Skipped[] = [];
   for (const entry of remote.snapshot.entries) {
-    if (!/(^|\/)hook\.yaml$/.test(entry.path) || !isBlob(entry.mode)) continue;
+    if (fileName(entry.path) !== "hook.yaml" || !isBlob(entry.mode)) continue;
     const root = parentOf(entry.path);
     if (!inScope(remote, root) && !inScope(remote, entry.path)) continue;
     try {
@@ -209,14 +252,11 @@ export function discoverHooks(remote: RemoteRepo, fallbackName: string) {
   const blobPaths = blobEntries.map((e) => e.path);
   const implementations: Partial<Record<Harness, DraftEvent[]>> = {};
   for (const entry of blobEntries) {
-    const harness = settingsOwner(entry.path);
+    const harness = hookSettingsOwner(entry.path);
     if (!harness) continue;
     let hooks: NativeHook[] = [];
     try {
-      hooks = nativeHooks(
-        entry,
-        remote.blobs.get(entry.hash)!.toString("utf8"),
-      );
+      hooks = nativeHooks(entry, blobOf(remote, entry).toString("utf8"));
     } catch (error) {
       skipped.push({ path: entry.path, reason: friendlyMessage(error) });
     }
@@ -239,9 +279,9 @@ export function discoverHooks(remote: RemoteRepo, fallbackName: string) {
     ...new Set([
       ...Object.values(implementations)
         .flat()
-        .map((d) => d!.script),
+        .map((d) => d.script),
       ...blobEntries
-        .filter((e) => scriptLike.test(e.path) || e.mode === "100755")
+        .filter((e) => scriptLike(e.path) || e.mode === "100755")
         .map((e) => e.path),
     ]),
   ];
@@ -283,7 +323,7 @@ export function buildHookPackage(
   },
 ) {
   const used = Object.values(input.implementations).flat();
-  const scripts = [...new Set(used.map((d) => d!.script))];
+  const scripts = [...new Set(used.map((d) => d.script))];
   const root = commonFolder(scripts);
   const relative = (path: string) =>
     root ? path.slice(root.length + 1) : path;
@@ -300,20 +340,18 @@ export function buildHookPackage(
     )
     .map((entry) => ({
       path: relative(entry.path),
-      data: remote.blobs.get(entry.hash)!,
+      data: blobOf(remote, entry),
       executable: entry.mode === "100755" || scripts.includes(entry.path),
     }));
   const implementations: HookManifest["implementations"] = {};
-  for (const [harness, events] of Object.entries(input.implementations) as [
-    Harness,
-    DraftEvent[],
-  ][]) {
+  for (const harness of harnesses) {
+    const events = input.implementations[harness] ?? [];
     if (!events.length) continue;
     const byEvent: Record<string, unknown[]> = {};
     for (const draft of events) {
       const command = draft.command.replace(
-        new RegExp(`@@${draft.script.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`),
-        `${ROOT_TOKEN}/${relative(draft.script)}`,
+        `@@${draft.script}`,
+        () => `${ROOT_TOKEN}/${relative(draft.script)}`,
       );
       (byEvent[draft.event] ??= []).push(
         harness === "cursor"

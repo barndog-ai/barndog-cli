@@ -17,7 +17,8 @@ import {
   originLabel,
   resolveClashes,
 } from "../environment/names.js";
-import { validateSkillSource, asRecord } from "../skills/validation.js";
+import { validateSkillSource } from "../skills/validation.js";
+import { asRecord } from "../../shared/values.js";
 import type { Harness } from "../../harnesses/types.js";
 import type { AssetKind } from "../asset-selection/types.js";
 import { isAssetKind } from "../asset-kinds/index.js";

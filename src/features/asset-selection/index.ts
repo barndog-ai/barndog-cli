@@ -14,14 +14,13 @@ import type {
   SelectionResult,
   SelectionState,
 } from "./types.js";
+import { defined } from "../../shared/lookup.js";
+import { UUID_V4 } from "../../shared/patterns.js";
 
 export type * from "./types.js";
 
-const uuidV4 =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
 function id(value: string): string {
-  if (!uuidV4.test(value)) throw new Error(`Expected UUIDv4: ${value}`);
+  if (!UUID_V4.test(value)) throw new Error(`Expected UUIDv4: ${value}`);
   return value.toLowerCase();
 }
 
@@ -147,7 +146,10 @@ export function resolveAssets(
   const effective: EffectiveAsset[] = [...contributions]
     .sort(([a], [b]) => compare(a, b))
     .map(([assetId, sources]) => ({
-      asset: assets.get(assetId)!,
+      asset: defined(
+        assets.get(assetId),
+        `Asset ${assetId} is missing from the catalog`,
+      ),
       enabled:
         !disabled.has(assetId) &&
         sources.some(

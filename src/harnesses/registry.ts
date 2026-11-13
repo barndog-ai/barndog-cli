@@ -20,6 +20,17 @@ export function isHarness(value: unknown): value is Harness {
   );
 }
 
+/**
+ * The harness whose hook settings live at a repository path, such as
+ * `.claude/settings.json` (Claude Code) or `.codex/config.toml` (Codex);
+ * undefined for any other file.
+ */
+export function hookSettingsOwner(path: string): Harness | undefined {
+  return harnesses.find((harness) =>
+    adapters[harness].hooks.settings.some((pattern) => pattern.test(path)),
+  );
+}
+
 export function skillDirectory(harness: Harness, home: string): string {
   return resolve(home, adapters[harness].skillRoot);
 }

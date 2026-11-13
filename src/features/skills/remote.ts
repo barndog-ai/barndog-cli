@@ -37,6 +37,10 @@ import {
 } from "../../config/settings.js";
 import { resolveAssets } from "../asset-selection/index.js";
 import type { CatalogAsset } from "../catalog/index.js";
+import { errorCode } from "../../errors.js";
+import { defined } from "../../shared/lookup.js";
+import { GIT_OBJECT_ID } from "../../shared/patterns.js";
+import { z } from "zod";
 
 export { normalizeServer } from "../auth/transport.js";
 
@@ -145,9 +149,9 @@ export async function listSkills(home = homedir()) {
 }
 
 async function fingerprintMatches(root: string, name: string) {
-  const saved = JSON.parse(
-    await readFile(join(root, "manifest.json"), "utf8"),
-  ) as { fingerprint: string };
+  const saved = z
+    .object({ fingerprint: z.string() })
+    .parse(JSON.parse(await readFile(join(root, "manifest.json"), "utf8")));
   if ((await directoryFingerprint(join(root, name))) !== saved.fingerprint)
     throw new Error(`Cached Skill was modified locally: ${name}`);
 }
@@ -172,7 +176,7 @@ async function download(
   await mkdir(root, { recursive: true });
   // Verify previous cached versions too: a new publication must not silently hide local edits.
   for (const commit of await readdir(root)) {
-    if (/^[0-9a-f]{40}$/.test(commit))
+    if (GIT_OBJECT_ID.test(commit))
       await fingerprintMatches(join(root, commit), skill.name);
   }
   const target = join(root, skill.version.commit);
@@ -181,7 +185,7 @@ async function download(
     await fingerprintMatches(target, skill.name);
     return join(target, skill.name);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    if (errorCode(error) !== "ENOENT") throw error;
   }
   const response = await serverFetch(connection.server, home)(
     `${connection.server}/v1/skills/${skill.id}/versions/${skill.version.number}/package`,
@@ -218,11 +222,7 @@ async function download(
     try {
       await rename(stage, target);
     } catch (error) {
-      if (
-        !["EEXIST", "ENOTEMPTY"].includes(
-          (error as NodeJS.ErrnoException).code ?? "",
-        )
-      )
+      if (!["EEXIST", "ENOTEMPTY"].includes(errorCode(error) ?? ""))
         throw error;
       await fingerprintMatches(target, skill.name);
     }
@@ -242,7 +242,11 @@ export async function prepareSources(
     (skill) => skill.kind === "local",
   );
   if (!remote.length) return result;
-  const connection = settings.connection!;
+  const { connection } = settings;
+  if (!connection)
+    throw new Error(
+      "Invalid user settings: API selections require a connection",
+    );
   const skills = await catalog(connection, home);
   const resolved = resolveAssets(
     {
@@ -269,7 +273,10 @@ export async function prepareSources(
       "Selected Skill is missing from the server; installation was preserved",
     );
   for (const effective of resolved.assets) {
-    const skill = skills.find((skill) => skill.id === effective.asset.id)!;
+    const skill = defined(
+      skills.find((skill) => skill.id === effective.asset.id),
+      "Selected Skill is missing from the server; installation was preserved",
+    );
     result.push({
       id: skill.id,
       enabled: effective.enabled,

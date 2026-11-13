@@ -469,7 +469,7 @@ test("--version prints the package version and build details", async () => {
     await readFile(new URL("../../package.json", import.meta.url), "utf8"),
   ) as { version: string };
   expect(lines.join("\n")).toMatch(new RegExp(`^barndog ${version}\\n`));
-  expect(lines.join("\n")).toMatch(/Node\.js v\d+.* on \w+ \w+/);
+  expect(lines.join("\n")).toMatch(/Node\.js v\d.* on \w+ \w+/);
   expect(lines.join("\n")).toMatch(/Default server https?:\/\//);
 });
 

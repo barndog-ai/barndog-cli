@@ -24,13 +24,15 @@ import {
   type SnapshotEntry,
 } from "./snapshot.js";
 import { assetKinds } from "../asset-kinds/index.js";
+import { defined } from "../../shared/lookup.js";
+import { NAME, splitFrontMatter } from "../../shared/patterns.js";
 
 export const CONFIG_FILE = "barndog.yaml";
 
 export const NAME_RULE =
   "Names use lowercase letters, numbers and single hyphens";
 
-const slug = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+const slug = z.string().regex(NAME);
 
 const configSchema = z
   .object({
@@ -86,8 +88,9 @@ export function stableId(...parts: string[]) {
     .update(parts.join("\0"))
     .digest()
     .subarray(0, 16);
-  bytes[6] = (bytes[6]! & 0x0f) | 0x40;
-  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  // A 16-byte digest always has these bytes; set the UUID version and variant bits.
+  bytes.writeUInt8((bytes.readUInt8(6) & 0x0f) | 0x40, 6);
+  bytes.writeUInt8((bytes.readUInt8(8) & 0x3f) | 0x80, 8);
   const hex = bytes.toString("hex");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
@@ -143,12 +146,9 @@ export type WorkspaceModel = {
 const hidden = (name: string) => name.startsWith(".");
 
 function frontMatter(text: string) {
-  const match = /^\uFEFF?---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(text);
-  if (!match) throw new Error("Missing front matter");
-  return {
-    metadata: parse(match[1]!) as unknown,
-    body: text.slice(match[0].length),
-  };
+  const parts = splitFrontMatter(text);
+  if (!parts) throw new Error("Missing front matter");
+  return { metadata: parse(parts.yaml) as unknown, body: parts.body };
 }
 
 function knowledgeContent(name: string, text: string): KnowledgeContent {
@@ -184,8 +184,9 @@ export async function loadWorkspace(
       .filter((entry) => isBlob(entry.mode))
       .map((entry) => entry.hash),
   );
-  const text = (entry: SnapshotEntry) =>
-    blobs.get(entry.hash)!.toString("utf8");
+  const blob = (entry: SnapshotEntry) =>
+    defined(blobs.get(entry.hash), `Git object ${entry.hash} wasn't read`);
+  const text = (entry: SnapshotEntry) => blob(entry).toString("utf8");
   const config = parseConfig(text(configEntry));
   if (expectedId && config.workspaceId !== expectedId)
     throw new CliError(
@@ -259,7 +260,7 @@ export async function loadWorkspace(
         );
       entries.push({
         path: entry.path.slice(root.length + 1),
-        data: blobs.get(entry.hash)!,
+        data: blob(entry),
         executable: entry.mode === "100755",
       });
     }

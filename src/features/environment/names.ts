@@ -1,4 +1,4 @@
-import { skillName } from "../skills/validation.js";
+import { NAME, slugify } from "../../shared/patterns.js";
 
 /** Kinds whose installed name is a shared native namespace (Skill folders, MCP server keys). */
 export type NamedKind = "skill" | "mcp";
@@ -54,25 +54,30 @@ const rank: Record<string, number> = {
 
 /** `<origin-type>-<origin-slug>-<name>` with single hyphens, e.g. team-super-team-review. */
 export function prefixedName(asset: Pick<NamedAsset, "name" | "origin">) {
-  return [
-    asset.origin.type,
-    asset.origin.slug ?? asset.origin.id ?? "",
-    asset.name,
-  ]
-    .join("-")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+  return slugify(
+    [
+      asset.origin.type,
+      asset.origin.slug ?? asset.origin.id ?? "",
+      asset.name,
+    ].join("-"),
+  );
 }
 
 export function validInstalledName(name: string) {
-  return skillName.test(name) && name.length <= 64;
+  return NAME.test(name) && name.length <= 64;
 }
 
 export const installedName = (
   asset: Pick<NamedAsset, "id" | "name">,
   localNames: Record<string, string>,
 ) => localNames[asset.id] ?? asset.name;
+
+/** A folder name with a trailing copy number, `review-1a2b-2`; group 1 is the rest. */
+const COPY_NUMBER = /^(.*)-\d+$/;
+
+/** `review-1a2b-2` → `review-1a2b`; undefined when there is no copy number. */
+export const withoutCopyNumber = (folder: string) =>
+  COPY_NUMBER.exec(folder)?.[1];
 
 /**
  * Origin prefixes are ambiguous: team a's b-c and team a-b's c read the same. Each
@@ -114,7 +119,7 @@ export function hookFolders(
       (hook.current === plain(hook) ||
         hook.current === suffixed(hook) ||
         hook.current === whole(hook) ||
-        hook.current.match(/^(.*)-\d+$/)?.[1] === whole(hook))
+        withoutCopyNumber(hook.current) === whole(hook))
     )
       claim(hook, hook.current);
   const wanting = open().map(plain);
@@ -162,19 +167,17 @@ export function findClash(
     const key = `${asset.kind}\0${installedName(asset, localNames)}`;
     groups.set(key, [...(groups.get(key) ?? []), asset]);
   }
-  for (const [key, group] of [...groups].sort(([a], [b]) =>
-    a.localeCompare(b),
-  )) {
-    if (group.length < 2) continue;
+  for (const [, group] of [...groups].sort(([a], [b]) => a.localeCompare(b))) {
     const [installed, incoming] = [...group].sort(
       (a, b) =>
         Number(b.installed) - Number(a.installed) ||
         (rank[a.origin.type] ?? 9) - (rank[b.origin.type] ?? 9) ||
         a.id.localeCompare(b.id),
-    ) as [NamedAsset, NamedAsset];
+    );
+    if (!installed || !incoming) continue;
     return {
       kind: installed.kind,
-      name: key.split("\0")[1]!,
+      name: installedName(installed, localNames),
       installed,
       incoming,
       installedRename: prefixedName(installed),

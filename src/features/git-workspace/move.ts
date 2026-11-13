@@ -47,6 +47,8 @@ import {
   trackingRef,
   type RepoSource,
 } from "./source.js";
+import { defined } from "../../shared/lookup.js";
+import { setYamlName } from "../../shared/patterns.js";
 
 export type MoveRow = {
   kind: string;
@@ -75,6 +77,9 @@ type Candidate = {
   definition?: McpDefinition;
   content?: KnowledgeContent;
 };
+
+const knowledgeOf = (item: Candidate) =>
+  defined(item.content, `${item.name} has no knowledge content`);
 
 /** A one-off destination: nothing about this machine's own setup changes. */
 async function repoDestination(value: string, home: string) {
@@ -111,9 +116,7 @@ function renamed(asset: RepoAsset, name: string): PackageEntry[] {
     entry.path === "hook.yaml"
       ? {
           ...entry,
-          data: Buffer.from(
-            entry.data.toString("utf8").replace(/^name:.*$/m, `name: ${name}`),
-          ),
+          data: Buffer.from(setYamlName(entry.data.toString("utf8"), name)),
         }
       : entry,
   );
@@ -196,7 +199,10 @@ async function moveToGit(
   home: string,
 ): Promise<MoveResult> {
   const shared = await gitRepoSource(workspace, home).model();
-  const tip = (await acceptedCommit(workspace.workspaceId, home))!;
+  const tip = defined(
+    await acceptedCommit(workspace.workspaceId, home),
+    "This Git workspace hasn't been fetched yet",
+  );
   const scope = selectScope(shared, to ?? "org");
   const repo = gitDirectory(workspace.workspaceId, home);
   const rows: MoveRow[] = [];
@@ -228,7 +234,7 @@ async function moveToGit(
           ? [
               {
                 path,
-                data: Buffer.from(knowledgeFile(item.content!)),
+                data: Buffer.from(knowledgeFile(knowledgeOf(item))),
                 executable: false,
               },
             ]
@@ -327,7 +333,11 @@ async function moveToCloud(
           });
         else {
           await publishKnowledge(
-            { id: item.id, version: item.version, content: item.content! },
+            {
+              id: item.id,
+              version: item.version,
+              content: knowledgeOf(item),
+            },
             conn,
             home,
           );
@@ -436,8 +446,10 @@ export function moveLocalAssets(
         kind: row.kind,
         name: row.name,
         ...(row.kind !== "knowledge" ? { originId: result.originId } : {}),
-        path: items.find((i) => i.kind === row.kind && i.name === row.name)!
-          .path,
+        path: defined(
+          items.find((i) => i.kind === row.kind && i.name === row.name),
+          `${row.name} isn't among the moved items`,
+        ).path,
       })),
     );
     if (moved.length)
@@ -466,7 +478,7 @@ export async function listLocalAssets(home = homedir()) {
     folder: settings.localWorkspace.path,
     assets: [
       ...model.assets.map((asset) => ({
-        kind: asset.kind as string,
+        kind: asset.kind,
         name: asset.name,
         path: asset.path,
         state: state(asset.path, asset.invalid),

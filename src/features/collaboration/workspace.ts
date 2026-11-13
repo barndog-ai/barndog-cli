@@ -24,6 +24,7 @@ import {
 import {
   collaborationClient,
   metadata as packageMetadataFor,
+  responseData,
 } from "./domain.js";
 import { assetKinds, type PackageKind } from "../asset-kinds/index.js";
 import {
@@ -52,6 +53,20 @@ import {
 } from "./workspace-github.js";
 
 import { NoWorkingCopyError } from "./workspace-store.js";
+import { defined } from "../../shared/lookup.js";
+import { NAME } from "../../shared/patterns.js";
+
+const publishedId = (work: { skillId?: string | null }) =>
+  defined(work.skillId, "This working copy isn't published yet");
+
+const linkedProposal = <P>(work: { proposal?: P | null }) =>
+  defined(work.proposal, "This working copy has no linked proposal");
+
+const publishedVersion = <V>(change: { publishedVersion?: V | null }) =>
+  defined(
+    change.publishedVersion,
+    "The merged change has no published version",
+  );
 
 export {
   NoWorkingCopyError,
@@ -177,15 +192,15 @@ export async function updateWorkspace(cwd = process.cwd(), home = homedir()) {
         // The author's remote proposal may already have been rebased by another client.
         if (proposal.baseVersionId !== work.baseVersionId) {
           if (proposal.baseVersionId) {
-            const versions = (
+            const versions = responseData(
               await collaborationClient(
                 work.connection.server,
                 home,
                 work.kind,
               ).GET("/v1/skills/{id}/versions", {
-                params: { path: { id: work.skillId! } },
-              })
-            ).data!;
+                params: { path: { id: publishedId(work) } },
+              }),
+            );
             const version = versions.find(
               (v) => v.id === proposal.baseVersionId,
             );
@@ -222,7 +237,7 @@ export async function updateWorkspace(cwd = process.cwd(), home = homedir()) {
             home,
             work.kind,
           ).GET("/v1/skills/{id}", {
-            params: { path: { id: work.skillId! } },
+            params: { path: { id: publishedId(work) } },
           })
         ).data,
       );
@@ -279,6 +294,15 @@ export async function resolveConflict(
   });
 }
 
+/**
+ * A line a three-way merge writes around conflicting text: `<<<<<<< local`,
+ * `||||||| base`, `=======` or `>>>>>>> remote` (seven characters, then a space
+ * and a label or the end of the line).
+ */
+const CONFLICT_MARKER = /^(?:<{7}|\|{7}|={7}|>{7})(?: |$)/m;
+
+export const hasConflictMarkers = (text: string) => CONFLICT_MARKER.test(text);
+
 /** Clears one conflict once its markers are gone; shared by cloud and Git working copies. */
 export async function markResolved(
   work: Pick<
@@ -294,10 +318,7 @@ export async function markResolved(
   if (!conflict) throw new Error("Path is not an unresolved conflict");
   const files = await readDirectory(work.root),
     file = files.find((e) => e.path === conflict);
-  if (
-    file &&
-    /^(<{7}|\|{7}|={7}|>{7})(?: |$)/m.test(textContent(file.data) ?? "")
-  )
+  if (file && hasConflictMarkers(textContent(file.data) ?? ""))
     throw new Error("Remove conflict markers before resolving this file");
   const paths = new Set(files.map((e) => e.path));
   for (const p of paths)
@@ -414,11 +435,11 @@ export async function pushWorkspace(
       proposal?.status === "merged" &&
       proposal.publishedVersion &&
       packageFingerprint(await readDirectory(work.root)) ===
-        packageFingerprint(decodeFiles(work.proposal!.files))
+        packageFingerprint(decodeFiles(linkedProposal(work).files))
     ) {
       work.baseVersionId = proposal.publishedVersion.id;
       work.baseNumber = proposal.publishedVersion.number;
-      work.base = work.proposal!.files;
+      work.base = linkedProposal(work).files;
       await save(work, home);
       return proposal;
     }
@@ -436,7 +457,7 @@ export async function pushWorkspace(
         );
       if (
         proposal?.status === "open" &&
-        proposal.revision !== work.proposal!.revision
+        proposal.revision !== linkedProposal(work).revision
       )
         throw new Error(
           "Suggested Change changed remotely; run barndog pull before pushing",
@@ -446,7 +467,7 @@ export async function pushWorkspace(
         throw new Error("Package name cannot change in this working copy");
       const previous =
         proposal?.status === "open" && !options.new
-          ? work.proposal!.files
+          ? linkedProposal(work).files
           : work.base;
       if (
         packageFingerprint(files) ===
@@ -463,9 +484,9 @@ export async function pushWorkspace(
               })
             ).data,
           );
-          work.baseVersionId = merged.publishedVersion!.id;
-          work.baseNumber = merged.publishedVersion!.number;
-          work.base = work.proposal!.files;
+          work.baseVersionId = publishedVersion(merged).id;
+          work.baseNumber = publishedVersion(merged).number;
+          work.base = linkedProposal(work).files;
           await save(work, home);
           return merged;
         }
@@ -478,7 +499,7 @@ export async function pushWorkspace(
         name: work.name,
         origin: work.origin,
         baseVersionId: work.baseVersionId,
-        expectedRevision: changeId ? work.proposal!.revision : undefined,
+        expectedRevision: changeId ? linkedProposal(work).revision : undefined,
         title: options.title ?? proposal?.title ?? `Update ${work.name}`,
         idempotencyKey: randomUUID(),
       };
@@ -529,8 +550,8 @@ export async function pushWorkspace(
           })
         ).data,
       );
-      work.baseVersionId = proposal.publishedVersion!.id;
-      work.baseNumber = proposal.publishedVersion!.number;
+      work.baseVersionId = publishedVersion(proposal).id;
+      work.baseNumber = publishedVersion(proposal).number;
       work.base = work.proposal.files;
       await save(work, home);
     }
@@ -547,7 +568,7 @@ export async function createWorkspace(
   kind: PackageKind = "skill",
 ) {
   return locked(home, async () => {
-    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name))
+    if (!NAME.test(name))
       throw new Error("Use a lowercase hyphenated package name");
     const conn = await connection(home),
       scope = await selectOrigin(origin, conn, home);

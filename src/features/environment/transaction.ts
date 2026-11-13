@@ -20,13 +20,14 @@ import { nativeFile } from "../native/configuration.js";
 import { z } from "zod";
 import { connectionContext } from "../skills/remote.js";
 import type { JournalIdentity } from "./source.js";
-import { skillName } from "../skills/validation.js";
+import { NAME } from "../../shared/patterns.js";
 import {
   desiredEntries,
   installedRoot,
   mirrorTree,
   treeFingerprint,
 } from "./installed.js";
+import { errorCode } from "../../errors.js";
 
 export type Write =
   | {
@@ -88,7 +89,7 @@ export async function fileText(path: string): Promise<string | null> {
       throw new Error(`Refusing non-regular configuration file: ${path}`);
     return await readFile(path, "utf8");
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    if (errorCode(error) === "ENOENT") return null;
     throw error;
   }
 }
@@ -102,7 +103,7 @@ export async function linkTarget(path: string): Promise<string | null> {
       );
     return resolve(dirname(path), await readlink(path));
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    if (errorCode(error) === "ENOENT") return null;
     throw error;
   }
 }
@@ -137,10 +138,10 @@ function validateWrites(writes: Write[], home: string) {
         ![installedRoot(home, "skill"), installedRoot(home, "hook")].includes(
           dirname(write.path),
         ) ||
-        !skillName.test(basename(write.path)) ||
+        !NAME.test(basename(write.path)) ||
         (write.source !== null && !isAbsolute(write.source)) ||
         (write.after !== null) !== (write.source !== null) ||
-        (write.rename !== null && !skillName.test(write.rename))
+        (write.rename !== null && !NAME.test(write.rename))
       )
         throw new Error("Invalid sync journal destination; refusing recovery");
       continue;
@@ -324,7 +325,7 @@ export async function locked<T>(
   try {
     await mkdir(path);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    if (errorCode(error) !== "EEXIST") throw error;
     const pid = Number(
       await readFile(join(path, "pid"), "utf8").catch(() => "0"),
     );
@@ -336,7 +337,7 @@ export async function locked<T>(
     try {
       process.kill(pid, 0);
     } catch (failure) {
-      if ((failure as NodeJS.ErrnoException).code !== "ESRCH") throw failure;
+      if (errorCode(failure) !== "ESRCH") throw failure;
       await rm(path, { recursive: true });
       return locked(home, run);
     }

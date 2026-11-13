@@ -12,7 +12,7 @@ import type { Settings } from "../../config/settings.js";
 import { openRepoSource } from "../environment/workspace-source.js";
 import { LOCAL_ORIGIN, localOverlay } from "./overlay.js";
 import { assetNotFound } from "../asset-kinds/index.js";
-import { only } from "../../lookup.js";
+import { only } from "../../shared/lookup.js";
 
 /** The repo-backed source that answers for an origin, if any. */
 export function repoForOrigin(

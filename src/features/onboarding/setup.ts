@@ -29,7 +29,7 @@ import {
 } from "../../config/settings.js";
 
 import { connectionContext } from "../skills/remote.js";
-import { defined } from "../../lookup.js";
+import { defined } from "../../shared/lookup.js";
 
 export type HarnessChoice = {
   value: Harness;

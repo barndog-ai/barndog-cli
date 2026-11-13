@@ -44,7 +44,7 @@ import {
   packageKindList,
   type PackageKind,
 } from "../asset-kinds/index.js";
-import { defined } from "../../lookup.js";
+import { defined } from "../../shared/lookup.js";
 import { z } from "zod";
 
 const SOURCES_FILE = ".barndog-sources.json";

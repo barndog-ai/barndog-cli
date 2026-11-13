@@ -1,4 +1,4 @@
-import { CliError } from "../../errors.js";
+import { CliError, errorCode } from "../../errors.js";
 import { randomUUID, createHash } from "node:crypto";
 
 import { join, dirname, isAbsolute } from "node:path";
@@ -22,6 +22,7 @@ import {
 } from "@barndog-ai/api-contract/package";
 import { readDirectory } from "@barndog-ai/api-contract/collaboration";
 import { packageKindList } from "../asset-kinds/index.js";
+import { GIT_OBJECT_ID } from "../../shared/patterns.js";
 
 const filesSchema = z.array(
   z.object({ path: z.string(), content: z.string(), executable: z.boolean() }),
@@ -102,14 +103,14 @@ const gitWorkspaceSchema = z.object({
     slug: z.string(),
     path: z.string(),
   }),
-  baseCommit: z.string().regex(/^[0-9a-f]{40}$/),
+  baseCommit: z.string().regex(GIT_OBJECT_ID),
   base: filesSchema,
   conflicts: z.array(z.string()),
   /** The branch under review; it stays until its content reaches the default branch. */
   review: z
     .object({
       branch: z.string(),
-      head: z.string().regex(/^[0-9a-f]{40}$/),
+      head: z.string().regex(GIT_OBJECT_ID),
       files: filesSchema,
       url: z.string().optional(),
     })
@@ -168,7 +169,7 @@ export async function locked<T>(home: string, run: () => Promise<T>) {
   try {
     await mkdir(lock);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    if (errorCode(error) !== "EEXIST") throw error;
     const pid = Number(
       await readFile(join(lock, "pid"), "utf8").catch(() => "0"),
     );
@@ -180,7 +181,7 @@ export async function locked<T>(home: string, run: () => Promise<T>) {
     try {
       process.kill(pid, 0);
     } catch (failure) {
-      if ((failure as NodeJS.ErrnoException).code !== "ESRCH") throw failure;
+      if (errorCode(failure) !== "ESRCH") throw failure;
       await rm(lock, { recursive: true });
       return locked(home, run);
     }
@@ -240,9 +241,9 @@ async function findRecord<T extends StoredRecord>(
           throw new Error(
             "Interrupted workspace update has no recovery snapshot",
           );
-        const snapshot = JSON.parse(
-          await readFile(work.pendingSnapshot, "utf8"),
-        ) as { files: Files };
+        const snapshot = z
+          .object({ files: filesSchema })
+          .parse(JSON.parse(await readFile(work.pendingSnapshot, "utf8")));
         const allowed = [
           ...decodeFiles(snapshot.files),
           ...decodeFiles(work.pendingWrite),
@@ -266,7 +267,7 @@ async function findRecord<T extends StoredRecord>(
       }
       return work;
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      if (errorCode(error) !== "ENOENT") throw error;
     }
     if (dirname(path) === path) break;
     path = dirname(path);

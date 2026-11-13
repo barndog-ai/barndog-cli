@@ -17,7 +17,7 @@ import {
 } from "./format.js";
 import { git, GitError, gitReason, gitText } from "./git.js";
 import { folderSnapshot, gitSnapshot, type Snapshot } from "./snapshot.js";
-import { defined } from "../../lookup.js";
+import { defined } from "../../shared/lookup.js";
 import { z } from "zod";
 
 /** A workspace read from files; adds what cloud answers through other endpoints. */

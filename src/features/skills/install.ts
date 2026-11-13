@@ -8,7 +8,7 @@ import {
 } from "../../config/settings.js";
 import { catalog } from "./remote.js";
 import { sync } from "./sync.js";
-import { only } from "../../lookup.js";
+import { only } from "../../shared/lookup.js";
 
 export async function installSkill(
   name: string,

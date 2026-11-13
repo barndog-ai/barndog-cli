@@ -57,12 +57,17 @@ import {
   save,
   type GitWorkingCopy,
 } from "./workspace-store.js";
+import { defined, only } from "../../shared/lookup.js";
+import { NAME, splitOrigin } from "../../shared/patterns.js";
 
 async function latest(workspace: GitWorkspace, home: string) {
   const model = await gitRepoSource(workspace, home).model();
   return {
     model,
-    commit: (await acceptedCommit(workspace.workspaceId, home))!,
+    commit: defined(
+      await acceptedCommit(workspace.workspaceId, home),
+      "This Git workspace hasn't been fetched yet",
+    ),
   };
 }
 
@@ -78,31 +83,33 @@ function selectAsset(
       asset.name === name &&
       matchesOrigin(asset.origin, origin, model),
   );
-  if (matches.length !== 1) throw assetNotFound(kind, name, origin);
-  return matches[0]!;
+  const match = only(matches);
+  if (!match) throw assetNotFound(kind, name, origin);
+  return match;
 }
 
 export function selectScope(model: WorkspaceModel, origin: string) {
   const matches = model.scopes.filter((scope) =>
     matchesOrigin(scope, origin, model),
   );
-  if (origin === "me" || /^dev[/:]/.test(origin))
+  const { type, value: slug } = splitOrigin(origin);
+  if (origin === "me" || (type === "dev" && slug !== undefined))
     throw new CliError(
       "Personal scopes don't exist in a Git repo workspace. Use org, team/<slug> or repo/<slug>.",
     );
-  if (!matches.length && /^(team|repo)[/:]/.test(origin)) {
-    const [type, slug] = origin.split(/[/:]/) as ["team" | "repo", string];
+  if (!matches.length && (type === "team" || type === "repo") && slug) {
     return {
       type,
       slug,
       path: `${type === "team" ? "teams" : "repos"}/${slug}`,
-    };
+    } as const;
   }
-  if (matches.length !== 1)
+  const match = only(matches);
+  if (!match)
     throw new CliError(
       `No scope named ${origin}. Use org, team/<slug> or repo/<slug>.`,
     );
-  return pickScope(matches[0]!);
+  return pickScope(match);
 }
 
 const pickScope = (scope: RepoScope) => ({
@@ -194,7 +201,7 @@ export function createGitAsset(
 ) {
   const kind = options.kind ?? "skill";
   return locked(home, async () => {
-    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(options.name))
+    if (!NAME.test(options.name))
       throw new Error("Use a lowercase hyphenated package name");
     const { model, commit } = await latest(workspace, home);
     const scope = selectScope(model, options.origin);
@@ -243,23 +250,18 @@ const assetIn = (model: WorkspaceModel, work: GitWorkingCopy) =>
 const fingerprint = (entries: PackageEntry[]) => packageFingerprint(entries);
 
 async function branchFiles(work: GitWorkingCopy, head: string, home: string) {
+  const { branch } = defined(
+    work.review,
+    "This working copy has no review branch",
+  );
   const repo = gitDirectory(work.git.workspaceId, home);
   await git(
-    [
-      "fetch",
-      "--quiet",
-      "--no-tags",
-      "origin",
-      `refs/heads/${work.review!.branch}`,
-    ],
+    ["fetch", "--quiet", "--no-tags", "origin", `refs/heads/${branch}`],
     { repo },
   );
   const model = await loadWorkspace(await gitSnapshot(repo, head));
   const asset = assetIn(model, work);
-  if (!asset)
-    throw new CliError(
-      `${work.review!.branch} no longer contains ${work.name}.`,
-    );
+  if (!asset) throw new CliError(`${branch} no longer contains ${work.name}.`);
   return usable(asset).entries;
 }
 
@@ -469,12 +471,14 @@ async function assetHistory(repo: string, commit: string, path: string) {
     .filter(Boolean)
     .map((line, index) => {
       const [hash, time, author, subject] = line.split("\0");
+      if (!hash || author === undefined || subject === undefined)
+        throw new Error(`Unexpected git log line: ${line}`);
       return {
         number: index + 1,
-        commit: hash!,
+        commit: hash,
         publishedAt: new Date(Number(time) * 1000).toISOString(),
-        publishedBy: author!,
-        description: subject!,
+        publishedBy: author,
+        description: subject,
       };
     });
 }
@@ -484,7 +488,7 @@ async function filesAt(repo: string, commit: string, path: string) {
   const single = snapshot.entries.find((entry) => entry.path === path);
   const members =
     single && single.mode !== TREE_MODE
-      ? [{ ...single, path: path.split("/").at(-1)! }]
+      ? [{ ...single, path: path.slice(path.lastIndexOf("/") + 1) }]
       : snapshot.entries
           .filter(
             (entry) => entry.path.startsWith(`${path}/`) && isBlob(entry.mode),
@@ -496,7 +500,10 @@ async function filesAt(repo: string, commit: string, path: string) {
   const blobs = await snapshot.readBlobs(members.map((entry) => entry.hash));
   return members.map((entry): PackageEntry => ({
     path: entry.path,
-    data: blobs.get(entry.hash)!,
+    data: defined(
+      blobs.get(entry.hash),
+      `Git object ${entry.hash} wasn't read`,
+    ),
     executable: entry.mode === "100755",
   }));
 }

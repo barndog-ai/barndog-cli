@@ -117,7 +117,7 @@ import { interactiveTerminal } from "./ui/pick.js";
 import { promptClash } from "./ui/clash.js";
 import { primary } from "./ui/theme.js";
 import { versionReport } from "./version.js";
-import { defined } from "./lookup.js";
+import { defined } from "./shared/lookup.js";
 
 type ProgramOptions = Partial<Omit<CommandContext, "mode">> & {
   writeError?: (message: string) => void;

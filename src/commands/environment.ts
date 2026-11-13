@@ -398,10 +398,10 @@ export function registerEnvironment(program: Command, context: CommandContext) {
               { empty: `No ${labels.many} to rename on this machine.` },
             );
             target = item.id;
-            const [type, slug] = item.origin.split("/");
+            const [type = "", slug = ""] = item.origin.split("/");
             suggestion = prefixedName({
               name: item.name,
-              origin: { type: type!, slug: slug ?? "" },
+              origin: { type, slug },
             });
           }
           const as = options.reset
@@ -423,10 +423,11 @@ export function registerEnvironment(program: Command, context: CommandContext) {
             }),
           );
           // A clash prompt during the sync may have chosen a different name.
+          const renamed = target;
           const item = (await context.inventory()).items.find(
             (entry) =>
               entry.kind === kind &&
-              [entry.id, entry.name, entry.installedName].includes(target!) &&
+              [entry.id, entry.name, entry.installedName].includes(renamed) &&
               (!options.origin || entry.origin === options.origin),
           );
           if (item && !context.mode.json)
@@ -534,6 +535,14 @@ export function registerEnvironment(program: Command, context: CommandContext) {
   }
   registerSets(program, context);
 }
+
+/** Options of the `sets` subcommands, as Commander parses them. */
+type SetOptions = {
+  origin?: string;
+  mode?: "recommended" | "optional" | "all";
+  overrides?: "preserve" | "clear";
+  decisions?: string;
+};
 
 function registerSets(program: Command, context: CommandContext) {
   const sets = program
@@ -677,7 +686,7 @@ function registerSets(program: Command, context: CommandContext) {
           ).choices(["preserve", "clear"]),
         )
         .option("--decisions <file>", "JSON per-asset override choices");
-    command.action(async (scope: string | undefined, options) => {
+    command.action(async (scope: string | undefined, options: SetOptions) => {
       let origin = scope ?? options.origin;
       if (!origin) {
         requireArguments(context, `barndog sets ${action} <scope>`);
@@ -717,7 +726,7 @@ function registerSets(program: Command, context: CommandContext) {
         ).choices(["preserve", "clear"]),
       )
       .option("--decisions <file>", "JSON per-asset override choices")
-      .action(async (scope: string | undefined, options) => {
+      .action(async (scope: string | undefined, options: SetOptions) => {
         let origin =
           scope && name === "switch-team" && !scope.includes("/")
             ? `team/${scope}`

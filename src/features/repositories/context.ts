@@ -11,7 +11,7 @@ import type { Connection } from "../../config/settings.js";
 import { connection } from "../collaboration/remote.js";
 import { request } from "../environment/remote.js";
 import { errorCode } from "../../errors.js";
-import { only } from "../../lookup.js";
+import { only } from "../../shared/lookup.js";
 
 const execute = promisify(execFile);
 

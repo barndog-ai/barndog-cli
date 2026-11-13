@@ -6,7 +6,8 @@ import {
   type Harness,
 } from "../harnesses/registry.js";
 import { treeFingerprint } from "../features/environment/installed.js";
-import { isRecord, uuid, skillName } from "../features/skills/validation.js";
+import { isRecord } from "../shared/values.js";
+import { NAME, UUID_V4 } from "../shared/patterns.js";
 
 export type Link = {
   id: string;
@@ -43,13 +44,12 @@ async function withoutRepeatedLinks(links: unknown[], installed: unknown) {
             (other) => isRecord(other) && other.target === link.target,
           )
         : -1;
-    if (index < 0) {
+    const held = kept[index];
+    if (!isRecord(link) || !isRecord(held)) {
       kept.push(link);
       continue;
     }
-    const held = kept[index] as Record<string, unknown>;
-    if ((await score(link as Record<string, unknown>)) > (await score(held)))
-      kept[index] = link;
+    if ((await score(link)) > (await score(held))) kept[index] = link;
   }
   return kept;
 }
@@ -67,17 +67,18 @@ export async function readState(path: string, home: string): Promise<State> {
     throw new Error("Invalid installation state");
   const links = await withoutRepeatedLinks(value.links, value.installed);
   const targets = new Set<string>();
+  const checked: Link[] = [];
   for (const link of links) {
     if (
       !isRecord(link) ||
       typeof link.id !== "string" ||
-      !uuid.test(link.id) ||
+      !UUID_V4.test(link.id) ||
       !isHarness(link.harness) ||
       typeof link.source !== "string" ||
       !isAbsolute(link.source) ||
       typeof link.target !== "string" ||
       dirname(link.target) !== skillDirectory(link.harness, home) ||
-      !skillName.test(basename(link.target)) ||
+      !NAME.test(basename(link.target)) ||
       targets.has(link.target)
     ) {
       throw new Error(
@@ -85,8 +86,15 @@ export async function readState(path: string, home: string): Promise<State> {
       );
     }
     targets.add(link.target);
+    checked.push({
+      ...link,
+      id: link.id,
+      harness: link.harness,
+      source: link.source,
+      target: link.target,
+    });
   }
-  return { ...value, links } as State;
+  return { ...value, version: 1, links: checked };
 }
 
 export async function saveState(path: string, state: State) {

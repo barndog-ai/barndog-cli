@@ -14,7 +14,7 @@ import { renderCollaboration } from "../ui/collaboration.js";
 import { dim, json, ok } from "../ui/format.js";
 import { renderSyncOutput } from "../ui/output.js";
 import type { CommandContext } from "./context.js";
-import { defined } from "../lookup.js";
+import { defined } from "../shared/lookup.js";
 
 const updates = () =>
   new Option("--updates <mode>", "Stay current: fork, manual or auto").choices([

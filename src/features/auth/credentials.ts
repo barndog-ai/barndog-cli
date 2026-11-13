@@ -11,6 +11,11 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { contextSchema, type ActorContext } from "@barndog-ai/api-contract";
+import { z } from "zod";
+import { errorCode } from "../../errors.js";
+
+/** A BarnDog session token: 32 random bytes in unpadded base64url, 43 characters. */
+export const SESSION_TOKEN = /^[\w-]{43}$/;
 
 export type Credential = {
   token: string;
@@ -18,11 +23,22 @@ export type Credential = {
   context: ActorContext;
 };
 
-type Credentials = {
-  version: 1;
-  selectedServer?: string;
-  servers: Record<string, Credential>;
-};
+const credentialsSchema = z.looseObject({
+  version: z.literal(1),
+  selectedServer: z.string().optional(),
+  servers: z.record(
+    z.string(),
+    z.looseObject({
+      token: z.string().regex(SESSION_TOKEN),
+      expiresAt: z
+        .string()
+        .refine((value) => Number.isFinite(Date.parse(value))),
+      context: contextSchema,
+    }),
+  ),
+});
+
+type Credentials = z.infer<typeof credentialsSchema>;
 
 export async function readCredentials(home = homedir()): Promise<Credentials> {
   const path = join(home, ".barndog", "credentials.json");
@@ -32,29 +48,13 @@ export async function readCredentials(home = homedir()): Promise<Credentials> {
       throw new Error(
         "Credentials file must be a regular file accessible only to its owner",
       );
-    const value = JSON.parse(await readFile(path, "utf8")) as Credentials;
-    if (
-      value.version !== 1 ||
-      !value.servers ||
-      typeof value.servers !== "object" ||
-      Array.isArray(value.servers) ||
-      (value.selectedServer !== undefined &&
-        typeof value.selectedServer !== "string")
-    )
-      throw new Error("Invalid credentials file");
-    for (const entry of Object.values(value.servers)) {
-      if (
-        !entry ||
-        !/^[A-Za-z0-9_-]{43}$/.test(entry.token) ||
-        !Number.isFinite(Date.parse(entry.expiresAt))
-      )
-        throw new Error("Invalid credentials file");
-      contextSchema.parse(entry.context);
-    }
-    return value;
+    const parsed = credentialsSchema.safeParse(
+      JSON.parse(await readFile(path, "utf8")),
+    );
+    if (!parsed.success) throw new Error("Invalid credentials file");
+    return parsed.data;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT")
-      return { version: 1, servers: {} };
+    if (errorCode(error) === "ENOENT") return { version: 1, servers: {} };
     throw error;
   }
 }
@@ -70,8 +70,8 @@ export async function updateCredentials(
     throw new Error("Credentials directory must be a regular directory");
   await chmod(root, 0o700);
   const lock = join(root, "credentials.lock");
-  await mkdir(lock, { mode: 0o700 }).catch((error: NodeJS.ErrnoException) => {
-    if (error.code === "EEXIST")
+  await mkdir(lock, { mode: 0o700 }).catch((error: unknown) => {
+    if (errorCode(error) === "EEXIST")
       throw new Error("Another login or logout is running");
     throw error;
   });

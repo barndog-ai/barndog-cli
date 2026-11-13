@@ -26,7 +26,7 @@ import {
   applyFiles,
   type Workspace,
 } from "./workspace-store.js";
-import { defined } from "../../lookup.js";
+import { defined } from "../../shared/lookup.js";
 
 const publishedId = (work: { skillId?: string | null }) =>
   defined(work.skillId, "This working copy isn't published yet");

@@ -9,7 +9,10 @@ import {
 import { resolve } from "node:path";
 import { CliError, friendlyHint, friendlyMessage } from "../errors.js";
 import { ApiError } from "@barndog-ai/api-contract";
-import type { PushOptions } from "../features/collaboration/index.js";
+import type {
+  CommentOptions,
+  PushOptions,
+} from "../features/collaboration/index.js";
 import {
   assetKinds,
   packageKindList,
@@ -18,9 +21,17 @@ import {
 import { pickOne } from "../ui/pick.js";
 import { resolveOrigin } from "./origin.js";
 import { clean, json, ORIGIN_HELP, originLabel, warn } from "../ui/format.js";
+import { defined } from "../shared/lookup.js";
+import { POSITIVE_INTEGER } from "../shared/patterns.js";
+
+function side(value: string) {
+  if (value !== "old" && value !== "new")
+    throw new InvalidArgumentError("Expected old or new");
+  return value;
+}
 
 function positive(value: string) {
-  if (!/^[1-9][0-9]*$/.test(value) || !Number.isSafeInteger(Number(value)))
+  if (!POSITIVE_INTEGER.test(value) || !Number.isSafeInteger(Number(value)))
     throw new InvalidArgumentError("Expected a positive integer");
   return Number(value);
 }
@@ -95,7 +106,10 @@ export function registerCollaboration(
   };
   const noun = assetKinds[kind].one;
   const group = assetKinds[kind].command;
-  const kindCommand = program.commands.find((c) => c.name() === group)!;
+  const kindCommand = defined(
+    program.commands.find((c) => c.name() === group),
+    `Command group ${group} isn't registered`,
+  );
   /** Fills a missing name and origin from a searchable catalog list. */
   const choose = async (
     name: string | undefined,
@@ -134,17 +148,26 @@ export function registerCollaboration(
     .description(
       `Download a ${noun} into an editable folder to change and propose edits`,
     )
-    .action(async (name, options) => {
-      const target = {
-        ...options,
-        ...(await choose(name, options.origin, `barndog ${group} pull <name>`)),
-      };
-      const pulled = context.pullPackage(withKind(target));
-      await run(pulled);
-      await warnDivergence(
-        (await pulled)?.root ?? resolve(target.directory ?? target.name),
-      );
-    });
+    .action(
+      async (
+        name: string | undefined,
+        options: { origin?: string; directory?: string },
+      ) => {
+        const target = {
+          ...options,
+          ...(await choose(
+            name,
+            options.origin,
+            `barndog ${group} pull <name>`,
+          )),
+        };
+        const pulled = context.pullPackage(withKind(target));
+        await run(pulled);
+        await warnDivergence(
+          (await pulled)?.root ?? resolve(target.directory ?? target.name),
+        );
+      },
+    );
   if (kind === "skill") {
     program
       .command("pull")
@@ -175,7 +198,7 @@ export function registerCollaboration(
     program
       .command("resolve <path>")
       .description("Mark a conflicted file in this working copy as resolved")
-      .action((path) => run(context.resolveFile(path)));
+      .action((path: string) => run(context.resolveFile(path)));
   }
   for (const [name, description] of [
     [
@@ -195,23 +218,33 @@ export function registerCollaboration(
       command
         .requiredOption("--from <number>", "Old version", positive)
         .requiredOption("--to <number>", "New version", positive);
-    command.action(async (asset, options) => {
-      const target = withKind({
-        ...options,
-        ...(await choose(
-          asset,
-          options.origin,
-          `barndog ${group} ${name} <name>`,
-        )),
-      });
-      await run(
-        name === "versions"
-          ? context.packageVersions(target)
-          : name === "show"
-            ? context.versionFiles(target)
-            : context.diffVersions(target),
-      );
-    });
+    command.action(
+      async (
+        asset: string | undefined,
+        options: {
+          origin?: string;
+          version?: number;
+          from: number;
+          to: number;
+        },
+      ) => {
+        const target = withKind({
+          ...options,
+          ...(await choose(
+            asset,
+            options.origin,
+            `barndog ${group} ${name} <name>`,
+          )),
+        });
+        await run(
+          name === "versions"
+            ? context.packageVersions(target)
+            : name === "show"
+              ? context.versionFiles(target)
+              : context.diffVersions(target),
+        );
+      },
+    );
   }
   kindCommand
     .command("push [name]")
@@ -223,7 +256,9 @@ export function registerCollaboration(
     .option("--publish", "Publish with direct authority")
     .option("--new", "Start a new proposal")
     .option("--title <title>", "Proposal title")
-    .action((name, options) => push({ ...options, name }));
+    .action((name: string | undefined, options: PushOptions) =>
+      push({ ...options, name }),
+    );
   kindCommand
     .command("create <name>")
     .requiredOption("--origin <origin>", ORIGIN_HELP)
@@ -231,7 +266,7 @@ export function registerCollaboration(
     .description(
       `Start a new ${noun} in an editable folder (not installed until published)`,
     )
-    .action((name, options) =>
+    .action((name: string, options: { origin: string; directory?: string }) =>
       run(context.createPackage(withKind({ ...options, name }))),
     );
   for (const parent of kind === "hook" ? [kindCommand] : [program, kindCommand])
@@ -254,7 +289,7 @@ function registerChanges(
   changes
     .command("show <id>")
     .description("Read proposal content, reviews, and discussion history")
-    .action((id) =>
+    .action((id: string) =>
       run(context.showChange(withKind({ id })), {
         changeId: id,
         details: true,
@@ -269,8 +304,11 @@ function registerChanges(
       "Compare to another proposal revision",
       positive,
     )
-    .action((id, options) =>
-      run(context.changeDiff(withKind({ ...options, id })), { changeId: id }),
+    .action(
+      (id: string, options: { revision?: number; fromRevision?: number }) =>
+        run(context.changeDiff(withKind({ ...options, id })), {
+          changeId: id,
+        }),
     );
   for (const [name, description] of [
     ["approve", "Approve a reviewed revision"],
@@ -282,7 +320,7 @@ function registerChanges(
       .command(`${name} <id>`)
       .description(description)
       .requiredOption("--revision <number>", "Revision you reviewed", positive)
-      .action((id, options) => {
+      .action((id: string, options: { revision: number }) => {
         const target = withKind({ ...options, id });
         return run(
           name === "reject"
@@ -301,12 +339,12 @@ function registerChanges(
     .option("--body-file <path>", "Read comment text from a file")
     .option("--thread <id>", "Reply to a discussion")
     .option("--path <path>", "Package file for an inline discussion")
-    .option("--side <side>", "old or new")
+    .option("--side <side>", "old or new", side)
     .option("--start-line <number>", "First line", positive)
     .option("--end-line <number>", "Last line", positive)
     .option("--replacement-file <path>", "Replacement text file")
     .option("--expected-file <path>", "Exact original text file")
-    .action((id, options) =>
+    .action((id: string, options: Omit<CommentOptions, "id" | "kind">) =>
       run(context.commentOnChange(withKind({ ...options, id })), {
         changeId: id,
         thread: options.thread,
@@ -325,7 +363,7 @@ function registerChanges(
         "Current proposal revision",
         positive,
       )
-      .action((id, thread, options) => {
+      .action((id: string, thread: string, options: { revision: number }) => {
         const target = withKind({ ...options, id, thread });
         return run(
           name === "apply"

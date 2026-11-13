@@ -3,6 +3,7 @@ import { constants } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
 import { harnesses, adapters, type DetectedHarness } from "./registry.js";
+import { errorCode } from "../errors.js";
 
 type DetectionOptions = {
   home?: string;
@@ -18,11 +19,7 @@ async function exists(path: string, directory = false): Promise<boolean> {
     await access(path, constants.X_OK);
     return info.isFile();
   } catch (error) {
-    if (
-      ["ENOENT", "ENOTDIR", "EACCES"].includes(
-        (error as NodeJS.ErrnoException).code ?? "",
-      )
-    )
+    if (["ENOENT", "ENOTDIR", "EACCES"].includes(errorCode(error) ?? ""))
       return false;
     throw error;
   }

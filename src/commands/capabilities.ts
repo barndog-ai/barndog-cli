@@ -38,7 +38,7 @@ import type {
 } from "../features/github/pulls.js";
 import type { Harness } from "../harnesses/types.js";
 import { packageKindList } from "../features/asset-kinds/index.js";
-import { defined } from "../lookup.js";
+import { defined } from "../shared/lookup.js";
 
 function positive(value: string) {
   const result = Number(value);

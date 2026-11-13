@@ -9,6 +9,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { join } from "node:path";
+import { z } from "zod";
 import {
   defaultLimits,
   parsePackage,
@@ -21,6 +22,8 @@ import type { Connection } from "../../config/settings.js";
 import { serverFetch } from "../auth/transport.js";
 import { assetKinds, type PackageKind } from "../asset-kinds/index.js";
 import { metadata } from "../collaboration/domain.js";
+import { errorCode } from "../../errors.js";
+import { GIT_OBJECT_ID } from "../../shared/patterns.js";
 
 /** One identity's cache partition: server, organization and developer never mix. */
 export function cacheKey(conn: Connection) {
@@ -47,7 +50,7 @@ export async function pruneCache(
     try {
       return await readdir(path);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+      if (errorCode(error) === "ENOENT") return [];
       throw error;
     }
   };
@@ -58,7 +61,7 @@ export async function pruneCache(
       for (const revision of await children(directory)) {
         const path = join(directory, revision);
         if (keep.has(path)) continue;
-        if (!/^[0-9a-f]{40}$/.test(revision) && !revision.startsWith(".stage-"))
+        if (!GIT_OBJECT_ID.test(revision) && !revision.startsWith(".stage-"))
           continue;
         await rm(path, { recursive: true, force: true });
         removed++;
@@ -86,24 +89,27 @@ export async function storePackage(
   );
   await mkdir(parent, { recursive: true, mode: 0o700 });
   const check = async (root: string) => {
-    const saved = JSON.parse(
-      await readFile(join(root, "manifest.json"), "utf8"),
-    );
+    const saved = z
+      .object({ fingerprint: z.string() })
+      .safeParse(
+        JSON.parse(await readFile(join(root, "manifest.json"), "utf8")),
+      );
     if (
-      typeof saved.fingerprint !== "string" ||
-      (await directoryFingerprint(join(root, asset.name))) !== saved.fingerprint
+      !saved.success ||
+      (await directoryFingerprint(join(root, asset.name))) !==
+        saved.data.fingerprint
     )
       throw new Error(`Cached ${kind} was modified locally: ${asset.name}`);
   };
   for (const revision of await readdir(parent))
-    if (/^[0-9a-f]{40}$/.test(revision)) await check(join(parent, revision));
+    if (GIT_OBJECT_ID.test(revision)) await check(join(parent, revision));
   const target = join(parent, asset.revision);
   try {
     await lstat(target);
     await check(target);
     return join(target, asset.name);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    if (errorCode(error) !== "ENOENT") throw error;
   }
   const entries = await load();
   const stage = join(parent, `.stage-${randomUUID()}`);

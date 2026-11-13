@@ -3,9 +3,12 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { parse, stringify } from "yaml";
+import { z } from "zod";
 import type { SelectionState } from "../features/asset-selection/types.js";
 import { selectionStateSchema } from "./environment.js";
 import { isHarness, type Harness } from "../harnesses/registry.js";
+import { errorCode } from "../errors.js";
+import { NAME, UUID_V4 } from "../shared/patterns.js";
 
 export type SkillSelection = { id: string; source: string; enabled: boolean };
 
@@ -74,122 +77,135 @@ export function settingsPath(home = homedir()): string {
   return join(home, ".barndog", "config.yaml");
 }
 
-const uuidPattern =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const uuid = z.string().regex(UUID_V4);
+
+// Loose objects keep keys this version doesn't know, as the file had them.
+const headerSchema = z.looseObject({
+  version: z.union([z.literal(1), z.literal(2)]),
+  harnesses: z
+    .array(z.custom<Harness>(isHarness))
+    .refine((list) => new Set(list).size === list.length),
+  skills: z.array(z.unknown()),
+});
+
+const legacySkillSchema = z.looseObject({
+  id: z.string(),
+  source: z.string(),
+  enabled: z.boolean(),
+});
+
+const skillSchema = z.union([
+  z.looseObject({
+    kind: z.literal("local"),
+    id: uuid,
+    enabled: z.boolean(),
+    source: z.string().refine((source) => source.trim() !== ""),
+  }),
+  z.looseObject({ kind: z.literal("api"), id: uuid, enabled: z.boolean() }),
+]);
+
+const connectionSchema = z.looseObject({
+  server: z.string().regex(/^https?:\/\//),
+  organizationId: z.string(),
+  developerId: z.string(),
+});
+
+const gitWorkspaceSchema = z.looseObject({
+  url: z
+    .string()
+    .min(1)
+    .refine((url) => !url.startsWith("-")),
+  branch: z.string().min(1),
+  workspaceId: uuid,
+});
+
+const localWorkspaceSchema = z.looseObject({
+  path: z.string().refine(isAbsolute),
+  workspaceId: uuid,
+});
+
+const localNamesSchema = z.record(uuid, z.string().regex(NAME).max(64));
+
+/** Every part of a version-2 file; each optional key is named only here. */
+const settingsV2Schema = headerSchema.extend({
+  version: z.literal(2),
+  skills: z.array(skillSchema),
+  connection: connectionSchema.optional(),
+  gitWorkspace: gitWorkspaceSchema.optional(),
+  localWorkspace: localWorkspaceSchema.optional(),
+  // Lazy: config/environment.ts imports this module, so its schema isn't ready yet.
+  environment: z.lazy(() => selectionStateSchema).optional(),
+  knowledge: z.boolean().optional(),
+  localNames: localNamesSchema.optional(),
+});
+
+const invalidSkill = "Invalid user settings: invalid skill selection";
+
+/** What to say about an invalid part, keyed by the field Zod reports it under. */
+const invalidPart = {
+  skills: invalidSkill,
+  connection: "Invalid user settings: invalid server connection",
+  gitWorkspace: "Invalid user settings: invalid Git workspace",
+  localWorkspace: "Invalid user settings: invalid local workspace",
+  environment: "Invalid user settings: invalid asset selection",
+  knowledge: "Invalid knowledge integration setting",
+  localNames:
+    "Invalid user settings: localNames maps asset IDs to lowercase hyphenated names",
+} satisfies Partial<Record<keyof typeof settingsV2Schema.shape, string>>;
+
+const isInvalidPart = (key: unknown): key is keyof typeof invalidPart =>
+  typeof key === "string" && Object.hasOwn(invalidPart, key);
+
+/** Parses one part of the settings, failing with `message` instead of Zod's issues. */
+function part<T>(schema: z.ZodType<T>, value: unknown, message: string): T {
+  const result = schema.safeParse(value);
+  if (!result.success) throw new Error(message);
+  return result.data;
+}
 
 function validate(value: unknown): Settings {
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    !("version" in value) ||
-    (value.version !== 1 && value.version !== 2) ||
-    !("harnesses" in value) ||
-    !Array.isArray(value.harnesses) ||
-    !value.harnesses.every(isHarness) ||
-    new Set(value.harnesses).size !== value.harnesses.length ||
-    !("skills" in value) ||
-    !Array.isArray(value.skills)
-  ) {
+  const header = part(
+    headerSchema,
+    value,
+    "Invalid user settings: expected version: 1 or 2, a unique harnesses list (claude, codex, cursor), and a skills array",
+  );
+  if (header.version === 1)
+    return {
+      ...header,
+      version: 1,
+      skills: part(z.array(legacySkillSchema), header.skills, invalidSkill),
+    };
+  const result = settingsV2Schema.safeParse(header);
+  if (!result.success) {
+    const field = result.error.issues[0]?.path[0];
     throw new Error(
-      "Invalid user settings: expected version: 1 or 2, a unique harnesses list (claude, codex, cursor), and a skills array",
+      isInvalidPart(field) ? invalidPart[field] : "Invalid user settings",
     );
   }
-  if (value.version === 2) {
-    if ("environment" in value) selectionStateSchema.parse(value.environment);
-    if ("knowledge" in value && typeof value.knowledge !== "boolean")
-      throw new Error("Invalid knowledge integration setting");
-    if (
-      "localNames" in value &&
-      (typeof value.localNames !== "object" ||
-        value.localNames === null ||
-        Array.isArray(value.localNames) ||
-        Object.entries(value.localNames).some(
-          ([id, name]) =>
-            !uuidPattern.test(id) ||
-            typeof name !== "string" ||
-            !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name) ||
-            name.length > 64,
-        ))
-    )
-      throw new Error(
-        "Invalid user settings: localNames maps asset IDs to lowercase hyphenated names",
-      );
-    for (const skill of value.skills) {
-      if (
-        !skill ||
-        typeof skill !== "object" ||
-        !["local", "api"].includes(skill.kind) ||
-        typeof skill.id !== "string" ||
-        !uuidPattern.test(skill.id) ||
-        typeof skill.enabled !== "boolean" ||
-        (skill.kind === "local" &&
-          (typeof skill.source !== "string" || !skill.source.trim()))
-      )
-        throw new Error("Invalid user settings: invalid skill selection");
-    }
-    if (
-      new Set(value.skills.map((skill) => skill.id.toLowerCase())).size !==
-      value.skills.length
-    )
-      throw new Error("Invalid user settings: duplicate Skill ID");
-    const connection =
-      "connection" in value ? (value.connection as Connection) : undefined;
-    if (
-      connection &&
-      (typeof connection.server !== "string" ||
-        !/^https?:\/\//.test(connection.server) ||
-        typeof connection.organizationId !== "string" ||
-        typeof connection.developerId !== "string")
-    )
-      throw new Error("Invalid user settings: invalid server connection");
-    const git =
-      "gitWorkspace" in value
-        ? (value.gitWorkspace as GitWorkspace)
-        : undefined;
-    const local =
-      "localWorkspace" in value
-        ? (value.localWorkspace as LocalWorkspace)
-        : undefined;
-    if (
-      git &&
-      (typeof git.url !== "string" ||
-        !git.url ||
-        git.url.startsWith("-") ||
-        typeof git.branch !== "string" ||
-        !git.branch ||
-        !uuidPattern.test(git.workspaceId))
-    )
-      throw new Error("Invalid user settings: invalid Git workspace");
-    if (
-      local &&
-      (typeof local.path !== "string" ||
-        !isAbsolute(local.path) ||
-        !uuidPattern.test(local.workspaceId))
-    )
-      throw new Error("Invalid user settings: invalid local workspace");
-    if (connection && git)
-      throw new Error(
-        "Invalid user settings: use only one of connection and gitWorkspace",
-      );
-    if (value.skills.some((skill) => skill.kind === "api") && !connection)
-      throw new Error(
-        "Invalid user settings: API selections require a connection",
-      );
-    if (
-      "environment" in value &&
-      (() => {
-        const state = selectionStateSchema.parse(value.environment);
-        return state.subscriptions.length || state.individualAssetIds.length;
-      })() &&
-      !connection &&
-      !git &&
-      !local
-    )
-      throw new Error(
-        "Invalid user settings: API selections require a connection",
-      );
-  }
-  return value as Settings;
+  const settings = result.data;
+  const { skills, connection, gitWorkspace, localWorkspace, environment } =
+    settings;
+  if (
+    new Set(skills.map((skill) => skill.id.toLowerCase())).size !==
+    skills.length
+  )
+    throw new Error("Invalid user settings: duplicate Skill ID");
+  if (connection && gitWorkspace)
+    throw new Error(
+      "Invalid user settings: use only one of connection and gitWorkspace",
+    );
+  const selectsRemoteAssets =
+    skills.some((skill) => skill.kind === "api") ||
+    (environment &&
+      (environment.subscriptions.length ||
+        environment.individualAssetIds.length) &&
+      !gitWorkspace &&
+      !localWorkspace);
+  if (selectsRemoteAssets && !connection)
+    throw new Error(
+      "Invalid user settings: API selections require a connection",
+    );
+  return settings;
 }
 
 export async function readSettings(
@@ -199,7 +215,7 @@ export async function readSettings(
   try {
     return validate(parse(await readFile(path, "utf8")));
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    if (errorCode(error) === "ENOENT") return null;
     throw error;
   }
 }

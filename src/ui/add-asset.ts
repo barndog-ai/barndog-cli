@@ -6,7 +6,12 @@ import { createInterface } from "node:readline";
 import { basename, join } from "node:path";
 
 import { CliError } from "../errors.js";
-import { adapters, harnesses, type Harness } from "../harnesses/registry.js";
+import {
+  adapters,
+  harnesses,
+  type Harness,
+  isHarness,
+} from "../harnesses/registry.js";
 import {
   buildHookPackage,
   discoverHooks,
@@ -48,6 +53,8 @@ import { synchronize } from "../features/environment/sync.js";
 import { readFile } from "node:fs/promises";
 import { bold, dim, ok, warn } from "./format.js";
 import { checkboxTheme, promptTheme } from "./theme.js";
+import { setYamlName, slugify } from "../shared/patterns.js";
+import { defined, only } from "../shared/lookup.js";
 
 export type AddOptions = {
   updates?: UpdateMode;
@@ -136,7 +143,11 @@ export type AddContext = {
   prompts: AddPrompts;
 };
 
-const updateChoices = [
+const updateChoices: {
+  name: string;
+  value: UpdateMode;
+  description: string;
+}[] = [
   {
     name: "Update when I ask",
     value: "manual",
@@ -159,11 +170,14 @@ const updateChoices = [
 async function updateMode(options: AddOptions, context: AddContext) {
   if (options.updates) return options.updates;
   if (!context.interactive) return "manual";
-  return (await context.prompts.chooseOne(
+  const mode = await context.prompts.chooseOne(
     "How should it stay up to date?",
     updateChoices,
     "manual",
-  )) as UpdateMode;
+  );
+  return (
+    updateChoices.find((choice) => choice.value === mode)?.value ?? "manual"
+  );
 }
 
 async function finish(context: AddContext) {
@@ -206,7 +220,7 @@ function assertDistinctNames(chosen: SkillCandidate[], url: string) {
   const copies = chosen.filter((s) => s.name === clash.name);
   throw new CliError(
     `${clash.name} is in more than one folder: ${copies.map((s) => folderLabel(s.root)).join(", ")}. Choose one.`,
-    `barndog skills add ${url} --only ${copies.find((s) => s.root)!.root}`,
+    `barndog skills add ${url} --only ${copies.find((s) => s.root)?.root ?? clash.name}`,
   );
 }
 
@@ -277,9 +291,10 @@ export async function addSkills(
     const distinctName = (s: SkillCandidate) =>
       repeated(s.name) ? `${s.name} (${folderLabel(s.root)})` : s.name;
     let chosen = skills;
-    if (options.only?.length)
+    const { only } = options;
+    if (only?.length)
       chosen = skills.filter(
-        (s) => options.only!.includes(s.name) || options.only!.includes(s.root),
+        (s) => only.includes(s.name) || only.includes(s.root),
       );
     else if (skills.length > 1 && !options.all) {
       if (!context.interactive)
@@ -324,7 +339,10 @@ export async function addSkills(
         context.write(`${ok("✔")} Added ${bold(name)}`);
         continue;
       }
-      const original = join(folder!, skill.root);
+      const original = join(
+        defined(folder, "Only a local folder can be moved"),
+        skill.root,
+      );
       const gone = await removeImported(original, skill.entries);
       context.write(`${ok("✔")} Moved ${bold(name)} into your workspace`);
       if (!gone)
@@ -345,10 +363,12 @@ export async function pickHookPlan(
   const { prompts } = context;
   // Choices made for one coding tool start out selected for the next.
   const carried = new Map<string, DraftEvent>();
-  const chosen = (await prompts.chooseMany(
-    "Which coding tools should this Hook support?",
-    harnesses.map((h) => ({ name: adapters[h].name, value: h })),
-  )) as Harness[];
+  const chosen = (
+    await prompts.chooseMany(
+      "Which coding tools should this Hook support?",
+      harnesses.map((h) => ({ name: adapters[h].name, value: h })),
+    )
+  ).filter(isHarness);
   const plan: Partial<Record<Harness, DraftEvent[]>> = {};
   for (const harness of chosen) {
     const known = adapters[harness].hooks.events;
@@ -363,13 +383,12 @@ export async function pickHookPlan(
     const drafts: DraftEvent[] = [];
     for (const event of events) {
       const script =
-        draft.scripts.length === 1
-          ? draft.scripts[0]!
-          : await prompts.chooseOne(
-              `${adapters[harness].name} ${event}: which script?`,
-              draft.scripts.map((s) => ({ name: s, value: s })),
-              carried.get(event.toLowerCase())?.script,
-            );
+        only(draft.scripts) ??
+        (await prompts.chooseOne(
+          `${adapters[harness].name} ${event}: which script?`,
+          draft.scripts.map((s) => ({ name: s, value: s })),
+          carried.get(event.toLowerCase())?.script,
+        ));
       const hint = known.find((e) => e.name === event)?.matcher;
       const matcher = hint
         ? (await prompts.text(`${event} matcher (${hint})`, "")).trim() ||
@@ -433,20 +452,17 @@ export async function addHook(
     );
   const location = parseLocation(url);
   const fallback =
-    basename(url.replace(/\/$/, "").replace(/\.git$/, ""))
-      .toLowerCase()
-      .replace(/[^a-z0-9-]+/g, "-")
-      .replace(/^-+|-+$/g, "") || "hook";
+    slugify(basename(url.replace(/\/$/, "").replace(/\.git$/, ""))) || "hook";
   await fetchRemote(location, { allowPrompt: true }, async (remote) => {
     const { candidates, skipped } = discoverHooks(remote, fallback);
     for (const skip of skipped)
       context.write(`${warn("!")} ${skip.path}: ${skip.reason}`);
-    if (!candidates.length) throw notFound(remote, url, "Hook");
-    let candidate = candidates[0]!;
+    let [candidate] = candidates;
+    if (!candidate) throw notFound(remote, url, "Hook");
+    const wanted = only(options.only ?? []);
     if (candidates.length > 1) {
-      if (options.only?.length === 1)
-        candidate =
-          candidates.find((c) => c.name === options.only![0]) ?? candidate;
+      if (wanted)
+        candidate = candidates.find((c) => c.name === wanted) ?? candidate;
       else if (!context.interactive)
         throw new CliError(
           `${url} has several Hooks: ${candidates.map((c) => c.name).join(", ")}.`,
@@ -466,7 +482,7 @@ export async function addHook(
               : {}),
           })),
         );
-        candidate = candidates[Number(picked)]!;
+        candidate = candidates[Number(picked)] ?? candidate;
       }
     }
     const mode = await updateMode(options, context);
@@ -476,11 +492,7 @@ export async function addHook(
         entry.path === "hook.yaml" && name !== candidate.name
           ? {
               ...entry,
-              data: Buffer.from(
-                entry.data
-                  .toString("utf8")
-                  .replace(/^name:.*$/m, `name: ${name}`),
-              ),
+              data: Buffer.from(setYamlName(entry.data.toString("utf8"), name)),
             }
           : entry,
       );
@@ -502,18 +514,21 @@ export async function addHook(
     if (written.length) {
       const chosen =
         context.interactive && written.length > 1
-          ? ((await context.prompts.chooseMany(
-              "Which coding tools should this Hook support?",
-              written.map((h) => ({
-                name: `${adapters[h].name}  ${dim(`found in this ${remote.path ? "folder" : "repo"}`)}`,
-                short: adapters[h].name,
-                value: h,
-                checked: true,
-              })),
-            )) as Harness[])
+          ? (
+              await context.prompts.chooseMany(
+                "Which coding tools should this Hook support?",
+                written.map((h) => ({
+                  name: `${adapters[h].name}  ${dim(`found in this ${remote.path ? "folder" : "repo"}`)}`,
+                  short: adapters[h].name,
+                  value: h,
+                  checked: true,
+                })),
+              )
+            ).filter(isHarness)
           : written;
+      const { implementations } = candidate;
       plan = Object.fromEntries(
-        chosen.map((h) => [h, candidate.implementations[h]!]),
+        chosen.map((h) => [h, implementations[h] ?? []]),
       );
     } else if (context.interactive)
       plan = await pickHookPlan(candidate, executable, context);
@@ -608,7 +623,7 @@ async function serversToAdd(
         value: String(i),
       })),
     );
-    return picked.map((i) => matching[Number(i)]!);
+    return picked.flatMap((i) => matching[Number(i)] ?? []);
   };
   if (options.from) return fromHarness();
   if (!context.interactive) {

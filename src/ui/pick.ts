@@ -16,6 +16,7 @@ import { cursorHide } from "@inquirer/ansi";
 import { styleText } from "node:util";
 import { NothingToDoError } from "../errors.js";
 import { promptTheme, selected } from "./theme.js";
+import { defined } from "../shared/lookup.js";
 
 export type PickChoice<T> = {
   value: T;
@@ -79,7 +80,9 @@ const prompt = createPrompt(
       };
       if (isEnterKey(key)) {
         const values = config.multiple
-          ? [...checked].sort((a, b) => a - b).map((i) => config.choices[i]!)
+          ? [...checked]
+              .sort((a, b) => a - b)
+              .flatMap((i) => config.choices[i] ?? [])
           : visible[active]
             ? [visible[active].choice]
             : [];
@@ -118,7 +121,7 @@ const prompt = createPrompt(
     const message = theme.style.message(config.message, status);
     if (status === "done") {
       const names = config.multiple
-        ? [...checked].map((i) => config.choices[i]!.name).join(", ")
+        ? [...checked].map((i) => config.choices[i]?.name).join(", ")
         : (visible[active]?.choice.name ?? "");
       return `${prefix} ${message} ${promptTheme.style.answer(names)}`;
     }
@@ -160,13 +163,13 @@ const prompt = createPrompt(
       ? styleText("bold", search)
       : styleText("dim", "type to filter");
     const keys = [
-      ["↑↓", "move"],
-      ...(config.multiple ? [["space", "select"]] : []),
-      ["⏎", config.multiple ? `confirm (${checked.size})` : "choose"],
+      ["↑↓", "move"] as const,
+      ...(config.multiple ? [["space", "select"] as const] : []),
+      ["⏎", config.multiple ? `confirm (${checked.size})` : "choose"] as const,
     ]
       .map(
         ([key, action]) =>
-          `${styleText("bold", key!)} ${styleText("dim", action!)}`,
+          `${styleText("bold", key)} ${styleText("dim", action)}`,
       )
       .join(styleText("dim", " • "));
     return [
@@ -189,11 +192,7 @@ export async function pickMany<T>(
 ): Promise<T[]> {
   if (!choices.length)
     throw new NothingToDoError(options.empty ?? "Nothing to choose from.");
-  return (await prompt({
-    message,
-    choices,
-    multiple: true,
-  })) as T[];
+  return prompt({ message, choices, multiple: true });
 }
 
 export async function pickOne<T>(
@@ -203,10 +202,6 @@ export async function pickOne<T>(
 ): Promise<T> {
   if (!choices.length)
     throw new NothingToDoError(options.empty ?? "Nothing to choose from.");
-  const [value] = (await prompt({
-    message,
-    choices,
-    multiple: false,
-  })) as T[];
-  return value!;
+  const [value] = await prompt({ message, choices, multiple: false });
+  return defined(value, "Nothing was chosen");
 }

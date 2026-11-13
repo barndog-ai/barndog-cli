@@ -1,6 +1,8 @@
 import { stripVTControlCharacters, styleText } from "node:util";
 import { safe } from "./collaboration.js";
 import { danger, primary, selected } from "./theme.js";
+import { CONSTANT_CASE } from "../shared/patterns.js";
+import { isRecord } from "../shared/values.js";
 
 type Style = Parameters<typeof styleText>[0];
 
@@ -30,8 +32,9 @@ function pad(text: string, width: number): string {
   return text + " ".repeat(Math.max(0, width - visibleWidth(text)));
 }
 
+/** One SGR style code, such as `\u001b[1m` (bold) or `\u001b[38;2;197;72;54m`; captured so `split` keeps it. */
 // eslint-disable-next-line no-control-regex -- matches terminal style codes
-const STYLE_CODE = new RegExp("(\\u001b\\[[0-9;]*m)");
+const STYLE_CODE = /(\u001b\[[\d;]*m)/;
 
 function truncate(text: string, width: number): string {
   const plain = stripVTControlCharacters(text);
@@ -115,7 +118,7 @@ export function table(
     (count - 1) * 2;
   const total = widths.reduce((sum, width) => sum + width, 0);
   if (total > available && widths[flex] !== undefined)
-    widths[flex] = Math.max(8, widths[flex]! - (total - available));
+    widths[flex] = Math.max(8, widths[flex] - (total - available));
   return all.map((row) =>
     (
       indent +
@@ -142,7 +145,8 @@ export type State =
   | "pending"
   | "unavailable";
 
-export function badge(state: State | string, label: string = state): string {
+/** Known states get a color; any other text shows as it is. */
+export function badge(state: string, label: string = state): string {
   switch (state) {
     case "installed":
     case "enabled":
@@ -168,7 +172,7 @@ export function plural(count: number, noun: string, many = `${noun}s`) {
 
 export function humanize(value: string): string {
   const text = value.replaceAll("_", " ");
-  return text[0]!.toUpperCase() + text.slice(1);
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 export function json(value: unknown): string {
@@ -186,7 +190,7 @@ const show = (value: unknown) =>
 
 const label = (key: string) =>
   // Environment variable names are data, not field labels.
-  /^[A-Z][A-Z0-9_]*$/.test(key)
+  CONSTANT_CASE.test(key)
     ? key
     : humanize(key.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase());
 
@@ -195,19 +199,15 @@ export function renderValue(value: unknown, indent = 0): string[] {
   if (isPlain(value)) return [`${" ".repeat(indent)}${show(value)}`];
   if (Array.isArray(value)) {
     if (!value.length) return [`${" ".repeat(indent)}${dim("None.")}`];
-    if (
-      value.every(
-        (row) => row && typeof row === "object" && !Array.isArray(row),
-      )
-    ) {
-      const keys = Object.keys(value[0] as object).filter((key) =>
-        value.every((row) => isPlain((row as Record<string, unknown>)[key])),
+    const rows = value.filter(isRecord);
+    const [first] = rows;
+    if (first && rows.length === value.length) {
+      const keys = Object.keys(first).filter((key) =>
+        rows.every((row) => isPlain(row[key])),
       );
       if (keys.length)
         return table(
-          value.map((row) =>
-            keys.map((key) => show((row as Record<string, unknown>)[key])),
-          ),
+          rows.map((row) => keys.map((key) => show(row[key]))),
           { header: keys.map(label), indent: indent + 2 },
         );
     }
@@ -216,7 +216,7 @@ export function renderValue(value: unknown, indent = 0): string[] {
       ...renderValue(row, indent),
     ]);
   }
-  const entries = Object.entries(value as Record<string, unknown>);
+  const entries = Object.entries(isRecord(value) ? value : {});
   const simple = entries.filter(([, v]) => isPlain(v));
   const nested = entries.filter(([, v]) => !isPlain(v) && v !== undefined);
   return [

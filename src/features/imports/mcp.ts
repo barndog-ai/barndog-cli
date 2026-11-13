@@ -9,6 +9,7 @@ import {
 import { parse as parseJsonc } from "jsonc-parser";
 import { parse as parseToml } from "smol-toml";
 import { stringify } from "yaml";
+import { z } from "zod";
 
 import { readSettings, SetupRequiredError } from "../../config/settings.js";
 import { CliError } from "../../errors.js";
@@ -19,14 +20,14 @@ import { nativeFile, patchNative } from "../native/configuration.js";
 import { NAME_RULE, validAssetName } from "../git-workspace/format.js";
 import { LOCAL_ORIGIN } from "../git-workspace/overlay.js";
 import { ensureLocalWorkspace } from "./local.js";
+import { asRecord, asStrings, isRecord } from "../../shared/values.js";
 
 export type RawServer = Record<string, unknown>;
 
 export type ImportedServer = { name: string; server: RawServer };
 
 const isServer = (value: unknown): value is RawServer =>
-  !!value &&
-  typeof value === "object" &&
+  isRecord(value) &&
   ("command" in value || "url" in value || "httpUrl" in value);
 
 /** Accepts the shapes people copy: a harness's whole file, a name map, or one server. */
@@ -45,36 +46,51 @@ export function parseMcpText(text: string, name?: string): ImportedServer[] {
       );
     return [{ name, server: value }];
   }
-  const object = value as Record<string, unknown>;
-  const map = (object?.mcpServers ?? object?.servers ?? object) as Record<
-    string,
-    unknown
-  >;
-  const servers = Object.entries(map ?? {}).filter(([, server]) =>
-    isServer(server),
+  const object = asRecord(value);
+  const map = asRecord(object.mcpServers ?? object.servers ?? object);
+  const servers = Object.entries(map).flatMap(([key, server]) =>
+    isServer(server) ? [{ key, server }] : [],
   );
   if (!servers.length)
     throw new CliError(
       "No MCP servers found in that JSON. Each one needs a command or url.",
     );
   return servers
-    .filter(([key]) => !name || servers.length === 1 || key === name)
-    .map(([key, server]) => ({
+    .filter(({ key }) => !name || servers.length === 1 || key === name)
+    .map(({ key, server }) => ({
       name: servers.length === 1 && name ? name : key,
-      server: server as RawServer,
+      server,
     }));
 }
 
-const variable = (value: string) =>
-  /^\$\{(?:env:)?([A-Za-z_][A-Za-z0-9_]*)\}$|^\$([A-Za-z_][A-Za-z0-9_]*)$/.exec(
-    value,
-  );
+/** A braced variable reference, `${API_KEY}` (Claude Code) or `${env:API_KEY}` (Cursor). */
+const BRACED_VARIABLE = /\$\{(?:env:)?([A-Z_a-z]\w*)\}/;
 
-const embedded = (value: string) =>
-  /\$\{(?:env:)?([A-Za-z_][A-Za-z0-9_]*)\}/.exec(value)?.[1];
+/** A whole value that is one variable reference, braced or bare (`$API_KEY`). */
+const WHOLE_VARIABLE = new RegExp(
+  String.raw`^(?:${BRACED_VARIABLE.source}|\$([A-Z_a-z]\w*))$`,
+);
 
-const envName = (text: string) =>
-  text.toUpperCase().replace(/[^A-Z0-9_]/g, "_");
+/** The variable a whole value refers to: `${env:TOKEN}` or `$TOKEN` → `TOKEN`. */
+export const variableName = (value: string) => {
+  const [, braced, bare] = WHOLE_VARIABLE.exec(value) ?? [];
+  return braced ?? bare;
+};
+
+/** The first braced variable inside a value: `Bearer ${TOKEN}` → `TOKEN`. */
+export const embeddedVariable = (value: string) =>
+  BRACED_VARIABLE.exec(value)?.[1];
+
+/** An environment variable name made from any text: `my-server_x-api` → `MY_SERVER_X_API`. */
+export const envName = (text: string) =>
+  text.toUpperCase().replace(/[^\dA-Z_]/g, "_");
+
+/** Words that suggest a credential: `--api-key`, `apikey=`, `TOKEN`, `password`. */
+const SECRET_WORD = /api[-_]?key|token|secret|password/i;
+
+/** Whether a command-line argument may hold a credential: a secret-sounding word, or an `sk-` key. */
+export const looksSecret = (arg: string) =>
+  SECRET_WORD.test(arg) || arg.startsWith("sk-");
 
 export type ConvertedServer = {
   name: string;
@@ -91,9 +107,9 @@ function reference(
   notes: string[],
 ) {
   const text = String(value);
-  const whole = variable(text);
-  if (whole) return { secretRef: whole[1] ?? whole[2]! };
-  const inside = embedded(text);
+  const whole = variableName(text);
+  if (whole) return { secretRef: whole };
+  const inside = embeddedVariable(text);
   if (inside) {
     notes.push(
       `${key} mixes text with ${inside}. Set ${inside} to the complete value of ${key}, including that text.`,
@@ -117,7 +133,8 @@ export function convertServer(
     throw new CliError(
       `${name} uses ${type} transport. BarnDog supports stdio and HTTP servers.`,
     );
-  const url = (server.url ?? server.httpUrl) as string | undefined;
+  const address = server.url ?? server.httpUrl;
+  const url = typeof address === "string" ? address : undefined;
   const common = {
     description:
       description ??
@@ -129,13 +146,13 @@ export function convertServer(
   if (url) {
     const headers: Record<string, { secretRef: string }> = {};
     for (const [key, value] of Object.entries(
-      (server.headers ?? server.http_headers ?? {}) as Record<string, unknown>,
+      asRecord(server.headers ?? server.http_headers),
     ))
       headers[key] = reference(key, value, envName(`${name}_${key}`), notes);
     for (const [key, value] of Object.entries(
-      (server.env_http_headers ?? {}) as Record<string, string>,
+      asRecord(server.env_http_headers),
     ))
-      headers[key] = { secretRef: value };
+      if (typeof value === "string") headers[key] = { secretRef: value };
     if (typeof server.bearer_token_env_var === "string") {
       headers.Authorization = { secretRef: server.bearer_token_env_var };
       notes.push(
@@ -165,19 +182,13 @@ export function convertServer(
         `${name} runs as a local command, and only HTTP servers sign in with OAuth.`,
       );
     const environment: Record<string, { secretRef: string }> = {};
-    for (const [key, value] of Object.entries(
-      (server.env ?? {}) as Record<string, unknown>,
-    ))
+    for (const [key, value] of Object.entries(asRecord(server.env)))
       environment[key] = reference(key, value, key, notes);
-    for (const key of (server.env_vars ?? []) as string[])
+    for (const key of asStrings(server.env_vars))
       environment[key] = { secretRef: key };
-    const args = ((server.args ?? []) as unknown[]).map(String);
-    if (
-      args.some(
-        (arg) =>
-          /(api[-_]?key|token|secret|password)/i.test(arg) || /^sk-/.test(arg),
-      )
-    )
+    const listed: unknown[] = Array.isArray(server.args) ? server.args : [];
+    const args = listed.map(String);
+    if (args.some(looksSecret))
       notes.push(
         "An argument looks like it may hold a secret. Arguments are stored as written, so check them before sharing this.",
       );
@@ -205,7 +216,7 @@ export type HarnessServer = ImportedServer & {
 
 async function jsonFile(path: string) {
   const text = await fileText(path).catch(() => null);
-  return text ? ((parseJsonc(text) ?? {}) as Record<string, unknown>) : {};
+  return text ? asRecord(parseJsonc(text)) : {};
 }
 
 /** Servers each harness has configured, leaving out the ones BarnDog installed. */
@@ -214,27 +225,31 @@ export async function harnessServers(
 ): Promise<HarnessServer[]> {
   const state = await jsonFile(join(home, ".barndog/state.json"));
   const owned = new Set(
-    ((state.native ?? []) as { kind: string; harness: string; key: string }[])
+    z
+      .array(
+        z.looseObject({
+          kind: z.string(),
+          harness: z.string(),
+          key: z.string(),
+        }),
+      )
+      .parse(state.native ?? [])
       .filter((entry) => entry.kind === "mcp")
       .map((entry) => `${entry.harness}:${entry.key}`),
   );
   const found: HarnessServer[] = [];
   const add = (harness: Harness, label: string, servers: unknown) => {
-    for (const [name, server] of Object.entries(
-      (servers ?? {}) as Record<string, unknown>,
-    ))
+    for (const [name, server] of Object.entries(asRecord(servers)))
       if (isServer(server) && !owned.has(`${harness}:${name}`))
         found.push({ harness, label, name, server });
   };
   const claude = await jsonFile(nativeFile("claude", "mcp", home));
   add("claude", "Claude Code", claude.mcpServers);
-  for (const [project, value] of Object.entries(
-    (claude.projects ?? {}) as Record<string, { mcpServers?: unknown }>,
-  ))
+  for (const [project, value] of Object.entries(asRecord(claude.projects)))
     add(
       "claude",
       `Claude Code, ${basename(project)} project`,
-      value?.mcpServers,
+      asRecord(value).mcpServers,
     );
   add(
     "cursor",
@@ -244,12 +259,7 @@ export async function harnessServers(
   const codex = await fileText(nativeFile("codex", "mcp", home)).catch(
     () => null,
   );
-  if (codex)
-    add(
-      "codex",
-      "Codex",
-      (parseToml(codex) as Record<string, unknown>).mcp_servers,
-    );
+  if (codex) add("codex", "Codex", parseToml(codex).mcp_servers);
   return found;
 }
 

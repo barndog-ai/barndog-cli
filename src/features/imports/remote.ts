@@ -10,7 +10,9 @@ import {
   GitError,
   gitReason,
   gitText,
+  parseLsRemote,
 } from "../git-workspace/git.js";
+import { GIT_OBJECT_ID } from "../../shared/patterns.js";
 import {
   gitSnapshot,
   isBlob,
@@ -23,22 +25,32 @@ export type RemoteLocation = {
   rest: string | null;
 };
 
+/** GitHub shorthand, `<owner>/<repo>`: `anthropics/skills`. */
+const GITHUB_SHORTHAND = /^([\da-z][\da-z-]*)\/([\w.-]+)$/i;
+
+/**
+ * A link to a folder or file in a repository's web view, on GitHub
+ * (`https://github.com/o/r/tree/main/skills/x`) or GitLab
+ * (`https://gitlab.com/o/r/-/blob/v1/hook.yaml`). Groups: host, owner, repo,
+ * then everything after `tree/` or `blob/`.
+ */
+const WEB_TREE_URL =
+  /^https?:\/\/([^/]+)\/([^/]+)\/([^/]+?)(?:\.git)?\/(?:-\/)?(?:tree|blob)\/(.+?)\/?$/;
+
+/** Reads what someone pasted: a GitHub shorthand, a web link into a repository, or a clone URL. */
 export function parseLocation(input: string): RemoteLocation {
   const value = input.trim();
-  const short = /^([A-Za-z0-9][A-Za-z0-9-]*)\/([A-Za-z0-9._-]+)$/.exec(value);
+  const short = GITHUB_SHORTHAND.exec(value);
   if (short)
     return {
       url: `https://github.com/${short[1]}/${short[2]}.git`,
       rest: null,
     };
-  const web =
-    /^https?:\/\/([^/]+)\/([^/]+)\/([^/]+?)(?:\.git)?\/(?:-\/)?(tree|blob)\/(.+?)\/?$/.exec(
-      value,
-    );
-  if (web)
+  const [, host, owner, repo, rest] = WEB_TREE_URL.exec(value) ?? [];
+  if (rest !== undefined)
     return {
-      url: checkRepositoryUrl(`https://${web[1]}/${web[2]}/${web[3]}.git`),
-      rest: decodeURIComponent(web[5]!),
+      url: checkRepositoryUrl(`https://${host}/${owner}/${repo}.git`),
+      rest: decodeURIComponent(rest),
     };
   return { url: checkRepositoryUrl(value.replace(/\/$/, "")), rest: null };
 }
@@ -60,17 +72,14 @@ async function resolveRest(
   allowPrompt: boolean,
 ) {
   if (!rest) return { ref: null, path: "" };
-  const first = rest.split("/")[0]!;
-  if (/^[0-9a-f]{40}$/.test(first))
+  const [first = ""] = rest.split("/");
+  if (GIT_OBJECT_ID.test(first))
     return { ref: first, path: rest.slice(first.length + 1) };
   const listing = await gitText(["ls-remote", "--heads", "--tags", "--", url], {
     allowPrompt,
   });
-  const refs = listing
-    .split("\n")
-    .map(
-      (line) => line.split("\t")[1]?.replace(/^refs\/(heads|tags)\//, "") ?? "",
-    )
+  const refs = parseLsRemote(listing)
+    .map(({ ref }) => ref.replace(/^refs\/(?:heads|tags)\//, ""))
     .filter(Boolean)
     .sort((a, b) => b.length - a.length);
   const ref = refs.find((name) => rest === name || rest.startsWith(`${name}/`));

@@ -7,7 +7,14 @@ import { promisify } from "node:util";
 import { normalizeRepositoryRemote } from "@barndog-ai/api-contract";
 
 import { CliError } from "../../errors.js";
-import { explainIdentity, git, GitError, gitReason, gitText } from "./git.js";
+import {
+  explainIdentity,
+  git,
+  GitError,
+  gitReason,
+  gitText,
+  parseLsRemote,
+} from "./git.js";
 
 const execute = promisify(execFile);
 
@@ -91,7 +98,7 @@ export async function remoteBranch(repo: string, branch: string) {
       repo,
     },
   );
-  return output ? output.split(/\s/)[0]! : null;
+  return parseLsRemote(output)[0]?.commit ?? null;
 }
 
 export function hostOf(url: string) {
@@ -125,7 +132,8 @@ const signedIn = async (tool: string, host: string) => {
   }
 };
 
-const firstUrl = (text: string) => /https?:\/\/\S+/.exec(text)?.[0];
+/** The first web link in a tool's output: `Created https://github.com/o/r/pull/1` → the link. */
+export const firstUrl = (text: string) => /https?:\/\/\S+/.exec(text)?.[0];
 
 /** Opens the review with gh or glab when signed in, else hands back a link. */
 export async function openPullRequest(request: {
@@ -175,9 +183,10 @@ export async function openPullRequest(request: {
           "-y",
         ]
       : null;
-  if (!command || !(await signedIn(command[0]!, remote.host))) return fallback;
+  const [program, ...args] = command ?? [];
+  if (!program || !(await signedIn(program, remote.host))) return fallback;
   try {
-    const { stdout } = await execute(command[0]!, command.slice(1), {
+    const { stdout } = await execute(program, args, {
       timeout: 60_000,
     });
     return { url: firstUrl(stdout) ?? fallback.url, opened: true };

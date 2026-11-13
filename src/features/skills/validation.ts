@@ -2,15 +2,8 @@ import { readFile } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import { parse } from "yaml";
 import type { SkillSelection } from "../../config/settings.js";
-
-export const uuid =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-export const skillName = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+import { NAME, splitFrontMatter, UUID_V4 } from "../../shared/patterns.js";
+import { isRecord } from "../../shared/values.js";
 
 export function validateSelection(
   value: unknown,
@@ -18,7 +11,7 @@ export function validateSelection(
   if (
     !isRecord(value) ||
     typeof value.id !== "string" ||
-    !uuid.test(value.id) ||
+    !UUID_V4.test(value.id) ||
     typeof value.source !== "string" ||
     !value.source.trim() ||
     typeof value.enabled !== "boolean"
@@ -33,14 +26,12 @@ export async function validateSkillSource(
   source: string,
 ): Promise<{ name: string; description: string }> {
   const text = await readFile(resolve(source, "SKILL.md"), "utf8");
-  const frontmatter = /^\uFEFF?---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(
-    text,
-  );
-  const metadata: unknown = frontmatter ? parse(frontmatter[1]!) : null;
+  const yaml = splitFrontMatter(text)?.yaml;
+  const metadata: unknown = yaml === undefined ? null : parse(yaml);
   if (
     !isRecord(metadata) ||
     typeof metadata.name !== "string" ||
-    !skillName.test(metadata.name) ||
+    !NAME.test(metadata.name) ||
     metadata.name.length > 64 ||
     typeof metadata.description !== "string" ||
     !metadata.description.trim()

@@ -10,7 +10,7 @@ import {
   assetNotFound,
   type AssetKind,
 } from "../asset-kinds/index.js";
-import { only } from "../../lookup.js";
+import { only } from "../../shared/lookup.js";
 
 /**
  * A caller-chosen idempotency key. Sending the same key again retries the

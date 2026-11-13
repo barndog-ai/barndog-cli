@@ -7,10 +7,25 @@ import { CliError } from "../../errors.js";
 import { folderSnapshot, isBlob } from "../git-workspace/snapshot.js";
 import type { RemoteRepo } from "./remote.js";
 
+/** `~` or `~/…` at the start of a path, which a shell would expand to the home folder. */
+const HOME_PREFIX = /^~(?=\/|$)/;
+
+/** `~/skills` → `/Users/me/skills`; other paths are unchanged. */
+export const expandHome = (path: string, home = homedir()) =>
+  path.replace(HOME_PREFIX, () => home);
+
+/**
+ * Text that can only mean a folder on this machine, never a repository URL:
+ * `/abs`, `.`, `..`, `./x`, `../x`, `~` or `~/x`.
+ */
+const LOCAL_PATH = /^(?:\/|\.{1,2}(?:\/|$)|~(?:\/|$))/;
+
+export const looksLocal = (source: string) => LOCAL_PATH.test(source.trim());
+
 /** The plain folder a source points at; Git repos return null and are fetched instead. */
 export async function plainFolder(source: string): Promise<string | null> {
   const value = source.trim();
-  const path = resolve(value.replace(/^~(?=\/|$)/, homedir()));
+  const path = resolve(expandHome(value));
   const directory = await stat(path).then(
     (info) => info.isDirectory(),
     () => false,
@@ -25,8 +40,8 @@ export async function plainFolder(source: string): Promise<string | null> {
 /** Git can't help with a path that isn't there, so say so instead of suggesting a clone. */
 export function assertSourceExists(source: string) {
   const value = source.trim();
-  if (!/^(\/|\.{1,2}(\/|$)|~(\/|$))/.test(value)) return;
-  if (!existsSync(resolve(value.replace(/^~(?=\/|$)/, homedir()))))
+  if (!looksLocal(value)) return;
+  if (!existsSync(resolve(expandHome(value))))
     throw new CliError(`Can't find ${value}.`);
 }
 

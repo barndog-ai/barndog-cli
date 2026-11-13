@@ -25,7 +25,7 @@ import {
   type NativeEntry,
 } from "../native/configuration.js";
 import { fileText } from "../environment/transaction.js";
-import { defined } from "../../lookup.js";
+import { defined } from "../../shared/lookup.js";
 
 export type McpWriteInput = {
   name: string;

@@ -40,7 +40,10 @@ Publishing has no npm token. The `barndog` package trusts `release.yml` in `barn
 
 - Use double quotes, semicolons, and two spaces for indentation (no tabs).
 - Prettier handles formatting; ESLint enforces blank lines after import blocks, between class methods, and around standalone declarations. Keep related imports and class fields grouped.
+- Source under `src/` (not tests) is linted with type information (`recommendedTypeChecked`, plus `no-unsafe-type-assertion`, `no-non-null-assertion` and `switch-exhaustiveness-check`), so `as` casts and `!` are rejected. Reach for what already exists instead: `errorCode(error)` in `src/errors.ts` for Node error codes; `defined(value, message)` and `only(items)` in `src/shared/lookup.ts` for lookups the code relies on; Zod schemas for JSON, YAML and API data; `isRecord`/`asRecord`/`asStrings` in `src/shared/values.ts` for config files written by other tools; `responseData()` in `src/features/collaboration/domain.ts` for API responses. Where TypeScript can't express a fact (such as `Object.fromEntries` keys), use `eslint-disable-next-line` with the reason. Tests may cast and assert.
+- Name each field of parsed data once, in its Zod schema (`.optional()` for parts a file may leave out), and read the typed result. Don't probe loose data with `"localNames" in header` and then read `header.localNames`: a loose object's index signature accepts any key, so a misspelled key compiles, the value stays `unknown`, and the name is typed again at every step. To word errors per field, key the messages by the schema's fields (`satisfies Partial<Record<keyof typeof schema.shape, string>>`, as in `config/settings.ts`), so a misspelled key fails to compile.
 - Use `pnpm lint:fix` for automatic lint fixes. Generated output, dependencies, machine-local state, and canonical skill fixtures are excluded from formatting.
+- A regex that is more than a fixed prefix or suffix check (`/\.git$/`, `/^error: /`) is a named constant or a small pure function with a doc comment showing the input it expects, and has a table test in `src/tests/patterns.test.ts` covering matching, non-matching and edge cases. Identifier shapes and text formats used in more than one place (UUIDv4, Git object names, asset names, front matter, the YAML `name:` line, slugs, origin selectors) live once in `src/shared/patterns.ts`; import them rather than writing the pattern again. `eslint-plugin-regexp` (`recommended`) rejects buggy, ambiguous and slow patterns. Prefer string methods (`endsWith`, `indexOf`, `replaceAll`) when no pattern is needed.
 
 ## Lessons learned
 
@@ -66,6 +69,14 @@ A comment that restates the code drifts from it and buries the comments that mat
 - Keep a comment only for what the code can't say: why something is done, a rule from outside the code (a server or harness behavior), a non-obvious consequence (`installSetAssets` doesn't follow later additions to the scope), or a units/format note on a field (`decisions` is a file path, not JSON).
 - Warning signs: a comment whose words mostly repeat the identifier below it; a call site where you can't tell what a boolean argument means without opening the function (`assetId(workspace, target, true)`, unlike `setKnowledge(true)`); a comment explaining what an abbreviation or generic name (`run`, `typed`, `handle`, `data`) means.
 
+### Define a type, then use it; never derive it from a function
+
+A type read back from a function's signature (`NonNullable<ReturnType<typeof commandNeeds>>`) has no definition of its own: changing the function silently changes every user of the type, and a reader has to open the function to learn what the type is.
+
+- Write the type first, with a name and a doc comment, and have the function declare it: `export type CommandNeed = "cloud" | "shared";` then `commandNeeds(…): CommandNeed | undefined`. The same goes for options, parameters and list elements: name the type and use it in both places.
+- A `const` list whose union a type needs repeats the type it serves (`Harness` in `harnesses/types.ts`, `harnesses` in `registry.ts`), rather than the type being read off the list.
+- Allowed: `z.infer<typeof schema>`, where the schema is the definition, and types of third-party functions whose package doesn't export them (`Parameters<typeof styleText>[0]`).
+
 ## Terminal output
 
 - Use the shared `primary()` formatter from `src/ui/theme.ts` for brand accents (`#C54836`), including the heading and interactive selection. Keep ordinary text neutral.
@@ -90,6 +101,7 @@ src/
 ├── features/               # Workflows, grouped by feature; no UI imports
 ├── harnesses/              # Native adapters, hook profiles, registry and detection
 ├── config/                 # Settings, installation state and build-time config
+├── shared/                 # Feature-free helpers: lookups, patterns, value guards, shell quoting
 ├── ui/                     # Prompts, result formatting and shared theme
 └── tests/                  # Command, workflow and filesystem coverage
 ```
@@ -99,6 +111,7 @@ src/
 - Put reusable operations under `src/features/`, grouped by feature. Return structured results; do not import Commander, Inquirer, terminal styling, or UI modules into feature operations.
 - Keep native tool definitions and detection under `src/harnesses/`; reuse the registered adapters for discovery and installation destinations.
 - Keep what differs between asset kinds (display words, command group, API route, workspace and installed folder, schema, package manifest, scaffold) in `assetKinds` in `src/features/asset-kinds/`. A per-kind fact only one module needs, or a per-kind function that would import a network module, goes in a `Record<AssetKind, …>` or `Record<PackageKind, …>` beside that code (`addArguments`, `packageCatalogs`, `catalogFetchers`), never in an `if`/ternary chain, so a new kind fails to compile until every map has an entry. Loop or validate over `assetKindList` or `packageKindList` instead of spelling out the kinds. Comparing `kind` to narrow a type or run kind-specific behavior is fine.
+- Put a helper that knows nothing about BarnDog (value guards, lookups, text patterns, shell quoting) in `src/shared/`, grouped by what it works on, and import it from there; `src/shared/` imports nothing from the rest of `src/`. A feature imports another feature only for that feature's own work (`connection()`, `synchronize()`), never for a general utility that happens to live there. Before writing a helper, search `src/shared/` and `@barndog-ai/api-contract` for one; when you find a general helper inside a feature, move it to `src/shared/` instead of importing it across features.
 - Keep configuration and installation-state persistence under `src/config/` and terminal prompts and formatting under `src/ui/`.
 - Tests live in `src/tests/` and run on Vitest with `expect`; use Vitest's `assert` only where a check must narrow a type. A test that starts a Node process runs the built JavaScript through `built()` in `src/tests/built.ts`. Test command parsing separately from workflows and filesystem behavior. Do not introduce placeholder modules for features that are not being implemented.
 - The [asset selection engine](src/features/asset-selection/README.md) calculates workspace subscriptions, individual selections, exclusions, and activation for Skills, MCP configurations, and Hooks. It is a pure library; commands, settings, and native installation use it.
