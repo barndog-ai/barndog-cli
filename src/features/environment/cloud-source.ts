@@ -41,7 +41,7 @@ export function cloudSource(conn: Connection, home: string): WorkspaceSource {
     mcpDefinition: async (reference) =>
       mcpSchema.parse(await currentAsset("mcp", reference, conn, home)).version
         .definition,
-    invalidAssets: async () => new Map(),
+    invalidAssets: () => Promise.resolve(new Map()),
     notices: () => [],
   };
 }

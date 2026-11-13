@@ -26,10 +26,10 @@ function sourceLabels(
   const rows = sources.map(describe);
   const width = Math.max(...rows.map((row) => visibleWidth(row.name)));
   const detailWidth = Math.max(...rows.map((row) => visibleWidth(row.detail)));
-  return sources.map(
-    (source, index) =>
-      `${rows[index]!.name.padEnd(width)}  ${dim(rows[index]!.detail.padEnd(detailWidth))}  ${dim(`${source.assets.length} ${source.assets.length === 1 ? "asset" : "assets"}`)}${source.scope.type === "org" ? `  ${dim("· suggested")}` : ""}`,
-  );
+  return sources.map((source) => {
+    const row = describe(source);
+    return `${row.name.padEnd(width)}  ${dim(row.detail.padEnd(detailWidth))}  ${dim(`${source.assets.length} ${source.assets.length === 1 ? "asset" : "assets"}`)}${source.scope.type === "org" ? `  ${dim("· suggested")}` : ""}`;
+  });
 }
 
 export function environmentChooser(
@@ -102,7 +102,7 @@ export function environmentChooser(
             ? `What should this machine install from ${repoName}?`
             : "Which sources would you like to include?",
           choices: sources.map((source, index) => ({
-            name: labels[index]!,
+            name: labels[index] ?? titled(source),
             short: titled(source),
             value: source,
             checked: source.checked,

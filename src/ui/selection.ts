@@ -57,6 +57,6 @@ export async function runSelection(
             : "preserve",
         });
       resolution = { type: "per-asset", decisions };
-    } else resolution = { type: type as "preserve-all" | "clear-all" };
+    } else resolution = { type };
   }
 }

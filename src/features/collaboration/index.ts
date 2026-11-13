@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { z } from "zod";
 import { changeSchema, type Change } from "@barndog-ai/api-contract";
-import { collaborationClient } from "./domain.js";
+import { collaborationClient, responseData } from "./domain.js";
 import type { PackageKind } from "../asset-kinds/index.js";
 import { connection, download, getChange, selectSkill } from "./remote.js";
 import { readSettings, type GitWorkspace } from "../../config/settings.js";
@@ -219,9 +219,8 @@ export async function workingDiff(
   cwd = process.cwd(),
   home = homedir(),
 ): Promise<
-  | Awaited<ReturnType<typeof gitWorkingStatus>>["changes"]
-  | Awaited<ReturnType<typeof workspaceStatus>>["changes"]
-  | EnvironmentPreview
+  // Git and Cloud working copies report changes in the same shape.
+  Awaited<ReturnType<typeof workspaceStatus>>["changes"] | EnvironmentPreview
 > {
   const status = await workingStatus(cwd, home);
   if ("changes" in status) return status.changes;
@@ -283,7 +282,7 @@ export async function packageVersions(target: PackageTarget, home = homedir()) {
     }),
     developerNames(home),
   ]);
-  return rows.data!.map((row) => ({
+  return responseData(rows).map((row) => ({
     ...row,
     publisherName: names[row.publishedBy],
   }));
@@ -296,14 +295,14 @@ export async function versionFiles(
   const where = await publishedPackage(target, home);
   if (where.type === "git")
     return gitVersionFiles(where.workspace, target, home);
-  return (
+  return responseData(
     await where.client.GET("/v1/skills/{id}/content", {
       params: {
         path: { id: where.skill.id },
         query: { version: target.version ?? where.skill.version.number },
       },
-    })
-  ).data!;
+    }),
+  );
 }
 
 export async function diffVersions(
@@ -313,14 +312,14 @@ export async function diffVersions(
   const where = await publishedPackage(target, home);
   if (where.type === "git")
     return gitVersionDiff(where.workspace, target, home);
-  return (
+  return responseData(
     await where.client.GET("/v1/skills/{id}/diff", {
       params: {
         path: { id: where.skill.id },
         query: { from: target.from, to: target.to },
       },
-    })
-  ).data!;
+    }),
+  );
 }
 
 export async function listChanges(
@@ -336,9 +335,9 @@ export async function listChanges(
   let cursor: string | undefined;
   const seen = new Set<string>();
   do {
-    const page = (
-      await client.GET("/v1/skill-changes", { params: { query: { cursor } } })
-    ).data!;
+    const page = responseData(
+      await client.GET("/v1/skill-changes", { params: { query: { cursor } } }),
+    );
     result.push(...page.changes.map((c) => changeSchema.parse(c)));
     if (page.nextCursor && seen.has(page.nextCursor))
       throw new Error("Invalid pagination");
@@ -403,7 +402,7 @@ export async function changeDiff(
     home,
     target.kind,
   );
-  return (
+  return responseData(
     await client.GET("/v1/skill-changes/{id}/diff", {
       params: {
         path: { id: z.uuid().parse(target.id) },
@@ -412,8 +411,8 @@ export async function changeDiff(
           fromRevision: target.fromRevision,
         },
       },
-    })
-  ).data!;
+    }),
+  );
 }
 
 async function changeAtRevision(target: ChangeRevision, home: string) {
@@ -436,35 +435,35 @@ export async function reviewChange(
   home = homedir(),
 ) {
   const { client, id, body } = await changeAtRevision(target, home);
-  return (
+  return responseData(
     await client.POST("/v1/skill-changes/{id}/reviews", {
       params: { path: { id } },
       body: {
         ...body,
         decision: decision === "approve" ? "approve" : "request_changes",
       },
-    })
-  ).data!;
+    }),
+  );
 }
 
 export async function rejectChange(target: ChangeRevision, home = homedir()) {
   const { client, id, body } = await changeAtRevision(target, home);
-  return (
+  return responseData(
     await client.POST("/v1/skill-changes/{id}/reject", {
       params: { path: { id } },
       body,
-    })
-  ).data!;
+    }),
+  );
 }
 
 export async function mergeChange(target: ChangeRevision, home = homedir()) {
   const { client, id, body } = await changeAtRevision(target, home);
-  return (
+  return responseData(
     await client.POST("/v1/skill-changes/{id}/merge", {
       params: { path: { id } },
       body,
-    })
-  ).data!;
+    }),
+  );
 }
 
 export async function commentOnChange(
@@ -478,16 +477,16 @@ export async function commentOnChange(
   if (!text?.trim())
     throw new Error("Supply --body <text> or --body-file <path>");
   if (options.thread)
-    return (
+    return responseData(
       await client.POST(
         "/v1/skill-changes/{id}/discussions/{threadId}/comments",
         {
           params: { path: { id, threadId: z.uuid().parse(options.thread) } },
           body: { ...body, body: text },
         },
-      )
-    ).data!;
-  return (
+      ),
+    );
+  return responseData(
     await client.POST("/v1/skill-changes/{id}/discussions", {
       params: { path: { id } },
       body: {
@@ -509,8 +508,8 @@ export async function commentOnChange(
             )
           : undefined,
       },
-    })
-  ).data!;
+    }),
+  );
 }
 
 /** Creates a new revision; the author runs `barndog pull` to receive it. */
@@ -519,12 +518,12 @@ export async function applySuggestion(
   home = homedir(),
 ) {
   const { client, id, body } = await changeAtRevision(target, home);
-  return (
+  return responseData(
     await client.POST("/v1/skill-changes/{id}/discussions/{threadId}/apply", {
       params: { path: { id, threadId: z.uuid().parse(target.thread) } },
       body,
-    })
-  ).data!;
+    }),
+  );
 }
 
 export async function setDiscussionResolved(
@@ -532,10 +531,10 @@ export async function setDiscussionResolved(
   home = homedir(),
 ) {
   const { client, id, body } = await changeAtRevision(target, home);
-  return (
+  return responseData(
     await client.POST("/v1/skill-changes/{id}/discussions/{threadId}/resolve", {
       params: { path: { id, threadId: z.uuid().parse(target.thread) } },
       body: { ...body, resolved: target.resolved },
-    })
-  ).data!;
+    }),
+  );
 }

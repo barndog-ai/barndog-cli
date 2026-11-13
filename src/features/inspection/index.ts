@@ -5,6 +5,7 @@ import { authStatus } from "../auth/session.js";
 import { readSettings } from "../../config/settings.js";
 import { repositoryContext, localRepository } from "../repositories/context.js";
 import { openRepoSource } from "../environment/workspace-source.js";
+import { only } from "../../lookup.js";
 
 /** The barndog.yaml answer to "which repository scope is this folder?". */
 async function declaredRepository(model: WorkspaceModel, cwd: string) {
@@ -16,7 +17,7 @@ async function declaredRepository(model: WorkspaceModel, cwd: string) {
         normalizeRepositoryRemote(repository.gitRemote) ?? "",
       ),
   );
-  const [slug, declared] = matches.length === 1 ? matches[0]! : [];
+  const [slug, declared] = only(matches) ?? [];
   const scope = (type: "team" | "repo", name: string | undefined) =>
     model.scopes.find((s) => s.type === type && s.slug === name);
   const repository = slug ? scope("repo", slug) : undefined;

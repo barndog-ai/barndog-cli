@@ -116,7 +116,11 @@ export function onboardingSources(choices: EnvironmentChoices): SetupSource[] {
       (s) => s.scope.type === scope.type && s.scope.id === scope.id,
     );
   const scopes = choices.scopes.filter(
-    (scope) =>
+    (
+      scope,
+    ): scope is (typeof choices.scopes)[number] & {
+      type: "org" | "team" | "repo";
+    } =>
       scope.type === "org" ||
       (scope.type === "team" &&
         (memberTeamIds.includes(scope.id) || subscribed(scope))) ||
@@ -127,7 +131,7 @@ export function onboardingSources(choices: EnvironmentChoices): SetupSource[] {
   );
   const origins = [
     ...scopes.map((scope) => ({
-      scope: { type: scope.type as "org" | "team" | "repo", id: scope.id },
+      scope: { type: scope.type, id: scope.id },
       label: scope.name,
     })),
     ...(developerId

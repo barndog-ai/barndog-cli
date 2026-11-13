@@ -1,20 +1,9 @@
 import type { CommandContext } from "./context.js";
-import type { AssetKind } from "../features/asset-selection/types.js";
+import { assetKinds, type AssetKind } from "../features/asset-kinds/index.js";
 import { CliError } from "../errors.js";
 import { pickOne } from "../ui/pick.js";
 import { clean, originLabel } from "../ui/format.js";
-
-const nouns: Record<AssetKind, string> = {
-  skill: "Skill",
-  hook: "Hook",
-  mcp: "MCP server",
-};
-
-const groups: Record<AssetKind, string> = {
-  skill: "skills",
-  hook: "hooks",
-  mcp: "mcp",
-};
+import { only } from "../lookup.js";
 
 /**
  * Names are unique only within a scope, so `--origin` picks between scopes
@@ -34,11 +23,12 @@ export async function resolveOrigin(
   );
   if (!rows.length)
     throw new CliError(
-      `No ${nouns[kind]} named ${name} is available to you.`,
-      `barndog ${groups[kind]} search ${name}`,
+      `No ${assetKinds[kind].one} named ${name} is available to you.`,
+      `barndog ${assetKinds[kind].command} search ${name}`,
     );
   const labels = [...new Set(rows.map((row) => originLabel(row.origin)))];
-  if (labels.length === 1) return labels[0]!;
+  const single = only(labels);
+  if (single) return single;
   if (!context.mode.interactive)
     throw new CliError(
       `${name} exists in several scopes: ${labels.join(", ")}. Choose one with --origin.`,
@@ -50,8 +40,8 @@ export async function resolveOrigin(
       value: label,
       name: label,
       hint: clean(
-        rows.find((row) => originLabel(row.origin) === label)!.version
-          .description,
+        rows.find((row) => originLabel(row.origin) === label)?.version
+          .description ?? "",
       ),
     })),
   );
@@ -65,20 +55,20 @@ export async function pickInstalled(
 ): Promise<{ name: string; origin: string }> {
   if (!context.mode.interactive)
     throw new CliError(
-      `Name the ${nouns[kind]} to use, or run this in a terminal to choose from a list.`,
+      `Name the ${assetKinds[kind].one} to use, or run this in a terminal to choose from a list.`,
       usage,
     );
   const items = (await context.inventory()).items.filter(
     (item) => item.kind === kind && item.origin !== "—",
   );
   const item = await pickOne(
-    `Choose a ${nouns[kind]}`,
+    `Choose a ${assetKinds[kind].one}`,
     items.map((item) => ({
       value: item,
       name: item.installedName,
       hint: `${item.origin} · ${item.state}`,
     })),
-    { empty: `No ${nouns[kind]}s are installed on this machine.` },
+    { empty: `No ${assetKinds[kind].one}s are installed on this machine.` },
   );
   return { name: item.name, origin: item.origin };
 }

@@ -16,6 +16,9 @@ export const assetKindList = [
   "hook",
 ] as const satisfies readonly AssetKind[];
 
+export const isAssetKind = (value: unknown): value is AssetKind =>
+  assetKindList.some((kind) => kind === value);
+
 export const packageKindList = [
   "skill",
   "hook",

@@ -25,6 +25,7 @@ import {
   type NativeEntry,
 } from "../native/configuration.js";
 import { fileText } from "../environment/transaction.js";
+import { defined } from "../../lookup.js";
 
 export type McpWriteInput = {
   name: string;
@@ -106,6 +107,22 @@ export async function mcpVersions(
   );
 }
 
+/** The native entries in state.json, as far as authentication reads them. */
+const installedMcpSchema = z.looseObject({
+  native: z
+    .array(
+      z.looseObject({
+        id: z.string(),
+        kind: z.string(),
+        harness: z.string(),
+        file: z.string(),
+        key: z.string(),
+        value: z.record(z.string(), z.unknown()),
+      }),
+    )
+    .default([]),
+});
+
 export async function authenticateMcp(
   name: string,
   origin: string,
@@ -120,7 +137,10 @@ export async function authenticateMcp(
         return {
           id: found.id,
           name: found.name,
-          definition: found.definition!,
+          definition: defined(
+            found.definition,
+            `${found.name} has no MCP definition`,
+          ),
         };
       })()
     : await (async () => {
@@ -147,23 +167,17 @@ export async function authenticateMcp(
               .join(", ")}. Credential values are never uploaded.`,
     };
   }
-  const state = JSON.parse(
-    (await fileText(join(home, ".barndog/state.json"))) ?? "{}",
+  const { native } = installedMcpSchema.parse(
+    JSON.parse((await fileText(join(home, ".barndog/state.json"))) ?? "{}"),
   );
-  if (
-    !Array.isArray(state.native) ||
-    !state.native.some(
-      (e: { id: string; kind: string; harness: string }) =>
-        e.id === asset.id && e.kind === "mcp" && e.harness === harness,
-    )
-  )
+  const installed = native.find(
+    (e) => e.id === asset.id && e.kind === "mcp" && e.harness === harness,
+  );
+  if (!installed)
     throw new Error(
       "Install and enable this MCP for the selected harness before authenticating",
     );
-  const entry = state.native.find(
-    (e: NativeEntry) =>
-      e.id === asset.id && e.kind === "mcp" && e.harness === harness,
-  ) as NativeEntry;
+  const entry: NativeEntry = { ...installed, kind: "mcp", harness };
   if (entry.file !== nativeFile(harness, "mcp", home))
     throw new Error("Invalid native installation state");
   patchNative(await fileText(entry.file), [entry], [entry]);

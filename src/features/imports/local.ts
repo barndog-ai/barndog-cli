@@ -22,7 +22,7 @@ import {
   type LocalWorkspace,
   type Settings,
 } from "../../config/settings.js";
-import { CliError, friendlyMessage } from "../../errors.js";
+import { CliError, friendlyMessage, errorCode } from "../../errors.js";
 import { renameSkillEntries } from "../environment/installed.js";
 import {
   assertAssetName,
@@ -39,35 +39,47 @@ import {
 } from "./discover.js";
 import { readFolder } from "./folder.js";
 import { fetchRemote, type RemoteRepo } from "./remote.js";
-import { assetKinds, type PackageKind } from "../asset-kinds/index.js";
+import {
+  assetKinds,
+  packageKindList,
+  type PackageKind,
+} from "../asset-kinds/index.js";
+import { defined } from "../../lookup.js";
+import { z } from "zod";
 
 const SOURCES_FILE = ".barndog-sources.json";
 
 export type UpdateMode = "fork" | "manual" | "auto";
 
-type ImportRecord = {
-  kind: "skill" | "hook";
-  name: string;
-  mode: "manual" | "auto";
-  url: string;
-  ref: string | null;
-  root: string;
-  commit: string;
+const importRecordSchema = z.looseObject({
+  kind: z.enum(packageKindList),
+  name: z.string(),
+  mode: z.enum(["manual", "auto"]),
+  url: z.string(),
+  ref: z.string().nullable(),
+  root: z.string(),
+  commit: z.string(),
   /** Set for Hooks built by the picker: only these files come from the repo. */
-  files?: string[];
-  fingerprint: string;
-};
+  files: z.array(z.string()).optional(),
+  fingerprint: z.string(),
+});
 
-type Sources = { checkedAt?: string; imports: ImportRecord[] };
+type ImportRecord = z.infer<typeof importRecordSchema>;
+
+const sourcesSchema = z.looseObject({
+  checkedAt: z.string().optional(),
+  imports: z.array(importRecordSchema),
+});
+
+type Sources = z.infer<typeof sourcesSchema>;
 
 async function readSources(folder: string): Promise<Sources> {
   try {
-    return JSON.parse(
-      await readFile(join(folder, SOURCES_FILE), "utf8"),
-    ) as Sources;
+    return sourcesSchema.parse(
+      JSON.parse(await readFile(join(folder, SOURCES_FILE), "utf8")),
+    );
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT")
-      return { imports: [] };
+    if (errorCode(error) === "ENOENT") return { imports: [] };
     throw error;
   }
 }
@@ -154,13 +166,20 @@ export async function adoptLinkedFolders(home: string): Promise<string[]> {
     }
   }
   if (!adopted.length) return notices;
-  const current = upgradeSettings((await readSettings(home))!);
+  const current = upgradeSettings(
+    defined(await readSettings(home), "Settings disappeared during adoption"),
+  );
   const ids = new Set(adopted.map((skill) => skill.id));
   const skills = current.skills.filter((skill) => !ids.has(skill.id));
   const off = new Set(adopted.filter((s) => !s.enabled).map((s) => s.name));
   const selection = selectionState(current);
   const assets = off.size
-    ? (await localRepoSource(current.localWorkspace!, home).model()).assets
+    ? (
+        await localRepoSource(
+          defined(current.localWorkspace, "Adoption needs a local workspace"),
+          home,
+        ).model()
+      ).assets
     : [];
   await saveSettings(
     off.size
@@ -195,7 +214,7 @@ async function assertFree(root: string, kind: PackageKind, name: string) {
   try {
     if (!(await readdir(root)).length) return;
   } catch (error) {
-    const { code } = error as NodeJS.ErrnoException;
+    const code = errorCode(error);
     if (code === "ENOENT") return;
     if (code !== "ENOTDIR") throw error;
   }
@@ -261,12 +280,13 @@ function latestEntries(
     throw new CliError(
       `${record.root || "That folder"} no longer exists in ${record.url}.`,
     );
-  if (record.files) {
-    const manifest = current.find((entry) => entry.path === "hook.yaml")!;
-    return [
-      ...all.filter((entry) => record.files!.includes(entry.path)),
-      manifest,
-    ];
+  const { files } = record;
+  if (files) {
+    const manifest = defined(
+      current.find((entry) => entry.path === "hook.yaml"),
+      `${record.name} has no hook.yaml`,
+    );
+    return [...all.filter((entry) => files.includes(entry.path)), manifest];
   }
   if (record.kind === "skill") {
     const manifestName = /^name:\s*(\S+)/m.exec(

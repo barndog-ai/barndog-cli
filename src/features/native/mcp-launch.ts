@@ -26,14 +26,14 @@ try {
   });
   for (const signal of ["SIGINT", "SIGTERM"] as const)
     process.on(signal, () => {
-      if (!child.pid) return;
+      const { pid } = child;
+      if (!pid) return;
       try {
-        if (process.platform !== "win32") process.kill(-child.pid, signal);
+        if (process.platform !== "win32") process.kill(-pid, signal);
         else child.kill(signal);
         const timer = setTimeout(() => {
           try {
-            if (process.platform !== "win32")
-              process.kill(-child.pid!, "SIGKILL");
+            if (process.platform !== "win32") process.kill(-pid, "SIGKILL");
             else child.kill("SIGKILL");
           } catch {
             /* exited */

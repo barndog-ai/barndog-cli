@@ -3,7 +3,7 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import type { GitWorkspace, LocalWorkspace } from "../../config/settings.js";
-import { CliError } from "../../errors.js";
+import { CliError, errorCode } from "../../errors.js";
 import { CONFIG_FILE, parseConfig, skeleton } from "./format.js";
 import {
   git,
@@ -174,7 +174,7 @@ export async function localWorkspace(
     );
     return { path, workspaceId };
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    if (errorCode(error) !== "ENOENT") throw error;
   }
   const workspaceId = randomUUID();
   for (const file of skeleton({ workspaceId, name: "My workspace" })) {

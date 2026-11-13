@@ -77,7 +77,7 @@ export async function chooseConnection(
             checkRepositoryUrl(value);
             return true;
           } catch (error) {
-            return (error as Error).message;
+            return error instanceof Error ? error.message : String(error);
           }
         },
         theme: promptTheme,

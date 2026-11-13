@@ -7,6 +7,7 @@ import { parse } from "yaml";
 import { serverFetch, normalizeServer } from "../auth/transport.js";
 import { homedir } from "node:os";
 import { assetKinds, type PackageKind } from "../asset-kinds/index.js";
+import { defined } from "../../lookup.js";
 
 /** The typed client speaks Skill routes; other package kinds swap in their own. */
 export function packagePath(path: string, kind: PackageKind) {
@@ -15,6 +16,9 @@ export function packagePath(path: string, kind: PackageKind) {
     .replace(/^\/v1\/skill-changes(?=\/|$)/, `/v1/${kind}-changes`);
 }
 
+const capitalized = (word: string) =>
+  `${word.charAt(0).toUpperCase()}${word.slice(1)}`;
+
 function fields(value: unknown, from: string, to: string): unknown {
   if (Array.isArray(value)) return value.map((v) => fields(v, from, to));
   if (value && typeof value === "object")
@@ -22,13 +26,18 @@ function fields(value: unknown, from: string, to: string): unknown {
       Object.entries(value).map(([key, val]) => [
         key === from
           ? to
-          : key === `published${from[0]!.toUpperCase()}${from.slice(1)}`
-            ? `published${to[0]!.toUpperCase()}${to.slice(1)}`
+          : key === `published${capitalized(from)}`
+            ? `published${capitalized(to)}`
             : key,
         fields(val, from, to),
       ]),
     );
   return value;
+}
+
+/** The body of a successful response; the client throws ApiError for failures. */
+export function responseData<T>(response: { data?: T }): T {
+  return defined(response.data, "The server sent an empty response");
 }
 
 /** Transport adapter for the proven working-copy algorithm. Distinct public Hook
@@ -77,11 +86,14 @@ export function collaborationClient(
         !response.headers.get("content-type")?.includes("application/json")
       )
         return response;
-      let data = fields(await response.json(), "hookId", "skillId") as Record<
-        string,
-        unknown
-      >;
-      if (data && "nextCursor" in data && Array.isArray(data.hooks)) {
+      let data = fields(await response.json(), "hookId", "skillId");
+      if (
+        data &&
+        typeof data === "object" &&
+        "nextCursor" in data &&
+        "hooks" in data &&
+        Array.isArray(data.hooks)
+      ) {
         const { hooks, ...rest } = data;
         data = { ...rest, skills: hooks };
       }

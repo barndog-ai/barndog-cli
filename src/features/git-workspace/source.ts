@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 
 import type { GitWorkspace, LocalWorkspace } from "../../config/settings.js";
-import { CliError } from "../../errors.js";
+import { CliError, errorCode } from "../../errors.js";
 import type { AssetReference } from "../asset-selection/types.js";
 import { storePackage } from "../environment/packages.js";
 import type { WorkspaceSource } from "../environment/source.js";
@@ -17,6 +17,8 @@ import {
 } from "./format.js";
 import { git, GitError, gitReason, gitText } from "./git.js";
 import { folderSnapshot, gitSnapshot, type Snapshot } from "./snapshot.js";
+import { defined } from "../../lookup.js";
+import { z } from "zod";
 
 /** A workspace read from files; adds what cloud answers through other endpoints. */
 export type RepoSource = WorkspaceSource & {
@@ -57,7 +59,7 @@ function repoSource(
     model,
     catalog: async () => (await model()).catalog,
     invalidAssets: async () => (await model()).invalid,
-    notices: backend.notices,
+    notices: () => backend.notices(),
     warnings: async () => {
       const { invalidKnowledge, problems } = await model();
       return [
@@ -84,10 +86,14 @@ function repoSource(
         },
         backend.cacheKey,
         home,
-        async () => asset.entries,
+        () => Promise.resolve(asset.entries),
       );
     },
-    mcpDefinition: async (reference) => (await find(reference)).definition!,
+    mcpDefinition: async (reference) =>
+      defined(
+        (await find(reference)).definition,
+        `${reference.name} has no MCP definition`,
+      ),
   };
 }
 
@@ -110,11 +116,13 @@ export function localRepoSource(
 
 const AUTO_FETCH_INTERVAL_MS = 5 * 60 * 1000;
 
-type FetchState = {
+const fetchStateSchema = z.looseObject({
   /** The branch tip this machine last read. */
-  accepted?: string;
-  fetchedAt?: string;
-};
+  accepted: z.string().optional(),
+  fetchedAt: z.string().optional(),
+});
+
+type FetchState = z.infer<typeof fetchStateSchema>;
 
 export const gitDirectory = (workspaceId: string, home: string) =>
   join(home, ".barndog", "git", `${workspaceId}.git`);
@@ -127,11 +135,11 @@ export async function readFetchState(
   home: string,
 ): Promise<FetchState> {
   try {
-    return JSON.parse(
-      await readFile(statePath(workspaceId, home), "utf8"),
-    ) as FetchState;
+    return fetchStateSchema.parse(
+      JSON.parse(await readFile(statePath(workspaceId, home), "utf8")),
+    );
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
+    if (errorCode(error) === "ENOENT") return {};
     throw error;
   }
 }

@@ -117,6 +117,7 @@ import { interactiveTerminal } from "./ui/pick.js";
 import { promptClash } from "./ui/clash.js";
 import { primary } from "./ui/theme.js";
 import { versionReport } from "./version.js";
+import { defined } from "./lookup.js";
 
 type ProgramOptions = Partial<Omit<CommandContext, "mode">> & {
   writeError?: (message: string) => void;
@@ -415,10 +416,10 @@ export function createProgram(options: ProgramOptions = {}): Command {
       program.help();
     });
   program.hook("preAction", async (_, action) => {
-    const flags = action.optsWithGlobals() as {
+    const flags = action.optsWithGlobals<{
       json?: boolean;
       interactive?: boolean;
-    };
+    }>();
     mode.json = !!flags.json;
     mode.interactive =
       mode.interactive &&
@@ -448,12 +449,17 @@ export function createProgram(options: ProgramOptions = {}): Command {
     for (const name of names)
       program.commands.find((c) => c.name() === name)?.helpGroup(heading);
   // Commander lists groups in command order, so sort commands into section order.
+  // Commander types `commands` as readonly but offers no other way to reorder them.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
   (program.commands as Command[]).sort(
     (a, b) => order.indexOf(a.name()) - order.indexOf(b.name()),
   );
   program.commandsGroup("Get started:").helpCommand(true);
   for (const name of ["skills", "mcp", "hooks"]) {
-    const group = program.commands.find((c) => c.name() === name)!;
+    const group = defined(
+      program.commands.find((c) => c.name() === name),
+      `Command group ${name} isn't registered`,
+    );
     for (const [heading, names] of assetGroups)
       for (const command of group.commands)
         if (names.includes(command.name()))

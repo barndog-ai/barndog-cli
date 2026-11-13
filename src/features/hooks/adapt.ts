@@ -46,6 +46,8 @@ export function toolNames(tools: readonly Harness[], joiner = "and") {
 export function adaptPrompt(input: AdaptInput) {
   return hookAdaptPrompt({
     ...input,
+    // Object.fromEntries types its keys as string; the map covers every harness.
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
     tools: Object.fromEntries(
       harnesses.map((harness) => [harness, adapters[harness].name]),
     ) as Record<Harness, string>,

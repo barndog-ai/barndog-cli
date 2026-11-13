@@ -25,9 +25,9 @@ export function primary(
         ? 8
         : 4;
   const depth = stream.getColorDepth?.() ?? forcedDepth;
-  const rgb = PRIMARY_COLOR.slice(1)
-    .match(/../g)!
-    .map((value) => parseInt(value, 16));
+  const rgb = [1, 3, 5].map((start) =>
+    parseInt(PRIMARY_COLOR.slice(start, start + 2), 16),
+  );
   const color =
     depth >= 24 ? `38;2;${rgb.join(";")}` : depth >= 8 ? "38;5;131" : "31";
   const start = `\u001b[${color}m`;

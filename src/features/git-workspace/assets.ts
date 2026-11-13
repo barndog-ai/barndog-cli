@@ -12,6 +12,7 @@ import type { Settings } from "../../config/settings.js";
 import { openRepoSource } from "../environment/workspace-source.js";
 import { LOCAL_ORIGIN, localOverlay } from "./overlay.js";
 import { assetNotFound } from "../asset-kinds/index.js";
+import { only } from "../../lookup.js";
 
 /** The repo-backed source that answers for an origin, if any. */
 export function repoForOrigin(
@@ -38,8 +39,8 @@ export function selectRepoAsset(
       (asset.id === name || asset.name === name) &&
       (origin === LOCAL_ORIGIN || matchesOrigin(asset.origin, origin, model)),
   );
-  if (matches.length !== 1) throw assetNotFound(kind, name, origin);
-  const asset = matches[0]!;
+  const asset = only(matches);
+  if (!asset) throw assetNotFound(kind, name, origin);
   if (asset.invalid)
     throw new CliError(`${asset.path} is invalid: ${asset.invalid}`);
   return asset;

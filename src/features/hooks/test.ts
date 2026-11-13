@@ -58,7 +58,7 @@ export async function testHook(
     throw new Error(
       `Choose --event from: ${Object.keys(implementation.events).join(", ")}`,
     );
-  const handlers = implementation.events[event]!.flatMap((h) =>
+  const handlers = implementation.events[event].flatMap((h) =>
     "hooks" in h ? h.hooks : [h],
   );
   if (handlers.length > 1 && options.handler === undefined)

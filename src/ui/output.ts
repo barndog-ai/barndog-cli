@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { basename, isAbsolute, relative, sep } from "node:path";
 import { SetupRequiredError } from "../config/settings.js";
 import type { SyncEvent } from "../features/skills/sync.js";
-import { adapters, type Harness } from "../harnesses/registry.js";
+import { adapters, isHarness } from "../harnesses/registry.js";
 import { primary, danger } from "./theme.js";
 import {
   bad,
@@ -75,7 +75,7 @@ function rows(events: SyncEvent[]): Row[] {
       harnesses: new Set<string>(),
       note,
     };
-    if (harness) row.harnesses.add(adapters[harness as Harness].name);
+    if (isHarness(harness)) row.harnesses.add(adapters[harness].name);
     byKey.set(key, row);
   };
   for (const event of events) {

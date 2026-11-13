@@ -10,6 +10,8 @@ import {
 import type { Connection } from "../../config/settings.js";
 import { connection } from "../collaboration/remote.js";
 import { request } from "../environment/remote.js";
+import { errorCode } from "../../errors.js";
+import { only } from "../../lookup.js";
 
 const execute = promisify(execFile);
 
@@ -26,8 +28,10 @@ export async function localRepository(cwd = process.cwd()) {
     root = await git("rev-parse", "--show-toplevel");
   } catch (error) {
     if (
-      (error as NodeJS.ErrnoException).code === "ENOENT" ||
-      /not a git repository/.test(String((error as { stderr?: string }).stderr))
+      errorCode(error) === "ENOENT" ||
+      (error instanceof Error &&
+        "stderr" in error &&
+        /not a git repository/.test(String(error.stderr)))
     )
       return { root: null, remotes: [] as string[] };
     throw error;
@@ -62,7 +66,7 @@ export async function repositoryContext(
   const matches = repositories.filter(
     (repo) => repo.gitRemote && local.remotes.includes(repo.gitRemote),
   );
-  const repository = matches.length === 1 ? matches[0]! : null;
+  const repository = only(matches) ?? null;
   const teams = repository
     ? await request(conn, "/v1/teams", z.array(teamSchema), home)
     : [];

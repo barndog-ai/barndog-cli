@@ -26,6 +26,10 @@ import {
   applyFiles,
   type Workspace,
 } from "./workspace-store.js";
+import { defined } from "../../lookup.js";
+
+const publishedId = (work: { skillId?: string | null }) =>
+  defined(work.skillId, "This working copy isn't published yet");
 
 export async function externalSource(work: Workspace, home: string) {
   if (!work.skillId) return undefined;
@@ -98,7 +102,12 @@ export async function pullExternal(
     }
     if (pull.merged) delete external.pull;
   }
-  const asset = await getAsset(work.kind, work.skillId!, work.connection, home);
+  const asset = await getAsset(
+    work.kind,
+    publishedId(work),
+    work.connection,
+    home,
+  );
   if (!("commit" in asset.version))
     throw new Error("Expected a Git-backed package version");
   if (asset.version.id !== work.baseVersionId) {
@@ -138,7 +147,7 @@ export async function pushExternal(
   if (!external.pending) {
     const asset = await getAsset(
       work.kind,
-      work.skillId!,
+      publishedId(work),
       work.connection,
       home,
     );
@@ -160,7 +169,7 @@ export async function pushExternal(
       throw new Error(
         "Pull request is closed; run barndog pull, then push --new to contribute again",
       );
-    if (pull && pull.head !== external.pull!.head)
+    if (pull && pull.head !== external.pull?.head)
       throw new Error(
         "Pull request changed remotely; run barndog pull before pushing",
       );
@@ -168,7 +177,7 @@ export async function pushExternal(
     const files = await readDirectory(work.root);
     if (packageMetadataFor(files, work.kind).name !== work.name)
       throw new Error("Package name cannot change in this working copy");
-    const previous = pull ? external.pull!.files : work.base;
+    const previous = (pull && external.pull?.files) || work.base;
     if (
       packageFingerprint(files) === packageFingerprint(decodeFiles(previous)) &&
       !options.title
@@ -186,7 +195,9 @@ export async function pushExternal(
     }
     external.pending = {
       number: pull?.number,
-      expectedCommit: pull?.head ?? source.syncedCommit!,
+      expectedCommit:
+        pull?.head ??
+        defined(source.syncedCommit, "This connection hasn't synced yet"),
       files: encodeFiles(files),
       title: options.title ?? `Update ${work.name}`,
       idempotencyKey: randomUUID(),

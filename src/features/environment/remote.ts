@@ -10,6 +10,7 @@ import {
   assetNotFound,
   type AssetKind,
 } from "../asset-kinds/index.js";
+import { only } from "../../lookup.js";
 
 /**
  * A caller-chosen idempotency key. Sending the same key again retries the
@@ -115,10 +116,11 @@ export async function selectAsset(
       (a.id === name || a.name === name) &&
       matchesOrigin(a.origin, origin, conn),
   );
-  if (matches.length !== 1) throw assetNotFound(kind, name, origin);
+  const reference = only(matches);
+  if (!reference) throw assetNotFound(kind, name, origin);
   return {
     connection: conn,
-    reference: matches[0]!,
-    asset: await getAsset(kind, matches[0]!.id, conn, home),
+    reference,
+    asset: await getAsset(kind, reference.id, conn, home),
   };
 }

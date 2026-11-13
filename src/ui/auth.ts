@@ -109,8 +109,8 @@ export async function runLogin(
     if (controller.signal.aborted)
       throw new Error("Sign-in cancelled", { cause: error });
     if (
-      (error as Error).name === "AbortError" ||
-      (error as Error).name === "TimeoutError"
+      error instanceof Error &&
+      (error.name === "AbortError" || error.name === "TimeoutError")
     )
       throw new CliError(
         "Sign-in expired before it was confirmed.",

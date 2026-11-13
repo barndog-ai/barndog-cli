@@ -14,6 +14,7 @@ import { randomUUID } from "node:crypto";
 import { moveLocalAssets, type MoveResult } from "../git-workspace/move.js";
 import { LOCAL_ORIGIN } from "../git-workspace/overlay.js";
 import { assetKindList } from "../asset-kinds/index.js";
+import { only } from "../../lookup.js";
 
 export async function developers(search?: string, home = homedir()) {
   const conn = await connection(home);
@@ -48,7 +49,8 @@ export async function developerAssets(
 ) {
   const people = await developers(undefined, home),
     matches = people.filter((p) => p.id === selector || p.slug === selector);
-  if (matches.length !== 1)
+  const developer = only(matches);
+  if (!developer)
     throw new CliError(
       `No developer found with that handle.`,
       "barndog people list",
@@ -65,7 +67,7 @@ export async function developerAssets(
     });
     const page: typeof developerAssetsSchema._output = await request(
       conn,
-      `/v1/developers/${matches[0]!.id}/assets?${query}`,
+      `/v1/developers/${developer.id}/assets?${query}`,
       developerAssetsSchema,
       home,
     );
@@ -75,7 +77,7 @@ export async function developerAssets(
     if (page.nextCursor) seen.add(page.nextCursor);
     cursor = page.nextCursor;
   } while (cursor);
-  return { developer: matches[0]!, assets };
+  return { developer, assets };
 }
 
 export type PromoteInput = {

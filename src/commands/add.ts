@@ -14,6 +14,7 @@ import { renderCollaboration } from "../ui/collaboration.js";
 import { dim, json, ok } from "../ui/format.js";
 import { renderSyncOutput } from "../ui/output.js";
 import type { CommandContext } from "./context.js";
+import { defined } from "../lookup.js";
 
 const updates = () =>
   new Option("--updates <mode>", "Stay current: fork, manual or auto").choices([
@@ -24,7 +25,10 @@ const updates = () =>
 
 export function registerAdd(program: Command, context: CommandContext) {
   const group = (name: string) =>
-    program.commands.find((c) => c.name() === name)!;
+    defined(
+      program.commands.find((c) => c.name() === name),
+      `Command group ${name} isn't registered`,
+    );
   const add = () => ({
     interactive: context.mode.interactive,
     write: context.write,

@@ -3,6 +3,7 @@ import { lstat, readFile, readdir, readlink } from "node:fs/promises";
 import { join } from "node:path";
 
 import { git } from "./git.js";
+import { defined } from "../../lookup.js";
 
 export type SnapshotEntry = { path: string; mode: string; hash: string };
 
@@ -76,7 +77,10 @@ export async function folderSnapshot(root: string): Promise<Snapshot> {
     readBlobs: async (hashes) => {
       const blobs = new Map<string, Buffer>();
       for (const hash of new Set(hashes))
-        blobs.set(hash, await readFile(paths.get(hash)!));
+        blobs.set(
+          hash,
+          await readFile(defined(paths.get(hash), `Unknown blob ${hash}`)),
+        );
       return blobs;
     },
   };
@@ -98,7 +102,9 @@ export async function gitSnapshot(
         line.slice(line.indexOf("\t") + 1),
       ];
       const [mode, , hash] = meta.split(" ");
-      return { path, mode: mode!, hash: hash! };
+      if (!mode || !hash)
+        throw new Error(`Unexpected git ls-tree line: ${line}`);
+      return { path, mode, hash };
     });
   return {
     entries,

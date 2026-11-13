@@ -13,6 +13,7 @@ import { parseForESLint } from "toml-eslint-parser";
 import { isDeepStrictEqual } from "node:util";
 import { join } from "node:path";
 import type { Harness } from "../../harnesses/types.js";
+import { isRecord } from "../skills/validation.js";
 
 export type NativeEntry = {
   id: string;
@@ -47,9 +48,9 @@ export const nativeFile = (
       );
 
 export function object(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value))
+  if (!isRecord(value))
     throw new Error("Native configuration must contain an object");
-  return value as Record<string, unknown>;
+  return value;
 }
 
 function same(left: unknown, right: unknown): boolean {
@@ -62,7 +63,9 @@ function same(left: unknown, right: unknown): boolean {
 
 function json(text: string) {
   const errors: ParseError[] = [];
-  const value = parseJson(text || "{}", errors, { allowTrailingComma: true });
+  const value: unknown = parseJson(text || "{}", errors, {
+    allowTrailingComma: true,
+  });
   if (errors.length)
     throw new Error(
       "Invalid native JSON configuration; installation preserved",
@@ -77,7 +80,7 @@ function tomlEdit(
 ) {
   const ast = parseForESLint(text).ast;
   const ranges: [number, number][] = [];
-  for (const node of ast.body[0]!.body) {
+  for (const node of ast.body[0].body) {
     if (node.type === "TOMLTable") {
       const path = node.resolvedKey;
       if (path[0] === "mcp_servers" && path[1] === key) ranges.push(node.range);
@@ -130,11 +133,14 @@ export function patchNative(
   let data = read();
   if (toml && text === null) output = "";
   const change = (path: (string | number)[], value: unknown) => {
-    if (value === undefined && typeof path.at(-1) === "number") {
-      const parent = findNodeAtLocation(parseTree(output)!, path.slice(0, -1))!;
-      const index = path.at(-1) as number,
-        nodes = parent.children!,
-        node = nodes[index]!;
+    const index = path.at(-1);
+    if (value === undefined && typeof index === "number") {
+      const tree = parseTree(output);
+      const parent = tree && findNodeAtLocation(tree, path.slice(0, -1));
+      const nodes = parent?.children;
+      const node = nodes?.[index];
+      if (!parent || !nodes || !node)
+        throw new Error("Native configuration changed while editing it");
       const previous = nodes[index - 1],
         next = nodes[index + 1];
       const start = previous
@@ -158,6 +164,11 @@ export function patchNative(
   };
   const table = (key: string) =>
     data[key] === undefined ? {} : object(data[key]);
+  /** The handlers registered for one hook event. */
+  const list = (event: string): unknown[] => {
+    const handlers = table("hooks")[event];
+    return Array.isArray(handlers) ? handlers : [];
+  };
   for (const old of before) {
     if (old.kind === "mcp") {
       const parent = toml ? "mcp_servers" : "mcpServers";
@@ -223,11 +234,9 @@ export function patchNative(
         data = object(parseToml(output));
       } else change(["mcpServers", old.key], undefined);
     } else {
-      const list = table("hooks")[old.key] as unknown[];
-      const index = list.findIndex((v) => same(v, old.value));
+      const index = list(old.key).findIndex((v) => same(v, old.value));
       change(["hooks", old.key, index], undefined);
-      if (!(table("hooks")[old.key] as unknown[]).length)
-        change(["hooks", old.key], undefined);
+      if (!list(old.key).length) change(["hooks", old.key], undefined);
     }
   }
   for (const next of after) {
@@ -247,8 +256,9 @@ export function patchNative(
         data = object(parseToml(output));
       } else change(["mcpServers", next.key], next.value);
     } else {
-      const list = table("hooks")[next.key] as unknown[] | undefined;
-      if (list) change(["hooks", next.key, list.length], next.value);
+      const handlers = table("hooks")[next.key];
+      if (Array.isArray(handlers))
+        change(["hooks", next.key, handlers.length], next.value);
       else change(["hooks", next.key], [next.value]);
     }
   }

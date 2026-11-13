@@ -8,6 +8,7 @@ import {
 } from "../../config/settings.js";
 import { catalog } from "./remote.js";
 import { sync } from "./sync.js";
+import { only } from "../../lookup.js";
 
 export async function installSkill(
   name: string,
@@ -17,16 +18,17 @@ export async function installSkill(
   const settings = await readSettings(home);
   if (!settings) throw new SetupRequiredError();
   const next = upgradeSettings(settings);
-  if (!next.connection)
+  const { connection } = next;
+  if (!connection)
     throw new Error("Connect with barndog init --server <url> first");
-  const matches = (await catalog(next.connection, home)).filter(
-    (skill) =>
-      skill.name === name &&
-      matchesOrigin(skill.origin, origin, next.connection!),
+  const skill = only(
+    (await catalog(connection, home)).filter(
+      (skill) =>
+        skill.name === name && matchesOrigin(skill.origin, origin, connection),
+    ),
   );
-  if (matches.length !== 1)
+  if (!skill)
     throw new Error(`Skill not found or ambiguous: ${origin}/${name}`);
-  const skill = matches[0]!;
   if (
     next.skills.some((entry) => entry.id === skill.id && entry.kind !== "api")
   )

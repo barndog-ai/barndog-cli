@@ -11,29 +11,35 @@ import { resolveAssets } from "../asset-selection/index.js";
 import type { WorkspaceSource } from "../environment/source.js";
 import type { WorkspaceModel } from "./format.js";
 import { localRepoSource, type RepoSource } from "./source.js";
+import { errorCode } from "../../errors.js";
+import { z } from "zod";
 
 /** How assets in the kept local folder are addressed next to a shared workspace. */
 export const LOCAL_ORIGIN = "local";
 
 const MOVED_FILE = ".barndog-moved.json";
 
-export type MovedAsset = {
-  kind: string;
-  path: string;
-  name: string;
-  /** Scope it was moved to; knowledge has none. */
-  originId?: string;
-  /** Set once the shared copy was selected, so removing it later sticks. */
-  adopted?: boolean;
-};
+const movedSchema = z.array(
+  z.looseObject({
+    kind: z.string(),
+    path: z.string(),
+    name: z.string(),
+    /** Scope it was moved to; knowledge has none. */
+    originId: z.string().optional(),
+    /** Set once the shared copy was selected, so removing it later sticks. */
+    adopted: z.boolean().optional(),
+  }),
+);
+
+export type MovedAsset = z.infer<typeof movedSchema>[number];
 
 export async function readMoved(folder: string): Promise<MovedAsset[]> {
   try {
-    return JSON.parse(
-      await readFile(join(folder, MOVED_FILE), "utf8"),
-    ) as MovedAsset[];
+    return movedSchema.parse(
+      JSON.parse(await readFile(join(folder, MOVED_FILE), "utf8")),
+    );
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    if (errorCode(error) === "ENOENT") return [];
     throw error;
   }
 }

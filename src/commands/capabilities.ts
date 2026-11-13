@@ -38,6 +38,7 @@ import type {
 } from "../features/github/pulls.js";
 import type { Harness } from "../harnesses/types.js";
 import { packageKindList } from "../features/asset-kinds/index.js";
+import { defined } from "../lookup.js";
 
 function positive(value: string) {
   const result = Number(value);
@@ -199,7 +200,10 @@ export function registerCapabilities(
       );
       if (failed) process.exitCode = 1;
     });
-  const mcp = program.commands.find((c) => c.name() === "mcp")!;
+  const mcp = defined(
+    program.commands.find((c) => c.name() === "mcp"),
+    "Command group mcp isn't registered",
+  );
   for (const action of ["create", "update"] as const) {
     const command = mcp
       .command(`${action} <name>`)
@@ -291,7 +295,10 @@ export function registerCapabilities(
         );
       },
     );
-  const hooks = program.commands.find((c) => c.name() === "hooks")!;
+  const hooks = defined(
+    program.commands.find((c) => c.name() === "hooks"),
+    "Command group hooks isn't registered",
+  );
   hooks
     .command("test [name]")
     .option("--origin <origin>", ORIGIN_HELP)
@@ -779,9 +786,11 @@ export function registerCapabilities(
       ),
   );
   const describe = (parent: Command, descriptions: Record<string, string>) => {
-    for (const command of parent.commands)
-      if (!command.description() && descriptions[command.name()])
-        command.description(descriptions[command.name()]!);
+    for (const command of parent.commands) {
+      const description = descriptions[command.name()];
+      if (!command.description() && description)
+        command.description(description);
+    }
   };
   describe(github, {
     auth: "Link your GitHub account to BarnDog",

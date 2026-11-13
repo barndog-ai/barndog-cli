@@ -35,7 +35,6 @@ import {
   hookFolders,
   resolveClashes,
   type ClashResolver,
-  type NamedKind,
 } from "./names.js";
 import { selectionState, withSelection } from "../../config/environment.js";
 import { harnesses, skillDirectory } from "../../harnesses/registry.js";
@@ -75,6 +74,7 @@ import {
   packageKindList,
   type PackageKind,
 } from "../asset-kinds/index.js";
+import { defined } from "../../lookup.js";
 
 const nativeSchema = z.array(
   z
@@ -106,7 +106,7 @@ export async function installedNames(home: string) {
   const path = join(home, ".barndog/state.json");
   const raw = await fileText(path);
   const { links } = await readState(path, home);
-  const native = nativeSchema.parse(raw ? (JSON.parse(raw).native ?? []) : []);
+  const { native } = readStateFile(raw);
   return (id: string) => heldName(id, links, native);
 }
 
@@ -155,6 +155,15 @@ const installedSchema = z.array(
     .strict(),
 );
 
+/** The parts of state.json this module owns; links are read by readState(). */
+const stateFileSchema = z.looseObject({
+  native: nativeSchema.default([]),
+  installed: installedSchema.default([]),
+});
+
+const readStateFile = (raw: string | null) =>
+  stateFileSchema.parse(raw ? JSON.parse(raw) : {});
+
 export async function synchronize(
   configPath?: string,
   home = homedir(),
@@ -190,15 +199,11 @@ export async function synchronize(
     const stateFile = join(home, ".barndog/state.json"),
       rawState = await fileText(stateFile);
     const before = await readState(stateFile, home);
-    const oldNative = nativeSchema.parse(
-      rawState ? (JSON.parse(rawState).native ?? []) : [],
-    );
+    const { native: oldNative, installed: installedState } =
+      readStateFile(rawState);
     for (const entry of oldNative)
       if (entry.file !== nativeFile(entry.harness, entry.kind, home))
         throw new Error("Invalid native installation state");
-    const installedState = installedSchema.parse(
-      rawState ? (JSON.parse(rawState).installed ?? []) : [],
-    );
     for (const entry of installedState)
       if (dirname(entry.path) !== installedRoot(home, entry.kind))
         throw new Error("Invalid installed package state");
@@ -310,22 +315,26 @@ export async function synchronize(
           installed: owned(local.id),
           renamable: false,
         })),
-        ...effective.assets
-          .filter(
-            (entry) =>
-              entry.enabled &&
-              entry.asset.kind !== "hook" &&
-              (!invalid.has(entry.asset.id) ||
-                (owned(entry.asset.id) && !vanished.has(entry.asset.id))),
+        ...effective.assets.flatMap(({ asset, enabled }) => {
+          const { kind } = asset;
+          if (
+            !enabled ||
+            kind === "hook" ||
+            (invalid.has(asset.id) &&
+              (!owned(asset.id) || vanished.has(asset.id)))
           )
-          .map((entry) => ({
-            id: entry.asset.id,
-            kind: entry.asset.kind as NamedKind,
-            name: entry.asset.name,
-            origin: entry.asset.origin,
-            installed: owned(entry.asset.id),
-            renamable: !invalid.has(entry.asset.id),
-          })),
+            return [];
+          return [
+            {
+              id: asset.id,
+              kind,
+              name: asset.name,
+              origin: asset.origin,
+              installed: owned(asset.id),
+              renamable: !invalid.has(asset.id),
+            },
+          ];
+        }),
       ],
       { ...savedNames, ...Object.fromEntries(heldNames) },
       options.prompt === false || options.dryRun
@@ -467,9 +476,11 @@ export async function synchronize(
           });
         continue;
       }
+      // Without a source the catalog is empty, so this never runs.
+      if (!source) throw new Error("Catalog assets need a workspace source");
       const name = installedName(ref, localNames);
       if (ref.kind === "skill") {
-        const cache = await source!.skillOrHookPackage("skill", ref);
+        const cache = await source.skillOrHookPackage("skill", ref);
         addSkill(
           ref.id,
           await stage(
@@ -483,13 +494,13 @@ export async function synchronize(
           name,
         );
       } else if (ref.kind === "mcp") {
-        const definition = await source!.mcpDefinition(ref);
+        const definition = await source.mcpDefinition(ref);
         for (const harness of settings.harnesses)
           native.push(
             mcpEntry(harness, { id: ref.id, name }, definition, home),
           );
       } else {
-        const cache = await source!.skillOrHookPackage("hook", ref);
+        const cache = await source.skillOrHookPackage("hook", ref);
         const manifest = hookManifestSchema.parse(
           parse(await readFile(join(cache, "hook.yaml"), "utf8")),
         );
@@ -497,7 +508,7 @@ export async function synchronize(
         const root = await stage(
           ref.id,
           "hook",
-          folders.get(ref.id)!,
+          defined(folders.get(ref.id), `No Hook folder chosen for ${ref.id}`),
           cache,
           null,
           ref.publishedVersion,

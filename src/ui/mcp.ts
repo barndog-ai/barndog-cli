@@ -1,14 +1,25 @@
-import type { McpDefinition } from "@barndog-ai/api-contract";
+import { mcpDefinitionSchema } from "@barndog-ai/api-contract";
+import { z } from "zod";
 
 import { clean, fields, originLabel, renderValue } from "./format.js";
 
-type ShownMcp = {
-  name: string;
-  origin: string | { type: string; slug?: string; id: string };
+const shownMcpSchema = z.looseObject({
+  name: z.string(),
+  origin: z.union([
+    z.string(),
+    z.looseObject({
+      type: z.string(),
+      slug: z.string().optional(),
+      id: z.string(),
+    }),
+  ]),
   /** Cloud nests the definition in a numbered version; repos give a content hash. */
-  version: string | { number: number; definition: McpDefinition };
-  definition?: McpDefinition;
-};
+  version: z.union([
+    z.string(),
+    z.looseObject({ number: z.number(), definition: mcpDefinitionSchema }),
+  ]),
+  definition: mcpDefinitionSchema.optional(),
+});
 
 const signIn = {
   none: "none",
@@ -18,7 +29,9 @@ const signIn = {
 
 /** An MCP configuration as a person reads it; secret references print by name. */
 export function renderMcp(value: unknown): string[] {
-  const mcp = value as ShownMcp;
+  const shown = shownMcpSchema.safeParse(value);
+  if (!shown.success) return renderValue(value);
+  const mcp = shown.data;
   const definition =
     mcp.definition ??
     (typeof mcp.version === "object" ? mcp.version.definition : undefined);

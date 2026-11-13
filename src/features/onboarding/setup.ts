@@ -29,6 +29,7 @@ import {
 } from "../../config/settings.js";
 
 import { connectionContext } from "../skills/remote.js";
+import { defined } from "../../lookup.js";
 
 export type HarnessChoice = {
   value: Harness;
@@ -104,7 +105,10 @@ export async function initialize(options: {
       next = applyWorkspace(next, options.workspace);
       const model =
         next.environment === undefined && options.workspace.kind === "local"
-          ? await openRepoSource(next, home)!.model()
+          ? await defined(
+              openRepoSource(next, home),
+              "A local workspace always has a source",
+            ).model()
           : undefined;
       // One developer's folder has nothing to choose between: everything installs.
       if (model)

@@ -16,11 +16,12 @@ import {
   installedName,
   originLabel,
   resolveClashes,
-  type NamedKind,
 } from "../environment/names.js";
-import { validateSkillSource } from "../skills/validation.js";
+import { validateSkillSource, asRecord } from "../skills/validation.js";
 import type { Harness } from "../../harnesses/types.js";
 import type { AssetKind } from "../asset-selection/types.js";
+import { isAssetKind } from "../asset-kinds/index.js";
+import { isHarness } from "../../harnesses/registry.js";
 
 export type InventoryState =
   | "installed"
@@ -79,7 +80,7 @@ export async function inventory(home = homedir()): Promise<Inventory> {
   const statePath = join(home, ".barndog/state.json");
   const raw = await fileText(statePath);
   const state = await readState(statePath, home);
-  const parsed = raw ? JSON.parse(raw) : {};
+  const parsed = asRecord(raw ? JSON.parse(raw) : {});
   const native = nativeSchema.parse(parsed.native ?? []);
   const installed = installedSchema.parse(parsed.installed ?? []);
   const conn = settings.version === 2 ? settings.connection : undefined;
@@ -136,7 +137,10 @@ export async function inventory(home = homedir()): Promise<Inventory> {
           if (repo) {
             const model = await repo.model();
             offline = repo.notices()[0] ?? null;
-            return { catalog: model.catalog, scopes: async () => model.scopes };
+            return {
+              catalog: model.catalog,
+              scopes: () => Promise.resolve(model.scopes),
+            };
           }
           const remote = await environmentCatalog(home, conn);
           return {
@@ -157,17 +161,20 @@ export async function inventory(home = homedir()): Promise<Inventory> {
       const selection = selectionState(settings);
       const effective = resolveAssets(catalog, selection);
       const outcome = await resolveClashes(
-        effective.assets
-          .filter((entry) => entry.enabled && entry.asset.kind !== "hook")
-          .map((entry) => ({
-            id: entry.asset.id,
-            kind: entry.asset.kind as NamedKind,
-            name: entry.asset.name,
-            origin: entry.asset.origin,
-            installed:
-              linksOf(entry.asset.id).length > 0 ||
-              nativeOf(entry.asset.id).length > 0,
-          })),
+        effective.assets.flatMap(({ asset, enabled }) => {
+          const { kind } = asset;
+          if (!enabled || kind === "hook") return [];
+          return [
+            {
+              id: asset.id,
+              kind,
+              name: asset.name,
+              origin: asset.origin,
+              installed:
+                linksOf(asset.id).length > 0 || nativeOf(asset.id).length > 0,
+            },
+          ];
+        }),
         localNames,
       );
       const clashed = new Set(outcome.skipped.map((c) => c.incoming.id));
@@ -181,7 +188,7 @@ export async function inventory(home = homedir()): Promise<Inventory> {
         const harnesses = [
           ...new Set([
             ...links.map((l) => l.harness),
-            ...entries.map((n) => n.harness as Harness),
+            ...entries.map((n) => n.harness).filter(isHarness),
           ]),
         ];
         items.push({
@@ -238,11 +245,14 @@ export async function inventory(home = homedir()): Promise<Inventory> {
     if (seen.has(id)) continue;
     const links = linksOf(id);
     const entries = nativeOf(id);
-    const kind = (links.length ? "skill" : entries[0]!.kind) as AssetKind;
-    const name = links.length
-      ? basename(links[0]!.target)
+    const [link] = links;
+    const [entry] = entries;
+    const kind = link ? "skill" : entry?.kind;
+    if (!isAssetKind(kind)) continue;
+    const name = link
+      ? basename(link.target)
       : kind === "mcp"
-        ? entries[0]!.key
+        ? (entry?.key ?? id)
         : (installed
             .find((t) => t.id === id)
             ?.path.split("/")
@@ -258,7 +268,7 @@ export async function inventory(home = homedir()): Promise<Inventory> {
       harnesses: [
         ...new Set([
           ...links.map((l) => l.harness),
-          ...entries.map((n) => n.harness as Harness),
+          ...entries.map((n) => n.harness).filter(isHarness),
         ]),
       ],
       paths: [
