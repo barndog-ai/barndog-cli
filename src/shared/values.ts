@@ -19,3 +19,12 @@ export function asStrings(value: unknown): string[] {
     ? value.filter((item): item is string => typeof item === "string")
     : [];
 }
+
+/** The `code` of a Node.js system error, such as `ENOENT`. */
+export function errorCode(error: unknown): string | undefined {
+  return error instanceof Error &&
+    "code" in error &&
+    typeof error.code === "string"
+    ? error.code
+    : undefined;
+}

@@ -21,7 +21,8 @@ import {
   type LocalWorkspace,
   type Settings,
 } from "../../config/settings.js";
-import { CliError, errorCode } from "../../errors.js";
+import { CliError } from "../../errors.js";
+import { errorCode } from "../../shared/values.js";
 import { renameSkillEntries } from "../environment/installed.js";
 import {
   assertAssetName,

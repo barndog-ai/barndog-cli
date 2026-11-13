@@ -2,6 +2,7 @@ import { ApiError } from "@barndog-ai/api-contract";
 import { z } from "zod";
 
 import { CONSTANT_CASE } from "./shared/patterns.js";
+import { errorCode } from "./shared/values.js";
 
 /** A user-facing failure with an optional command that fixes it. */
 export class CliError extends Error {
@@ -12,15 +13,6 @@ export class CliError extends Error {
     this.name = "CliError";
     this.hint = hint;
   }
-}
-
-/** The `code` of a Node.js system error, such as `ENOENT`. */
-export function errorCode(error: unknown): string | undefined {
-  return error instanceof Error &&
-    "code" in error &&
-    typeof error.code === "string"
-    ? error.code
-    : undefined;
 }
 
 /** Ends a command early when there is nothing to choose; not a failure. */

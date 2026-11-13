@@ -4,20 +4,18 @@ import {
   mkdir,
   readdir,
   readFile,
-  rename,
   rm,
   rmdir,
-  writeFile,
 } from "node:fs/promises";
-import { randomUUID } from "node:crypto";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import {
   packageFingerprint,
   type PackageEntry,
 } from "@barndog-ai/api-contract/package";
 import { assetKinds, type PackageKind } from "../asset-kinds/index.js";
-import { errorCode } from "../../errors.js";
+import { errorCode } from "../../shared/values.js";
 import { setYamlName, splitFrontMatter } from "../../shared/patterns.js";
+import { writeAtomic } from "../../shared/files.js";
 
 /** Readable, stable folders that harnesses resolve; the commit-pinned cache stays internal. */
 export function installedRoot(home: string, kind: PackageKind) {
@@ -28,6 +26,12 @@ export function installedPath(home: string, kind: PackageKind, name: string) {
   return join(installedRoot(home, kind), name);
 }
 
+/**
+ * Every file in an installed folder. Not `readDirectory()` from the contract
+ * package: that one reads a package to submit, so it skips `.git` and stops at
+ * package size limits. Here everything counts: a `.git` or large file added by
+ * hand must show up as a hand edit and be removed by mirroring.
+ */
 export async function readTree(directory: string): Promise<PackageEntry[]> {
   const entries: PackageEntry[] = [];
 
@@ -156,13 +160,6 @@ export async function mirrorTree(directory: string, entries: PackageEntry[]) {
       continue;
     }
 
-    await mkdir(dirname(path), { recursive: true, mode: 0o755 });
-    const temp = `${path}.${randomUUID()}.tmp`;
-    try {
-      await writeFile(temp, entry.data, { mode, flag: "wx" });
-      await rename(temp, path);
-    } finally {
-      await rm(temp, { force: true });
-    }
+    await writeAtomic(path, entry.data, { mode, directoryMode: 0o755 });
   }
 }

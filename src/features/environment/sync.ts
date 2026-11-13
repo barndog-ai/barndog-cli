@@ -1,13 +1,5 @@
 import { homedir } from "node:os";
-import {
-  basename,
-  dirname,
-  isAbsolute,
-  join,
-  relative,
-  resolve,
-  sep,
-} from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
@@ -56,14 +48,8 @@ import {
   runtimeRequirements,
 } from "../native/adapters.js";
 import { shellQuote } from "../../shared/shell.js";
-import {
-  atomicFile,
-  fileText,
-  linkTarget,
-  locked,
-  transact,
-  type Write,
-} from "./transaction.js";
+import { linkTarget, locked, transact, type Write } from "./transaction.js";
+import { fileText, isInside } from "../../shared/files.js";
 import type { AssetCatalog } from "../asset-selection/types.js";
 import {
   assetKinds,
@@ -128,15 +114,6 @@ function changeType(change: {
   }
 
   return "updated";
-}
-
-function inside(parent: string, child: string) {
-  const path = relative(parent, child);
-
-  return (
-    !path ||
-    (!path.startsWith(`..${sep}`) && path !== ".." && !isAbsolute(path))
-  );
 }
 
 export type SyncOptions = {
@@ -422,7 +399,7 @@ export async function synchronize(
       names.add(name);
       for (const harness of settings.harnesses) {
         const target = resolve(skillDirectory(harness, home), name);
-        if (inside(source, target) || inside(target, source)) {
+        if (isInside(source, target) || isInside(target, source)) {
           throw new Error(`Source overlaps installation: ${source}`);
         }
 
@@ -894,5 +871,3 @@ export async function synchronize(
     return events;
   });
 }
-
-export { atomicFile };

@@ -22,7 +22,7 @@ import type { Connection } from "../../config/settings.js";
 import { serverFetch } from "../auth/transport.js";
 import { assetKinds, type PackageKind } from "../asset-kinds/index.js";
 import { metadata } from "../collaboration/domain.js";
-import { errorCode } from "../../errors.js";
+import { errorCode } from "../../shared/values.js";
 import { GIT_OBJECT_ID } from "../../shared/patterns.js";
 
 /** One identity's cache partition: server, organization and developer never mix. */

@@ -1,10 +1,8 @@
-import { access } from "node:fs/promises";
-import { constants } from "node:fs";
-import { delimiter, join } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { coerce, satisfies, validRange } from "semver";
+import which from "which";
 import type { HookManifest, McpDefinition } from "@barndog-ai/api-contract";
 import { adapters } from "../../harnesses/registry.js";
 import type { Harness } from "../../harnesses/types.js";
@@ -20,24 +18,12 @@ const execute = promisify(execFile);
 export const hookCommand = (root: string, command: string, harness?: Harness) =>
   `export ${["BARNDOG_HOOK_ROOT", ...(harness ? adapters[harness].hooks.rootVariables : [])].map((name) => `${name}=${shellQuote(root)}`).join(" ")}; ${command}`;
 
-export async function executable(
+/** Where `command` runs from, trying Windows extensions there; null when it isn't on PATH. */
+export function executable(
   command: string,
   path = process.env.PATH ?? "",
-) {
-  for (const directory of command.includes("/")
-    ? [""]
-    : path.split(delimiter)) {
-    const candidate = directory ? join(directory, command) : command;
-    try {
-      await access(candidate, constants.X_OK);
-
-      return candidate;
-    } catch {
-      /* next PATH entry */
-    }
-  }
-
-  return null;
+): Promise<string | null> {
+  return which(command, { path, nothrow: true });
 }
 
 export async function runtimeRequirements(

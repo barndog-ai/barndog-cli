@@ -1,7 +1,6 @@
-import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 
 import {
   ApiError,
@@ -11,6 +10,7 @@ import { z } from "zod";
 
 import { readSettings, type Connection } from "../../config/settings.js";
 import { request } from "./remote.js";
+import { writeAtomic } from "../../shared/files.js";
 
 const CHECK_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -52,12 +52,7 @@ async function readCheck(home: string, conn: Connection) {
 }
 
 async function writeCheck(home: string, check: Check) {
-  const path = checkPath(home);
-  const temporary = `${path}.${randomUUID()}.tmp`;
-
-  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-  await writeFile(temporary, `${JSON.stringify(check)}\n`, { mode: 0o600 });
-  await rename(temporary, path);
+  await writeAtomic(checkPath(home), `${JSON.stringify(check)}\n`);
 }
 
 /** A server from before the check existed answers 404; sync as if it changed. */

@@ -18,7 +18,7 @@ import {
   warn,
 } from "../ui/format.js";
 
-import { InvalidArgumentError, Option, type Command } from "commander";
+import { Option, type Command } from "commander";
 import { ORIGIN_HELP } from "../ui/format.js";
 import type { CommandContext } from "./context.js";
 import { pickInstalled, resolveOrigin } from "./origin.js";
@@ -39,15 +39,7 @@ import type {
 import type { Harness } from "../harnesses/types.js";
 import { packageKindList } from "../features/asset-kinds/index.js";
 import { defined } from "../shared/lookup.js";
-
-function positive(value: string) {
-  const result = Number(value);
-  if (!Number.isSafeInteger(result) || result < 1) {
-    throw new InvalidArgumentError("Use a positive integer");
-  }
-
-  return result;
-}
+import { positiveInteger } from "../ui/options.js";
 
 const checkMarks: Record<"ok" | "warn" | "fail", string> = {
   ok: ok("✔"),
@@ -409,8 +401,8 @@ export function registerCapabilities(
     )
     .requiredOption("--input <file>", "Native JSON test input")
     .option("--event <event>", "Native event name")
-    .option("--handler <number>", "One-based command index", positive)
-    .option("--timeout <seconds>", "Maximum test duration", positive)
+    .option("--handler <number>", "One-based command index", positiveInteger)
+    .option("--timeout <seconds>", "Maximum test duration", positiveInteger)
     .description("Explicitly run one published command Hook with test input")
     .action(
       async (
@@ -686,16 +678,22 @@ export function registerCapabilities(
     .command("github")
     .description("Manage GitHub App connections, contributions and mirrors");
 
-  for (const [name, start] of [
-    ["auth", context.githubAuth],
-    ["install", context.githubInstall],
+  for (const [name, step, page] of [
+    ["auth", "authorization", context.githubAuth],
+    ["install", "App installation", context.githubInstall],
   ] as const) {
     github
       .command(name)
       .option("--no-browser", "Print the URL without opening it")
-      .action(async (options: { browser: boolean }) =>
-        print(await start(options)),
-      );
+      .action(async (options: { browser: boolean }) => {
+        const { url } = await page();
+        if (options.browser) {
+          // The message below still gives the URL when no browser opens.
+          await openBrowser(url).catch(() => undefined);
+        }
+
+        print({ message: `Complete GitHub ${step} in your browser: ${url}` });
+      });
   }
 
   for (const [name, read] of [
@@ -858,7 +856,7 @@ export function registerCapabilities(
   pulls
     .command("show <id> <number>")
     .action(async (id: string, number: string) =>
-      print(await context.githubPullsShow(id, positive(number))),
+      print(await context.githubPullsShow(id, positiveInteger(number))),
     );
 
   pulls
@@ -897,7 +895,7 @@ export function registerCapabilities(
           await context.githubPullsRevise({
             ...options,
             connectionId: id,
-            number: positive(number),
+            number: positiveInteger(number),
           }),
         ),
     );
@@ -929,14 +927,14 @@ export function registerCapabilities(
           await context.githubPullsReview({
             ...options,
             connectionId: id,
-            number: positive(number),
+            number: positiveInteger(number),
           }),
         ),
     );
 
   bodyOptions(pullCommand("comment"))
     .option("--path <file>", "Inline file")
-    .option("--line <number>", "Inline line", positive)
+    .option("--line <number>", "Inline line", positiveInteger)
     .addOption(
       new Option("--side <side>", "Inline diff side").choices([
         "LEFT",
@@ -953,7 +951,7 @@ export function registerCapabilities(
           await context.githubPullsComment({
             ...options,
             connectionId: id,
-            number: positive(number),
+            number: positiveInteger(number),
           }),
         ),
     );
@@ -964,7 +962,7 @@ export function registerCapabilities(
         await context.githubPullsMerge({
           ...options,
           connectionId: id,
-          number: positive(number),
+          number: positiveInteger(number),
         }),
       ),
   );

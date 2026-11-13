@@ -9,6 +9,9 @@ import {
   type ParseError,
 } from "jsonc-parser";
 import { parse as parseToml, stringify as stringifyToml } from "smol-toml";
+// Two TOML libraries on purpose: smol-toml parses and writes values but keeps no
+// source positions, and toml-eslint-parser (despite the name, a plain TOML parser
+// that doesn't need ESLint) gives each table's range in the text. See tomlEdit().
 import { parseForESLint } from "toml-eslint-parser";
 import { isDeepStrictEqual } from "node:util";
 import { join } from "node:path";
@@ -78,6 +81,13 @@ function json(text: string) {
   return object(value);
 }
 
+/**
+ * Replaces or removes one `[mcp_servers.<key>]` entry in Codex's config.toml by
+ * cutting its source range out of the text, so comments and unrelated settings
+ * survive. toml-eslint-parser finds the ranges; smol-toml writes the new entry
+ * and checks the result still parses. Re-serializing the whole file with
+ * smol-toml would drop every comment.
+ */
 function tomlEdit(
   text: string,
   key: string,

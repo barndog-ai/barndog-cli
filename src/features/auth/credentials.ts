@@ -1,18 +1,10 @@
-import {
-  chmod,
-  lstat,
-  mkdir,
-  readFile,
-  rename,
-  rm,
-  writeFile,
-} from "node:fs/promises";
+import { chmod, lstat, mkdir, readFile, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
 import { contextSchema, type ActorContext } from "@barndog-ai/api-contract";
 import { z } from "zod";
-import { errorCode } from "../../errors.js";
+import { errorCode } from "../../shared/values.js";
+import { writeAtomic } from "../../shared/files.js";
 
 /** A BarnDog session token: 32 random bytes in unpadded base64url, 43 characters. */
 export const SESSION_TOKEN = /^[\w-]{43}$/;
@@ -89,18 +81,14 @@ export async function updateCredentials(
     throw error;
   });
 
-  const temporary = join(root, `credentials.${randomUUID()}.tmp`);
   try {
     const credentials = await readCredentials(home);
     update(credentials);
-    await writeFile(temporary, JSON.stringify(credentials, null, 2) + "\n", {
-      mode: 0o600,
-      flag: "wx",
-    });
-
-    await rename(temporary, join(root, "credentials.json"));
+    await writeAtomic(
+      join(root, "credentials.json"),
+      JSON.stringify(credentials, null, 2) + "\n",
+    );
   } finally {
-    await rm(temporary, { force: true });
     await rm(lock, { recursive: true });
   }
 }

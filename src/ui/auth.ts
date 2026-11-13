@@ -1,5 +1,4 @@
-import { browserCommand } from "../shared/browser.js";
-import { spawn } from "node:child_process";
+import open from "open";
 import { homedir } from "node:os";
 import {
   login,
@@ -25,16 +24,9 @@ import {
   warn,
 } from "./format.js";
 
-export async function openBrowser(url: string) {
-  const { command, args } = browserCommand(url);
-
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn(command, args, { stdio: "ignore" });
-    child.once("error", reject);
-    child.once("exit", (code) =>
-      code === 0 ? resolve() : reject(new Error("Unable to open browser")),
-    );
-  });
+/** Opens `url` in the default browser; rejects when no browser could be started. */
+export async function openBrowser(url: string): Promise<void> {
+  await open(url);
 }
 
 export type Output = {

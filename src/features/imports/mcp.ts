@@ -14,7 +14,8 @@ import { z } from "zod";
 import { readSettings, SetupRequiredError } from "../../config/settings.js";
 import { CliError } from "../../errors.js";
 import { harnesses, type Harness } from "../../harnesses/registry.js";
-import { atomicFile, fileText, locked } from "../environment/transaction.js";
+import { locked } from "../environment/transaction.js";
+import { fileText, writeAtomic } from "../../shared/files.js";
 import { synchronize } from "../environment/sync.js";
 import { nativeFile, patchNative } from "../native/configuration.js";
 import { NAME_RULE, validAssetName } from "../git-workspace/format.js";
@@ -394,7 +395,7 @@ export async function addMcpServers(
 
         await copyFile(conflict.file, backup);
         backups.push(backup);
-        await atomicFile(
+        await writeAtomic(
           conflict.file,
           patchNative(
             text,

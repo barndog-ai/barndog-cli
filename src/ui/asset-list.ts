@@ -1,7 +1,7 @@
 import { InvalidArgumentError, type Command } from "commander";
 
 import { originLabel } from "../features/environment/names.js";
-import { POSITIVE_INTEGER } from "../shared/patterns.js";
+import { positiveInteger } from "./options.js";
 
 export type ListOptions = {
   search?: string;
@@ -16,14 +16,6 @@ export type ListAsset = {
   origin: { type: string; slug?: string; id?: string };
   version?: { number: number; description?: string };
 };
-
-function positive(value: string) {
-  if (!POSITIVE_INTEGER.test(value) || !Number.isSafeInteger(Number(value))) {
-    throw new InvalidArgumentError("Use a positive integer");
-  }
-
-  return Number(value);
-}
 
 export function assetListOptions(command: Command, withSearch = true): Command {
   if (withSearch) {
@@ -42,19 +34,21 @@ export function assetListOptions(command: Command, withSearch = true): Command {
 }
 
 export function pageOptions(command: Command): Command {
-  return command.option("--page <number>", "Results page", positive, 1).option(
-    "--limit <number>",
-    "Results per page (maximum 100)",
-    (value) => {
-      const count = positive(value);
-      if (count > 100) {
-        throw new InvalidArgumentError("Use at most 100 results per page");
-      }
+  return command
+    .option("--page <number>", "Results page", positiveInteger, 1)
+    .option(
+      "--limit <number>",
+      "Results per page (maximum 100)",
+      (value) => {
+        const count = positiveInteger(value);
+        if (count > 100) {
+          throw new InvalidArgumentError("Use at most 100 results per page");
+        }
 
-      return count;
-    },
-    20,
-  );
+        return count;
+      },
+      20,
+    );
 }
 
 /** Rows that match the search words and origin, in display order. */

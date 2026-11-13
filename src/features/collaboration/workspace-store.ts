@@ -1,4 +1,5 @@
-import { CliError, errorCode } from "../../errors.js";
+import { CliError } from "../../errors.js";
+import { errorCode } from "../../shared/values.js";
 import { randomUUID, createHash } from "node:crypto";
 
 import { join, dirname, isAbsolute } from "node:path";
@@ -6,7 +7,6 @@ import {
   mkdir,
   readFile,
   writeFile,
-  rename,
   readdir,
   realpath,
   rm,
@@ -23,6 +23,8 @@ import {
 import { readDirectory } from "@barndog-ai/api-contract/collaboration";
 import { packageKindList } from "../asset-kinds/index.js";
 import { GIT_OBJECT_ID } from "../../shared/patterns.js";
+import { writeAtomic } from "../../shared/files.js";
+import { withPidLock } from "../../shared/lock.js";
 
 const filesSchema = z.array(
   z.object({ path: z.string(), content: z.string(), executable: z.boolean() }),
@@ -154,61 +156,20 @@ function recordPath(root: string, home: string) {
 }
 
 export async function save<T extends StoredRecord>(work: T, home: string) {
-  await mkdir(directory(home), { recursive: true, mode: 0o700 });
-  const file = recordPath(work.root, home);
-  const temp = `${file}.${randomUUID()}.tmp`;
-
-  await writeFile(temp, JSON.stringify(work), { mode: 0o600 });
-  await rename(temp, file);
+  await writeAtomic(recordPath(work.root, home), JSON.stringify(work));
 }
 
-// Serialize local mutations across processes. A dead process's lock is reclaimable.
-export async function locked<T>(home: string, run: () => Promise<T>) {
-  const root = directory(home);
-  const lock = join(root, "lock");
-
-  await mkdir(root, { recursive: true, mode: 0o700 });
-  try {
-    await mkdir(lock);
-  } catch (error) {
-    if (errorCode(error) !== "EEXIST") {
-      throw error;
-    }
-
-    const pid = Number(
-      await readFile(join(lock, "pid"), "utf8").catch(() => "0"),
-    );
-
-    if (!pid) {
-      throw new Error(
+/** Serializes working-copy changes across processes. */
+export function locked<T>(home: string, run: () => Promise<T>): Promise<T> {
+  return withPidLock(
+    join(directory(home), "lock"),
+    {
+      starting:
         "Another BarnDog workspace operation is starting; retry shortly",
-        { cause: error },
-      );
-    }
-
-    try {
-      process.kill(pid, 0);
-    } catch (failure) {
-      if (errorCode(failure) !== "ESRCH") {
-        throw failure;
-      }
-
-      await rm(lock, { recursive: true });
-
-      return locked(home, run);
-    }
-
-    throw new Error("Another BarnDog workspace operation is running", {
-      cause: error,
-    });
-  }
-
-  await writeFile(join(lock, "pid"), String(process.pid));
-  try {
-    return await run();
-  } finally {
-    await rm(lock, { recursive: true, force: true });
-  }
+      running: "Another BarnDog workspace operation is running",
+    },
+    run,
+  );
 }
 
 /** Root working-copy commands only make sense inside a pulled or created folder. */

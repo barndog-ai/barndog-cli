@@ -11,7 +11,7 @@ import { resolveAssets } from "../asset-selection/index.js";
 import type { WorkspaceSource } from "../environment/source.js";
 import type { WorkspaceModel } from "./format.js";
 import { localRepoSource, type RepoSource } from "./source.js";
-import { errorCode } from "../../errors.js";
+import { errorCode } from "../../shared/values.js";
 import { z } from "zod";
 
 /** How assets in the kept local folder are addressed next to a shared workspace. */

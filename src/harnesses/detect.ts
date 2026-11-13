@@ -1,9 +1,9 @@
-import { access, stat } from "node:fs/promises";
-import { constants } from "node:fs";
+import { stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { delimiter, join } from "node:path";
+import { join } from "node:path";
+import which from "which";
 import { harnesses, adapters, type DetectedHarness } from "./registry.js";
-import { errorCode } from "../errors.js";
+import { errorCode } from "../shared/values.js";
 
 type DetectionOptions = {
   home?: string;
@@ -12,16 +12,9 @@ type DetectionOptions = {
   appDirectories?: string[];
 };
 
-async function exists(path: string, directory = false): Promise<boolean> {
+async function isDirectory(path: string): Promise<boolean> {
   try {
-    const info = await stat(path);
-    if (directory) {
-      return info.isDirectory();
-    }
-
-    await access(path, constants.X_OK);
-
-    return info.isFile();
+    return (await stat(path)).isDirectory();
   } catch (error) {
     if (["ENOENT", "ENOTDIR", "EACCES"].includes(errorCode(error) ?? "")) {
       return false;
@@ -37,36 +30,19 @@ export async function detectHarnesses(
 ): Promise<DetectedHarness[]> {
   const home = options.home ?? homedir();
   const platform = options.platform ?? process.platform;
-  const directories = (options.path ?? process.env.PATH ?? "")
-    .split(delimiter)
-    .filter(Boolean);
+  const path = options.path ?? process.env.PATH ?? "";
 
   const appDirectories = options.appDirectories ?? [
     "/Applications",
     join(home, "Applications"),
   ];
 
-  const extensions = platform === "win32" ? ["", ".exe", ".cmd", ".bat"] : [""];
-
   return Promise.all(
     harnesses.map(async (id) => {
       const installation = adapters[id];
       let evidence: string | null = null;
-      for (const directory of directories) {
-        for (const command of installation.commands) {
-          for (const extension of extensions) {
-            const candidate = join(directory, `${command}${extension}`);
-            if (await exists(candidate)) {
-              evidence = candidate;
-              break;
-            }
-          }
-
-          if (evidence) {
-            break;
-          }
-        }
-
+      for (const command of installation.commands) {
+        evidence = path ? await which(command, { path, nothrow: true }) : null;
         if (evidence) {
           break;
         }
@@ -75,7 +51,7 @@ export async function detectHarnesses(
       if (!evidence && platform === "darwin") {
         for (const directory of appDirectories) {
           const candidate = join(directory, installation.macApp);
-          if (await exists(join(candidate, "Contents", "MacOS"), true)) {
+          if (await isDirectory(join(candidate, "Contents", "MacOS"))) {
             evidence = candidate;
             break;
           }

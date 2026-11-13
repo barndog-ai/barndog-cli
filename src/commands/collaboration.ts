@@ -22,7 +22,7 @@ import { pickOne } from "../ui/pick.js";
 import { resolveOrigin } from "./origin.js";
 import { clean, json, ORIGIN_HELP, originLabel, warn } from "../ui/format.js";
 import { defined } from "../shared/lookup.js";
-import { POSITIVE_INTEGER } from "../shared/patterns.js";
+import { positiveInteger } from "../ui/options.js";
 
 function side(value: string) {
   if (value !== "old" && value !== "new") {
@@ -30,14 +30,6 @@ function side(value: string) {
   }
 
   return value;
-}
-
-function positive(value: string) {
-  if (!POSITIVE_INTEGER.test(value) || !Number.isSafeInteger(Number(value))) {
-    throw new InvalidArgumentError("Expected a positive integer");
-  }
-
-  return Number(value);
 }
 
 type RunOptions = {
@@ -249,13 +241,17 @@ export function registerCollaboration(
       .option("--origin <origin>", ORIGIN_HELP);
 
     if (name === "show") {
-      command.option("--version <number>", "Published version", positive);
+      command.option(
+        "--version <number>",
+        "Published version",
+        positiveInteger,
+      );
     }
 
     if (name === "diff") {
       command
-        .requiredOption("--from <number>", "Old version", positive)
-        .requiredOption("--to <number>", "New version", positive);
+        .requiredOption("--from <number>", "Old version", positiveInteger)
+        .requiredOption("--to <number>", "New version", positiveInteger);
     }
 
     command.action(
@@ -348,11 +344,11 @@ function registerChanges(
   changes
     .command("diff <id>")
     .description("Inspect a proposal diff")
-    .option("--revision <number>", "Proposal revision", positive)
+    .option("--revision <number>", "Proposal revision", positiveInteger)
     .option(
       "--from-revision <number>",
       "Compare to another proposal revision",
-      positive,
+      positiveInteger,
     )
     .action(
       (id: string, options: { revision?: number; fromRevision?: number }) =>
@@ -370,7 +366,11 @@ function registerChanges(
     changes
       .command(`${name} <id>`)
       .description(description)
-      .requiredOption("--revision <number>", "Revision you reviewed", positive)
+      .requiredOption(
+        "--revision <number>",
+        "Revision you reviewed",
+        positiveInteger,
+      )
       .action((id: string, options: { revision: number }) => {
         const target = withKind({ ...options, id });
 
@@ -391,14 +391,14 @@ function registerChanges(
   changes
     .command("comment <id>")
     .description("Comment, reply, or suggest an inline replacement")
-    .requiredOption("--revision <number>", "Proposal revision", positive)
+    .requiredOption("--revision <number>", "Proposal revision", positiveInteger)
     .option("--body <text>", "Comment text")
     .option("--body-file <path>", "Read comment text from a file")
     .option("--thread <id>", "Reply to a discussion")
     .option("--path <path>", "Package file for an inline discussion")
     .option("--side <side>", "old or new", side)
-    .option("--start-line <number>", "First line", positive)
-    .option("--end-line <number>", "Last line", positive)
+    .option("--start-line <number>", "First line", positiveInteger)
+    .option("--end-line <number>", "Last line", positiveInteger)
     .option("--replacement-file <path>", "Replacement text file")
     .option("--expected-file <path>", "Exact original text file")
     .action((id: string, options: Omit<CommentOptions, "id" | "kind">) =>
@@ -419,7 +419,7 @@ function registerChanges(
       .requiredOption(
         "--revision <number>",
         "Current proposal revision",
-        positive,
+        positiveInteger,
       )
       .action((id: string, thread: string, options: { revision: number }) => {
         const target = withKind({ ...options, id, thread });

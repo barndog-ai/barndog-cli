@@ -9,11 +9,8 @@ import {
   nativeFile,
   type NativeEntry,
 } from "../features/native/configuration.js";
-import {
-  locked,
-  transact,
-  fileText,
-} from "../features/environment/transaction.js";
+import { locked, transact } from "../features/environment/transaction.js";
+import { fileText } from "../shared/files.js";
 import { mcpEntry, hookCommand } from "../features/native/adapters.js";
 import { createProgram } from "../program.js";
 import { spawnSync } from "node:child_process";

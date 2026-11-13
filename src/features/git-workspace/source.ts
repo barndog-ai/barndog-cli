@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
 
 import type { GitWorkspace, LocalWorkspace } from "../../config/settings.js";
-import { CliError, errorCode } from "../../errors.js";
+import { CliError } from "../../errors.js";
+import { errorCode } from "../../shared/values.js";
 import type { AssetReference } from "../asset-selection/types.js";
 import { storePackage } from "../environment/packages.js";
 import type { WorkspaceSource } from "../environment/source.js";
@@ -19,6 +19,7 @@ import { git, GitError, gitReason, gitText } from "./git.js";
 import { folderSnapshot, gitSnapshot, type Snapshot } from "./snapshot.js";
 import { defined } from "../../shared/lookup.js";
 import { z } from "zod";
+import { writeAtomic } from "../../shared/files.js";
 
 /** A workspace read from files; adds what cloud answers through other endpoints. */
 export type RepoSource = WorkspaceSource & {
@@ -159,14 +160,7 @@ async function writeFetchState(
   home: string,
   state: FetchState,
 ) {
-  const path = statePath(workspaceId, home);
-  const temporary = `${path}.${randomUUID()}.tmp`;
-  try {
-    await writeFile(temporary, JSON.stringify(state), { mode: 0o600 });
-    await rename(temporary, path);
-  } finally {
-    await rm(temporary, { force: true });
-  }
+  await writeAtomic(statePath(workspaceId, home), JSON.stringify(state));
 }
 
 /** Creates or repairs the bare clone; nothing is ever checked out of it. */

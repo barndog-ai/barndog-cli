@@ -1,7 +1,8 @@
 import { LoginRequiredError } from "../features/auth/transport.js";
 import { styleText } from "node:util";
 import { homedir } from "node:os";
-import { basename, isAbsolute, relative, sep } from "node:path";
+import { basename, relative, sep } from "node:path";
+import { isInside } from "../shared/files.js";
 import { SetupRequiredError } from "../config/settings.js";
 import type { SyncEvent } from "../features/environment/events.js";
 import { adapters, isHarness } from "../harnesses/registry.js";
@@ -23,20 +24,14 @@ import { CliError, friendlyHint, friendlyMessage } from "../errors.js";
 import { assetKinds } from "../features/asset-kinds/index.js";
 
 export function displayPath(path: string): string {
-  const homeRelative = relative(homedir(), path);
-  if (!homeRelative) {
-    return "~";
+  const home = homedir();
+  if (!isInside(home, path)) {
+    return path;
   }
 
-  if (
-    homeRelative !== ".." &&
-    !homeRelative.startsWith(`..${sep}`) &&
-    !isAbsolute(homeRelative)
-  ) {
-    return `~${sep}${homeRelative}`;
-  }
+  const homeRelative = relative(home, path);
 
-  return path;
+  return homeRelative ? `~${sep}${homeRelative}` : "~";
 }
 
 type Action =

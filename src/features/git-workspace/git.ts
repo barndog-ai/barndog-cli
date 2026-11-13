@@ -1,7 +1,8 @@
 import { execFile, spawn } from "node:child_process";
 import { stat } from "node:fs/promises";
 
-import { CliError, errorCode } from "../../errors.js";
+import { CliError } from "../../errors.js";
+import { errorCode } from "../../shared/values.js";
 import { GIT_OBJECT_ID } from "../../shared/patterns.js";
 
 /** The prefix Git puts on a failure line: `fatal: `, `error: ` or `remote: `. */

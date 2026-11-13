@@ -94,9 +94,8 @@ import type {
   PromoteResult,
 } from "../features/discovery/index.js";
 import type {
-  BrowserStep,
-  GithubBrowserOptions,
   GithubInstallation,
+  GithubPage,
   GithubStatus,
 } from "../features/github/account.js";
 import type {
@@ -251,8 +250,8 @@ type FeatureFunctions = {
   setDiscussionResolved: (target: ThreadResolution) => Promise<Change>;
 
   githubStatus: () => Promise<GithubStatus>;
-  githubAuth: (options: GithubBrowserOptions) => Promise<BrowserStep>;
-  githubInstall: (options: GithubBrowserOptions) => Promise<BrowserStep>;
+  githubAuth: () => Promise<GithubPage>;
+  githubInstall: () => Promise<GithubPage>;
   githubInstallations: () => Promise<GithubInstallation[]>;
 
   githubList: () => Promise<GitConnection[]>;

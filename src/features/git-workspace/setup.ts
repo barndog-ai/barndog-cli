@@ -3,7 +3,8 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import type { GitWorkspace, LocalWorkspace } from "../../config/settings.js";
-import { CliError, errorCode } from "../../errors.js";
+import { CliError } from "../../errors.js";
+import { errorCode } from "../../shared/values.js";
 import { CONFIG_FILE, parseConfig, skeleton } from "./format.js";
 import {
   git,

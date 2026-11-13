@@ -1,14 +1,14 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, isAbsolute, join } from "node:path";
-import { randomUUID } from "node:crypto";
+import { isAbsolute, join } from "node:path";
 import { parse, stringify } from "yaml";
 import { z } from "zod";
 import type { SelectionState } from "../features/asset-selection/types.js";
 import { selectionStateSchema } from "./environment.js";
 import { isHarness, type Harness } from "../harnesses/registry.js";
-import { errorCode } from "../errors.js";
+import { errorCode } from "../shared/values.js";
 import { NAME, UUID_V4 } from "../shared/patterns.js";
+import { writeAtomic } from "../shared/files.js";
 
 export class SetupRequiredError extends Error {
   constructor() {
@@ -176,8 +176,5 @@ export async function saveSettings(
 ): Promise<void> {
   const text = settingsText(settings);
   const path = settingsPath(home);
-  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-  const temporary = `${path}.${randomUUID()}.tmp`;
-  await writeFile(temporary, text, { mode: 0o600 });
-  await rename(temporary, path);
+  await writeAtomic(path, text);
 }
