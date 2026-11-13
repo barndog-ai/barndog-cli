@@ -117,26 +117,32 @@ function validate(value: unknown): Settings {
       isInvalidPart(field) ? invalidPart[field] : invalidSettings,
     );
   }
+
   // Keys older files had (a format `version` and a `skills` list) are left
   // out here, so the next save removes them.
   const { version, skills, ...settings } = result.data;
   void version;
   void skills;
   const { connection, gitWorkspace, localWorkspace, environment } = settings;
-  if (connection && gitWorkspace)
+  if (connection && gitWorkspace) {
     throw new Error(
       "Invalid user settings: use only one of connection and gitWorkspace",
     );
+  }
+
   const selectsRemoteAssets =
     environment &&
     (environment.subscriptions.length ||
       environment.individualAssetIds.length) &&
     !gitWorkspace &&
     !localWorkspace;
-  if (selectsRemoteAssets && !connection)
+
+  if (selectsRemoteAssets && !connection) {
     throw new Error(
       "Invalid user settings: API selections require a connection",
     );
+  }
+
   return settings;
 }
 
@@ -147,7 +153,10 @@ export async function readSettings(
   try {
     return validate(parse(await readFile(path, "utf8")));
   } catch (error) {
-    if (errorCode(error) === "ENOENT") return null;
+    if (errorCode(error) === "ENOENT") {
+      return null;
+    }
+
     throw error;
   }
 }
@@ -155,6 +164,7 @@ export async function readSettings(
 /** The file's text, after checking the settings are valid. */
 export function settingsText(settings: Settings): string {
   validate(settings);
+
   return stringify(settings);
 }
 

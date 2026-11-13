@@ -20,27 +20,34 @@ export async function promptClash(clash: Clash): Promise<ClashChoice> {
       ["New", originLabel(clash.incoming.origin)],
     ],
     2,
-  ))
+  )) {
     console.log(line);
+  }
+
   console.log("");
   const choices: { name: string; value: ClashChoice; description?: string }[] =
     [];
+
   if (
     clash.incoming.renamable !== false &&
     validInstalledName(clash.incomingRename)
-  )
+  ) {
     choices.push({
       name: `Rename the new one to ${clash.incomingRename}`,
       value: "rename-incoming",
     });
+  }
+
   if (
     clash.installed.renamable !== false &&
     validInstalledName(clash.installedRename)
-  )
+  ) {
     choices.push({
       name: `Rename the installed one to ${clash.installedRename}`,
       value: "rename-installed",
     });
+  }
+
   choices.push(
     { name: "Don't install the new one", value: "skip-incoming" },
     {
@@ -48,12 +55,14 @@ export async function promptClash(clash: Clash): Promise<ClashChoice> {
       value: "replace-installed",
     },
   );
+
   const choice = await select({
     loop: false,
     message: "What should BarnDog do?",
     choices,
     theme: promptTheme,
   });
+
   console.log(
     dim(
       "  Saved. Change it later with barndog " +
@@ -61,5 +70,6 @@ export async function promptClash(clash: Clash): Promise<ClashChoice> {
         " rename, enable or disable.",
     ),
   );
+
   return choice;
 }

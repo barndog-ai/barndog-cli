@@ -30,21 +30,29 @@ export function registerSync(program: Command, context: CommandContext): void {
           await autoSync(() =>
             context.synchronize(undefined, { refresh: "auto", prompt: false }),
           ).catch(() => undefined);
+
           return;
         }
+
         const configPath =
           options.config === undefined ? undefined : resolve(options.config);
+
         const events = await context.synchronize(
           configPath,
           options.dryRun ? { dryRun: true } : undefined,
         );
-        if (context.mode.json) return context.write(json(events));
+
+        if (context.mode.json) {
+          return context.write(json(events));
+        }
+
         for (const line of renderSyncOutput(events, {
           title: options.dryRun ? "sync --dry-run" : "sync",
           preview: options.dryRun,
           verbose: options.verbose,
-        }))
+        })) {
           context.write(line);
+        }
       },
     );
 }

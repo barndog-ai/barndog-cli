@@ -23,6 +23,7 @@ export async function localRepository(cwd = process.cwd()) {
         maxBuffer: 65536,
       })
     ).stdout.trim();
+
   let root: string;
   try {
     root = await git("rev-parse", "--show-toplevel");
@@ -32,10 +33,13 @@ export async function localRepository(cwd = process.cwd()) {
       (error instanceof Error &&
         "stderr" in error &&
         /not a git repository/.test(String(error.stderr)))
-    )
+    ) {
       return { root: null, remotes: [] as string[] };
+    }
+
     throw error;
   }
+
   const names = (await git("remote")).split("\n").filter(Boolean);
   const remotes = new Set<string>();
   for (const name of names) {
@@ -44,9 +48,12 @@ export async function localRepository(cwd = process.cwd()) {
       "\n",
     )) {
       const key = normalizeRepositoryRemote(url);
-      if (key) remotes.add(key);
+      if (key) {
+        remotes.add(key);
+      }
     }
   }
+
   return { root, remotes: [...remotes] };
 }
 
@@ -63,13 +70,16 @@ export async function repositoryContext(
     z.array(repositorySchema),
     home,
   );
+
   const matches = repositories.filter(
     (repo) => repo.gitRemote && local.remotes.includes(repo.gitRemote),
   );
+
   const repository = only(matches) ?? null;
   const teams = repository
     ? await request(conn, "/v1/teams", z.array(teamSchema), home)
     : [];
+
   return {
     ...local,
     repository,

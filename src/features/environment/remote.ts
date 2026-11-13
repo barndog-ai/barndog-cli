@@ -26,8 +26,10 @@ export async function request<T>(
   method = "GET",
   body?: unknown,
 ): Promise<T> {
-  if (!path.startsWith("/v1/") || path.includes(".."))
+  if (!path.startsWith("/v1/") || path.includes("..")) {
     throw new Error("Invalid API path");
+  }
+
   const response = await serverFetch(conn.server, home)(
     `${conn.server}${path}`,
     {
@@ -46,10 +48,12 @@ export async function request<T>(
             : JSON.stringify(body),
     },
   );
+
   if (!response.ok) {
     const error = z
       .object({ code: z.string(), message: z.string() })
       .safeParse(await response.json().catch(() => null));
+
     throw new ApiError(
       response.status,
       error.success ? error.data.code : "REQUEST_FAILED",
@@ -58,6 +62,7 @@ export async function request<T>(
         : `Request failed (${response.status})`,
     );
   }
+
   return schema.parse(await response.json());
 }
 
@@ -71,14 +76,17 @@ export async function environmentCatalog(
   const conn = expected
     ? await connectionContext(expected.server, home)
     : await connection(home);
+
   if (
     expected &&
     (conn.organizationId !== expected.organizationId ||
       conn.developerId !== expected.developerId)
-  )
+  ) {
     throw new Error(
       "Authenticated identity does not match the selected environment",
     );
+  }
+
   return {
     connection: conn,
     catalog: await request(
@@ -97,6 +105,7 @@ export async function getAsset(
   home = homedir(),
 ) {
   const path = `/v1/${assetKinds[kind].route}/${z.uuidv4().parse(id)}`;
+
   return assetKinds[kind].schema.parse(
     await request(conn, path, z.unknown(), home),
   );
@@ -116,8 +125,12 @@ export async function selectAsset(
       (a.id === name || a.name === name) &&
       matchesOrigin(a.origin, origin, conn),
   );
+
   const reference = only(matches);
-  if (!reference) throw assetNotFound(kind, name, origin);
+  if (!reference) {
+    throw assetNotFound(kind, name, origin);
+  }
+
   return {
     connection: conn,
     reference,

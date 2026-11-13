@@ -25,17 +25,21 @@ export type State = { version: 1; links: Link[] };
 async function withoutRepeatedLinks(links: unknown[], installed: unknown) {
   const records = Array.isArray(installed) ? installed.filter(isRecord) : [];
   const score = async (link: Record<string, unknown>) => {
-    if (typeof link.target !== "string" || typeof link.source !== "string")
+    if (typeof link.target !== "string" || typeof link.source !== "string") {
       return 0;
+    }
+
     const actual = await readlink(link.target).catch(() => null);
     const entry = records.find(
       (item) => item.id === link.id && item.path === link.source,
     );
+
     return (
       (actual === link.source ? 2 : 0) +
       (entry?.fingerprint === (await treeFingerprint(link.source)) ? 1 : 0)
     );
   };
+
   const kept: unknown[] = [];
   for (const link of links) {
     const index =
@@ -44,13 +48,18 @@ async function withoutRepeatedLinks(links: unknown[], installed: unknown) {
             (other) => isRecord(other) && other.target === link.target,
           )
         : -1;
+
     const held = kept[index];
     if (!isRecord(link) || !isRecord(held)) {
       kept.push(link);
       continue;
     }
-    if ((await score(link)) > (await score(held))) kept[index] = link;
+
+    if ((await score(link)) > (await score(held))) {
+      kept[index] = link;
+    }
   }
+
   return kept;
 }
 
@@ -59,12 +68,17 @@ export async function readState(path: string, home: string): Promise<State> {
   try {
     value = JSON.parse(await readFile(path, "utf8"));
   } catch (error) {
-    if (isRecord(error) && error.code === "ENOENT")
+    if (isRecord(error) && error.code === "ENOENT") {
       return { version: 1, links: [] };
+    }
+
     throw error;
   }
-  if (!isRecord(value) || value.version !== 1 || !Array.isArray(value.links))
+
+  if (!isRecord(value) || value.version !== 1 || !Array.isArray(value.links)) {
     throw new Error("Invalid installation state");
+  }
+
   const links = await withoutRepeatedLinks(value.links, value.installed);
   const targets = new Set<string>();
   const checked: Link[] = [];
@@ -85,6 +99,7 @@ export async function readState(path: string, home: string): Promise<State> {
         "Invalid installation state; refusing to modify harness files",
       );
     }
+
     targets.add(link.target);
     checked.push({
       ...link,
@@ -94,5 +109,6 @@ export async function readState(path: string, home: string): Promise<State> {
       target: link.target,
     });
   }
+
   return { ...value, version: 1, links: checked };
 }

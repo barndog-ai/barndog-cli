@@ -39,21 +39,25 @@ function entry(
 test("native MCP changes preserve unmanaged entries, credentials, settings and comments", () => {
   const original =
     '{\n // User comment\n "theme": "dark",\n "mcpServers": { "mine": { "command": "mine", "env": { "TOKEN": "local-user-secret" } } }\n}\n';
+
   const managed = entry("claude");
   const installed = patchNative(original, [], [managed]);
   expect(installed).toContain("// User comment");
   expect(installed).toContain(
     '"mine": { "command": "mine", "env": { "TOKEN": "local-user-secret" } }',
   );
+
   expect(parseJson(installed).mcpServers.mine).toStrictEqual(
     parseJson(original).mcpServers.mine,
   );
+
   expect(patchNative(installed, [managed], [managed])).toBe(installed);
   const updated = { ...managed, value: { url: "https://example.org/new" } };
   const changed = patchNative(installed, [managed], [updated]);
   expect(parseJson(changed).mcpServers.mine).toStrictEqual(
     parseJson(original).mcpServers.mine,
   );
+
   const removed = patchNative(changed, [updated], []);
   expect(parseJson(removed)).toStrictEqual(parseJson(original));
   expect(() => patchNative(installed, [], [managed])).toThrow(/unmanaged MCP/);
@@ -67,6 +71,7 @@ test("native MCP changes preserve unmanaged entries, credentials, settings and c
       [updated],
     ),
   ).toThrow(/changed externally/);
+
   expect(() => patchNative(original, [managed], [])).toThrow(
     /changed externally/,
   );
@@ -75,11 +80,13 @@ test("native MCP changes preserve unmanaged entries, credentials, settings and c
 test("TOML edits preserve unrelated sections, header references, comments and multiline strings", () => {
   const original =
     '# My config\nmodel = "fixture-model"\nmessage = """\n[mcp_servers.fake]\nnot = a_table\n"""\n[mcp_servers.mine]\ncommand = "mine"\n# Keep this token local\n[mcp_servers.mine.env]\nTOKEN = "local-user-secret"\n[other]\nenabled = true\n';
+
   const managed = entry("codex", "mcp", "docs", {
     command: "node",
     args: ["a script.js"],
     env_vars: ["DOCS_TOKEN"],
   });
+
   const installed = patchNative(original, [], [managed]);
   expect(installed.startsWith(original.trimEnd())).toBeTruthy();
   expect(
@@ -88,6 +95,7 @@ test("TOML edits preserve unrelated sections, header references, comments and mu
     mine: { command: "mine", env: { TOKEN: "local-user-secret" } },
     docs: managed.value,
   });
+
   const updated = {
     ...managed,
     value: {
@@ -95,12 +103,14 @@ test("TOML edits preserve unrelated sections, header references, comments and mu
       env_http_headers: { Authorization: "DOCS_TOKEN" },
     },
   };
+
   const changed = patchNative(installed, [managed], [updated]);
   expect(changed).toContain('TOKEN = "local-user-secret"');
   expect(changed).toContain("# Keep this token local");
   expect(parseToml(patchNative(changed, [updated], []))).toStrictEqual(
     parseToml(original),
   );
+
   expect(() => patchNative(installed, [], [managed])).toThrow(/unmanaged MCP/);
   expect(() =>
     patchNative(
@@ -109,6 +119,7 @@ test("TOML edits preserve unrelated sections, header references, comments and mu
       [],
     ),
   ).toThrow(/changed externally/);
+
   expect(
     JSON.parse(
       JSON.stringify(parseToml(patchNative(null, [], [managed])).mcp_servers),
@@ -122,22 +133,28 @@ test("Hook array reconciliation preserves unmanaged registrations and detects ed
     hooks: { sessionStart: [{ command: "my-own-hook" }] },
     telemetry: false,
   });
+
   const first = entry("cursor", "hook", "sessionStart", {
     command: "barndog-owned-hook",
   });
+
   const second = entry("cursor", "hook", "afterFileEdit", {
     command: "second-owned-hook",
   });
+
   const installed = patchNative(original, [], [first, second]);
   expect(parseJson(installed).hooks.sessionStart[0]).toStrictEqual({
     command: "my-own-hook",
   });
+
   expect(patchNative(installed, [first, second], [first, second])).toBe(
     installed,
   );
+
   expect(parseJson(patchNative(installed, [first, second], []))).toStrictEqual(
     parseJson(original),
   );
+
   expect(() =>
     patchNative(
       installed.replace("barndog-owned-hook", "manual-edit"),
@@ -145,6 +162,7 @@ test("Hook array reconciliation preserves unmanaged registrations and detects ed
       [],
     ),
   ).toThrow(/changed externally/);
+
   expect(() => patchNative(installed, [], [first])).toThrow(/unmanaged Hook/);
 });
 
@@ -157,6 +175,7 @@ test("MCP adapters retain secret references and support Codex environment aliase
     environment: { API_KEY: { secretRef: "COMPANY_DOCS_TOKEN" } },
     authentication: "environment" as const,
   };
+
   for (const harness of ["claude", "codex", "cursor"] as const) {
     const result = mcpEntry(
       harness,
@@ -164,16 +183,18 @@ test("MCP adapters retain secret references and support Codex environment aliase
       definition,
       "/fixture",
     );
+
     if (harness === "codex") {
       expect(result.value.command).toBe(process.execPath);
       expect(result.value.env_vars).toStrictEqual(["COMPANY_DOCS_TOKEN"]);
-    } else
+    } else {
       expect(result.value.env).toStrictEqual({
         API_KEY:
           harness === "cursor"
             ? "${env:COMPANY_DOCS_TOKEN}"
             : "${COMPANY_DOCS_TOKEN}",
       });
+    }
   }
 });
 
@@ -187,6 +208,7 @@ test("Hook root binding preserves author quoting and paths containing spaces and
     ],
     { encoding: "utf8" },
   );
+
   expect(result.status).toBe(0);
   expect(result.stdout).toBe(`${root}/scripts/check.sh`);
 });
@@ -196,6 +218,7 @@ test("interrupted native writes roll forward and refuse to overwrite later user 
   t.onTestFinished(() => rm(home, { recursive: true, force: true }));
   const a = nativeFile("claude", "mcp", home),
     b = nativeFile("cursor", "mcp", home);
+
   await expect(
     locked(home, () =>
       transact(
@@ -206,17 +229,21 @@ test("interrupted native writes roll forward and refuse to overwrite later user 
         ],
         undefined,
         async (index) => {
-          if (!index) throw new Error("interrupted");
+          if (!index) {
+            throw new Error("interrupted");
+          }
         },
       ),
     ),
   ).rejects.toThrow(/interrupted/);
+
   expect(await fileText(a)).not.toBe(null);
   expect(await fileText(b)).toBe(null);
   await writeFile(a, '{"mcpServers":{},"userSetting":true}');
   await expect(locked(home, async () => undefined)).rejects.toThrow(
     /changed.*recovery/,
   );
+
   expect(await fileText(a)).toBe('{"mcpServers":{},"userSetting":true}');
   expect(await fileText(b)).toBe(null);
   await writeFile(a, '{"mcpServers":{}}');
@@ -230,23 +257,28 @@ test("command parsing delegates scope, native and mirror operations", async () =
   // The command only prints what comes back, so the result's shape isn't under test.
   const record = (name: string) => async (options: unknown) => {
     calls.push([name, options]);
+
     return { message: "ok" } as never;
   };
+
   const make = () =>
     createProgram({
       write: () => undefined,
       switchSet: async (options) => {
         calls.push(["switch", options]);
+
         return { status: "applied", events: [] };
       },
       changeAsset: async (change, target) => {
         calls.push([change, target]);
+
         return { status: "applied", events: [] };
       },
       githubResolveMirror: record("resolve-mirror"),
       githubImportCopy: record("import-copy"),
       githubCreateRepository: record("create-repository"),
     });
+
   await make().parseAsync(
     [
       "sets",
@@ -259,10 +291,12 @@ test("command parsing delegates scope, native and mirror operations", async () =
     ],
     { from: "user" },
   );
+
   await make().parseAsync(
     ["mcp", "install", "docs", "--origin", "team/platform"],
     { from: "user" },
   );
+
   await make().parseAsync(
     [
       "github",
@@ -277,6 +311,7 @@ test("command parsing delegates scope, native and mirror operations", async () =
     ],
     { from: "user" },
   );
+
   await make().parseAsync(
     [
       "github",
@@ -295,6 +330,7 @@ test("command parsing delegates scope, native and mirror operations", async () =
     ],
     { from: "user" },
   );
+
   await make().parseAsync(
     [
       "github",
@@ -315,6 +351,7 @@ test("command parsing delegates scope, native and mirror operations", async () =
     ],
     { from: "user" },
   );
+
   expect(calls[3]).toStrictEqual([
     "import-copy",
     {
@@ -326,6 +363,7 @@ test("command parsing delegates scope, native and mirror operations", async () =
       key: "copy-key",
     },
   ]);
+
   expect(calls[4]).toStrictEqual([
     "create-repository",
     {
@@ -340,6 +378,7 @@ test("command parsing delegates scope, native and mirror operations", async () =
       visibility: "public",
     },
   ]);
+
   expect(calls[0]).toStrictEqual([
     "switch",
     {
@@ -349,6 +388,7 @@ test("command parsing delegates scope, native and mirror operations", async () =
       resolution: undefined,
     },
   ]);
+
   expect(calls[1]).toStrictEqual([
     "install",
     {
@@ -358,6 +398,7 @@ test("command parsing delegates scope, native and mirror operations", async () =
       resolution: undefined,
     },
   ]);
+
   expect(calls[2]).toStrictEqual([
     "resolve-mirror",
     {
@@ -373,15 +414,19 @@ test("owned Hook removal retains adjacent unmanaged comments and trailing-comma 
   const managed = entry("claude", "hook", "SessionStart", {
     hooks: [{ type: "command", command: "owned" }],
   });
+
   const original =
     '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"unmanaged"}]}, /* keep this comment */ {"hooks":[{"type":"command","command":"owned"}]},]}}';
+
   const removed = patchNative(original, [managed], []);
   expect(removed).toContain("/* keep this comment */");
   expect(parseJson(removed).hooks.SessionStart[0].hooks[0].command).toBe(
     "unmanaged",
   );
+
   const only =
     '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"owned"}]},]}}';
+
   expect(parseJson(patchNative(only, [managed], []))).toStrictEqual({
     hooks: {},
   });

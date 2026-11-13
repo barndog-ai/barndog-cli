@@ -86,7 +86,7 @@ export type SetPreview = {
 async function overrideResolution(
   options: Overrides,
 ): Promise<OverrideResolution | undefined> {
-  if (options.decisions)
+  if (options.decisions) {
     return {
       type: "per-asset",
       decisions: z
@@ -100,6 +100,8 @@ async function overrideResolution(
         )
         .parse(JSON.parse(await readFile(options.decisions, "utf8"))),
     };
+  }
+
   return (
     options.resolution ??
     (options.overrides
@@ -144,9 +146,11 @@ async function workspaceAccess(settings: Settings, home: string) {
   const overlay = localOverlay(settings, home);
   const merge = (catalog: AssetCatalog) =>
     overlay ? mergeLocalCatalog(catalog, overlay) : catalog;
+
   const source = openRepoSource(settings, home);
   if (source) {
     const model = await source.model();
+
     return {
       identity: model,
       catalog: await merge(model.catalog),
@@ -154,7 +158,9 @@ async function workspaceAccess(settings: Settings, home: string) {
       scopes: () => Promise.resolve(model.scopes),
     };
   }
+
   const { connection: conn, catalog } = await environmentCatalog(home);
+
   return {
     identity: conn,
     catalog: await merge(catalog),
@@ -164,7 +170,10 @@ async function workspaceAccess(settings: Settings, home: string) {
 
 async function readRequiredSettings(home: string) {
   const settings = await readSettings(home);
-  if (!settings) throw new SetupRequiredError();
+  if (!settings) {
+    throw new SetupRequiredError();
+  }
+
   return settings;
 }
 
@@ -175,6 +184,7 @@ function withLockedWorkspace<T>(
   return locked(home, async () => {
     const settings = await readRequiredSettings(home);
     const access = await workspaceAccess(settings, home);
+
     return operation({
       ...access,
       home,
@@ -218,16 +228,22 @@ async function applyChange(
       if (
         error instanceof Error &&
         error.message.startsWith("Scope is not selected")
-      )
+      ) {
         throw new CliError(
           `${origin} isn't in your sets yet.`,
           `barndog sets install ${origin}`,
           { cause: error },
         );
+      }
+
       throw error;
     }
   })();
-  if (result.status === "decision-required") return result;
+
+  if (result.status === "decision-required") {
+    return result;
+  }
+
   return syncSelection(workspace, result.state);
 }
 
@@ -250,26 +266,33 @@ function assetId(
         a.name === target.name ||
         localNames[a.id] === target.name),
   );
+
   const { origin } = target;
   const matches = origin
     ? named.filter((a) => matchesOrigin(a.origin, origin, identity))
     : named;
+
   const staleId =
     change !== "install" && z.uuidv4().safeParse(target.name).success
       ? target.name
       : undefined;
+
   const id = only(matches)?.id ?? staleId;
   const [first] = matches;
-  if (!id && first && matches.length > 1)
+  if (!id && first && matches.length > 1) {
     throw new CliError(
       `${target.name} exists in several scopes: ${matches.map((a) => originLabel(a.origin)).join(", ")}. Choose one with --origin.`,
       `${command} ${target.name} --origin ${originLabel(first.origin)}`,
     );
-  if (!id)
+  }
+
+  if (!id) {
     throw new CliError(
       `No ${assetKinds[target.kind].one} named ${target.name}${target.origin ? ` in ${target.origin}` : ""} is available to you.`,
       `barndog ${assetKinds[target.kind].command} search ${target.name}`,
     );
+  }
+
   return id;
 }
 
@@ -280,6 +303,7 @@ export function changeAsset(
 ): Promise<SelectionOutcome> {
   return withLockedWorkspace(home, async (workspace) => {
     const id = assetId(workspace, target, change);
+
     return applyChange(
       workspace,
       assetChange(change, id),
@@ -295,7 +319,10 @@ export function changeAssets(
   home = homedir(),
 ): Promise<SelectionOutcome> {
   return withLockedWorkspace(home, async (workspace) => {
-    if (!target.ids.length) return { status: "applied", events: [] };
+    if (!target.ids.length) {
+      return { status: "applied", events: [] };
+    }
+
     const resolution = await overrideResolution(target);
     let state = workspace.current;
     for (const id of target.ids) {
@@ -305,9 +332,14 @@ export function changeAssets(
         assetChange(change, id),
         resolution,
       );
-      if (result.status === "decision-required") return result;
+
+      if (result.status === "decision-required") {
+        return result;
+      }
+
       state = result.state;
     }
+
     return syncSelection(workspace, state);
   });
 }
@@ -324,13 +356,17 @@ export function renameAsset(
     const names = {
       ...(settings.localNames ?? {}),
     };
-    if (target.reset || target.as === asset?.name) delete names[id];
-    else {
+
+    if (target.reset || target.as === asset?.name) {
+      delete names[id];
+    } else {
       const name = target.as ?? "";
-      if (!validInstalledName(name))
+      if (!validInstalledName(name)) {
         throw new CliError(
           "Use lowercase letters, numbers and single hyphens (at most 64 characters).",
         );
+      }
+
       const held = await installedNames(workspace.home);
       const taken = catalog.assets.find(
         (a) =>
@@ -341,15 +377,23 @@ export function renameAsset(
             (entry) => entry.asset.id === a.id && entry.enabled,
           ),
       );
-      if (taken)
+
+      if (taken) {
         throw new CliError(
           `${name} is already used by ${originLabel(taken.origin)}.`,
         );
+      }
+
       names[id] = name;
     }
+
     const next: Settings = withSelection(settings, current);
-    if (Object.keys(names).length) next.localNames = names;
-    else delete next.localNames;
+    if (Object.keys(names).length) {
+      next.localNames = names;
+    } else {
+      delete next.localNames;
+    }
+
     return syncSelection(workspace, current, next);
   });
 }
@@ -371,20 +415,25 @@ async function findScope(
   const matches = (await workspace.scopes()).filter(
     (s) => s.type !== "dev" && matchesOrigin(s, selector, workspace.identity),
   );
+
   const [match] = matches;
-  if (matches.length === 1 && match && match.type !== "dev")
+  if (matches.length === 1 && match && match.type !== "dev") {
     return { type: match.type, id: match.id };
+  }
+
   const { type, value: id } = splitOrigin(selector);
   if (
     !forRemoval ||
     (type !== "org" && type !== "team" && type !== "repo") ||
     id === undefined ||
     !z.uuidv4().safeParse(id).success
-  )
+  ) {
     throw new CliError(
       `No scope named ${selector} is available to you. To remove an unavailable subscription, pass its UUID, such as team/<uuid>.`,
       "barndog sets list",
     );
+  }
+
   return { type, id };
 }
 
@@ -392,7 +441,11 @@ function scopeAssets(workspace: Workspace, scope: Scope) {
   const distribution = workspace.catalog.distributions.find(
     (d) => d.scope.type === scope.type && d.scope.id === scope.id,
   );
-  if (!distribution) throw new Error("Scope distribution unavailable");
+
+  if (!distribution) {
+    throw new Error("Scope distribution unavailable");
+  }
+
   return workspace.catalog.assets.filter((asset) =>
     distribution.assets.some((entry) => entry.assetId === asset.id),
   );
@@ -444,26 +497,36 @@ export function installSetAssets(
     if (
       new Set(ids).size !== ids.length ||
       ids.some((id) => !available.some((asset) => asset.id === id))
-    )
+    ) {
       throw new Error(
         "Custom selection contains duplicate or unavailable assets",
       );
-    if (!ids.length) return { status: "applied", events: [] };
+    }
+
+    if (!ids.length) {
+      return { status: "applied", events: [] };
+    }
+
     let state: SelectionState = {
       ...workspace.current,
       subscriptions: workspace.current.subscriptions.filter(
         (s) => s.scope.type !== scope.type || s.scope.id !== scope.id,
       ),
     };
+
     for (const assetId of ids) {
       const result = applySelectionAction(workspace.catalog, state, {
         type: "install-asset",
         assetId,
       });
-      if (result.status !== "applied")
+
+      if (result.status !== "applied") {
         throw new Error("Individual installation needs a decision");
+      }
+
       state = result.state;
     }
+
     return syncSelection(workspace, state);
   });
 }
@@ -477,6 +540,7 @@ export function changeSet(
     const scope = await findScope(workspace, options.origin, {
       forRemoval: change === "remove",
     });
+
     return applyChange(
       workspace,
       change === "remove"
@@ -495,10 +559,12 @@ export function switchSet(
 ): Promise<SelectionOutcome> {
   return withLockedWorkspace(home, async (workspace) => {
     const scope = await findScope(workspace, options.origin);
-    if (scope.type !== "team" && scope.type !== "repo")
+    if (scope.type !== "team" && scope.type !== "repo") {
       throw new CliError(
         "Switch between teams or repositories, such as team/engineering or repo/web-app.",
       );
+    }
+
     return applyChange(
       workspace,
       {
@@ -523,8 +589,10 @@ export function setKnowledge(
       !settings.connection &&
       !settings.gitWorkspace &&
       !settings.localWorkspace
-    )
+    ) {
       throw new Error("Set up a workspace with barndog init first");
+    }
+
     return {
       status: "applied",
       events: await synchronize(undefined, home, {

@@ -13,6 +13,7 @@ try {
       env: { ...process.env, HOME: process.argv[2] },
     },
   );
+
   child.on("error", () => {});
   child.unref();
 } catch {

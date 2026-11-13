@@ -28,11 +28,13 @@ function openInBrowser(url: string) {
       : process.platform === "win32"
         ? "rundll32"
         : "xdg-open";
+
   const child = spawn(
     command,
     process.platform === "win32" ? ["url.dll,FileProtocolHandler", url] : [url],
     { stdio: "ignore" },
   );
+
   child.once("error", () => undefined);
   child.unref();
 }
@@ -52,7 +54,11 @@ async function startInBrowser(
     home,
     "POST",
   );
-  if (options.browser !== false) openInBrowser(result.url);
+
+  if (options.browser !== false) {
+    openInBrowser(result.url);
+  }
+
   return {
     message: `Complete GitHub ${step} in your browser: ${result.url}`,
   };
@@ -60,6 +66,7 @@ async function startInBrowser(
 
 export async function githubStatus(home = homedir()) {
   const conn = await connection(home);
+
   return request(conn, "/v1/github/status", githubStatusSchema, home);
 }
 
@@ -86,6 +93,7 @@ export function githubInstall(
 
 export async function githubInstallations(home = homedir()) {
   const conn = await connection(home);
+
   return request(
     conn,
     "/v1/github/installations",

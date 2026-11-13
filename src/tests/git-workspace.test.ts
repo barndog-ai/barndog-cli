@@ -160,6 +160,7 @@ async function addAssets(root: string) {
 async function temp(t: T) {
   const root = await realpath(await mkdtemp(join(tmpdir(), "barndog-git-")));
   t.onTestFinished(() => rm(root, { recursive: true, force: true }));
+
   return root;
 }
 
@@ -191,8 +192,10 @@ async function setupLocal(home: string) {
     confirmApply: async () => true,
     choose: async () => ["claude"],
   });
+
   const settings = await readSettings(home);
   assert(settings?.localWorkspace);
+
   return settings.localWorkspace.path;
 }
 
@@ -233,6 +236,7 @@ async function setupGit(
     chooseEnvironment: chooseEnvironment as never,
     ...(local ? { chooseLocalAssets: async () => local } : {}),
   });
+
   return output.join("\n");
 }
 
@@ -249,6 +253,7 @@ async function teamRepo(t: T) {
   await run(clone, "add", ".");
   await run(clone, "commit", "-m", "Add assets");
   await run(clone, "push", "origin", "main");
+
   return { root, url, admin, clone, output };
 }
 
@@ -264,6 +269,7 @@ const installed = (home: string, path: string) =>
 const gitWorkspaceId = async (home: string) => {
   const settings = await readSettings(home);
   assert(settings?.gitWorkspace);
+
   return settings.gitWorkspace.workspaceId;
 };
 
@@ -281,8 +287,10 @@ test("folder snapshots name content exactly as Git does", async (t) => {
   const expected = listing.split("\n").map((line) => {
     const [meta, path] = line.split("\t");
     const [mode, , hash] = meta!.split(" ");
+
     return { path: path!, mode: mode!, hash: hash! };
   });
+
   const actual = (await folderSnapshot(root)).entries;
   const key = (e: { path: string }) => e.path;
   expect(
@@ -295,6 +303,7 @@ test("stable IDs are valid UUIDv4 and depend on every part", () => {
   expect(id).toMatch(
     /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
   );
+
   expect(id).toBe(stableId("workspace", "skill", "org", "a"));
   expect(id).not.toBe(stableId("workspace", "skill", "org", "b"));
 });
@@ -311,17 +320,21 @@ test("an admin creates a workspace and a member installs every asset kind", asyn
   expect(await installed(member, "skills/code-review/SKILL.md")).toMatch(
     /code-review/,
   );
+
   expect(await installed(member, "skills/code-review/references/a.txt")).toBe(
     "supporting",
   );
+
   const hookScript = join(
     member,
     ".barndog/installed/hooks/org-org-audit/audit.sh",
   );
+
   expect((await lstat(hookScript)).mode & 0o100).toBeTruthy();
   expect(await readFile(join(member, ".claude.json"), "utf8")).toMatch(
     /DOCS_TOKEN/,
   );
+
   // Team assets stay out because this member chose only the organization.
   await expect(installed(member, "skills/lint/SKILL.md")).rejects.toThrow();
   const hooks = (await claudeSettings(member)).hooks.SessionStart;
@@ -330,11 +343,13 @@ test("an admin creates a workspace and a member installs every asset kind", asyn
       h.hooks[0]!.command.includes("git-workspace/startup.js"),
     ),
   ).toBeTruthy();
+
   const docs = await knowledgeList(true, member);
   expect(docs.map((d) => d.name)).toStrictEqual(["architecture"]);
   expect(
     (await knowledgeGet("architecture", member)).version.content.markdown,
   ).toMatch(/# Architecture/);
+
   const status = await inventory(member);
   expect(status.server).toBe(url);
   expect(status.offline).toBe(null);
@@ -352,12 +367,14 @@ test("merged changes reach members, sets work, and removals apply", async (t) =>
     "org/skills/code-review/SKILL.md",
     skill("code-review", "New."),
   );
+
   await commit(clone, "Update");
   const events = await synchronize(undefined, member);
   expect(events.some((e) => e.type === "updated")).toBeTruthy();
   expect(await installed(member, "skills/code-review/SKILL.md")).toMatch(
     /New\./,
   );
+
   await installSet({ origin: "team/web", mode: "all" }, member);
   expect(await installed(member, "skills/lint/SKILL.md")).toMatch(/lint/);
   await rm(join(clone, "org/skills/code-review"), { recursive: true });
@@ -377,14 +394,17 @@ test("an invalid asset whose installed folder is gone doesn't block sync", async
   await rm(join(member, ".barndog/installed/skills/code-review"), {
     recursive: true,
   });
+
   await synchronize(undefined, member);
   await synchronize(undefined, member);
   await expect(
     lstat(join(member, ".barndog/pending-sync.json")),
   ).rejects.toThrow();
+
   await expect(
     lstat(join(member, ".claude/skills/code-review")),
   ).rejects.toThrow();
+
   await write(clone, "org/skills/code-review/SKILL.md", skill("code-review"));
   await commit(clone, "Fix");
   await synchronize(undefined, member);
@@ -403,24 +423,29 @@ for (const newcomer of ["org", "teams/web"]) {
     const state = JSON.parse(
       await readFile(join(member, ".barndog/state.json"), "utf8"),
     );
+
     const id = state.links.find((entry: { target: string }) =>
       entry.target.endsWith("/code-review"),
     ).id;
+
     await saveSettings(
       { ...settings, localNames: { [id]: "org-org-code-review" } },
       member,
     );
+
     await write(
       clone,
       "org/skills/code-review/SKILL.md",
       skill("code-review", "Renamed copy."),
     );
+
     await commit(clone, "Update");
     await write(
       clone,
       "teams/web/skills/code-review/SKILL.md",
       skill("code-review", "Holds the plain name."),
     );
+
     await commit(clone, "Clash");
     await synchronize(undefined, member);
     await write(clone, "org/skills/code-review/SKILL.md", "not valid");
@@ -430,6 +455,7 @@ for (const newcomer of ["org", "teams/web"]) {
       `${newcomer}/skills/org-org-code-review/SKILL.md`,
       skill("org-org-code-review", "Newcomer."),
     );
+
     await commit(clone, "Break and add");
     const events = await synchronize(undefined, member);
     expect(
@@ -437,6 +463,7 @@ for (const newcomer of ["org", "teams/web"]) {
         (e) => e.type === "clash" && e.name === "org-org-code-review",
       ),
     ).toBeTruthy();
+
     await synchronize(undefined, member);
     expect(
       await installed(member, "skills/org-org-code-review/SKILL.md"),
@@ -464,6 +491,7 @@ for (const [broken, added] of [
     expect(
       events.some((e) => e.type === "clash" && e.name === "lint"),
     ).toBeTruthy();
+
     await synchronize(undefined, member);
     expect(await installed(member, "skills/lint/SKILL.md")).toMatch(/Do the/);
   });
@@ -486,15 +514,18 @@ test("Hooks whose prefixes read the same get separate folders", async (t) => {
   const folders = (await readdir(join(member, ".barndog/installed/hooks")))
     .filter((name) => name.startsWith("team-a-b-c"))
     .sort();
+
   expect(folders.length).toBe(2);
   expect(
     folders.every((name) => /^team-a-b-c-[0-9a-z]{8}$/.test(name)),
   ).toBeTruthy();
+
   const scripts = await Promise.all(
     folders.map((name) =>
       readdir(join(member, ".barndog/installed/hooks", name)),
     ),
   );
+
   expect(
     scripts
       .flat()
@@ -509,8 +540,12 @@ test("Hooks whose prefixes read the same get separate folders", async (t) => {
   const hooks = state.installed.filter((entry: { path: string }) =>
     entry.path.includes("team-a-b-c-"),
   );
+
   await cp(hooks[0].path, shared, { recursive: true });
-  for (const entry of hooks) entry.path = shared;
+  for (const entry of hooks) {
+    entry.path = shared;
+  }
+
   await writeFile(statePath, JSON.stringify(state));
   await synchronize(undefined, member);
   const repaired = JSON.parse(
@@ -518,11 +553,13 @@ test("Hooks whose prefixes read the same get separate folders", async (t) => {
   ).installed.filter((entry: { path: string }) =>
     entry.path.includes("team-a-b-c"),
   ) as { path: string }[];
+
   expect(new Set(repaired.map((entry) => entry.path)).size).toBe(2);
   expect(repaired.some((entry) => entry.path === shared)).toBeTruthy();
   const delivered = await Promise.all(
     repaired.map((entry) => readdir(entry.path)),
   );
+
   expect(
     delivered
       .flat()
@@ -540,9 +577,11 @@ test("an old repeated link in state is repaired, keeping the copy on disk", asyn
   const link = state.links.find((entry: { target: string }) =>
     entry.target.endsWith("/code-review"),
   );
+
   const tree = state.installed.find(
     (entry: { path: string }) => entry.path === link.source,
   );
+
   const stale = randomUUID();
   state.links.unshift({ ...link, id: stale });
   state.installed.unshift({ ...tree, id: stale, fingerprint: "stale" });
@@ -559,6 +598,7 @@ test("an old repeated link in state is repaired, keeping the copy on disk", asyn
       )
       .map((entry: { id: string }) => entry.id),
   ).toStrictEqual([link.id]);
+
   expect(await installed(member, "skills/code-review/SKILL.md")).toMatch(
     /Do the thing/,
   );
@@ -573,6 +613,7 @@ test("a repeated link with another source keeps the one the target points to", a
   const link = state.links.find((entry: { target: string }) =>
     entry.target.endsWith("/code-review"),
   );
+
   state.links.unshift({ ...link, id: randomUUID(), source: join(root, "ext") });
   await writeFile(statePath, JSON.stringify(state));
   await inventory(member);
@@ -594,15 +635,18 @@ test("an invalid Skill renamed since it broke still holds its installed name", a
   const state = JSON.parse(
     await readFile(join(member, ".barndog/state.json"), "utf8"),
   );
+
   const id = state.links.find((entry: { target: string }) =>
     entry.target.endsWith("/code-review"),
   ).id;
+
   await write(clone, "org/skills/code-review/SKILL.md", "not valid");
   await write(
     clone,
     "teams/web/skills/code-review/SKILL.md",
     skill("code-review", "Newcomer."),
   );
+
   await commit(clone, "Break and add");
   const settings = await readSettings(member);
   assert(settings);
@@ -611,10 +655,12 @@ test("an invalid Skill renamed since it broke still holds its installed name", a
   expect(
     events.some((e) => e.type === "clash" && e.name === "code-review"),
   ).toBeTruthy();
+
   await synchronize(undefined, member);
   expect(await installed(member, "skills/code-review/SKILL.md")).toMatch(
     /Do the thing/,
   );
+
   const saved = await readSettings(member);
   assert(saved);
   expect(saved.localNames?.[id]).toBe("renamed");
@@ -664,9 +710,11 @@ test("imports refuse unsafe names and occupied folders", async (t) => {
       },
       home,
     );
+
   await expect(add("../../../victim")).rejects.toThrow(
     /can't be used as a name/,
   );
+
   await expect(add("Bad_Name")).rejects.toThrow(/can't be used as a name/);
   expect(await readFile(join(victim, "keep.txt"), "utf8")).toBe("keep");
   await write(folder, "org/skills/occupied/notes.md", "mine");
@@ -674,6 +722,7 @@ test("imports refuse unsafe names and occupied folders", async (t) => {
   expect(
     await readFile(join(folder, "org/skills/occupied/notes.md"), "utf8"),
   ).toBe("mine");
+
   await mkdir(join(folder, "org/skills/empty"), { recursive: true });
   await add("empty");
   expect(
@@ -687,8 +736,9 @@ test("MCP names are checked before anything changes", async (t) => {
   const native = JSON.stringify({
     mcpServers: { My_Server: { command: "run" } },
   });
+
   await writeFile(join(home, ".claude.json"), native);
-  for (const name of ["My_Server", "../escape"])
+  for (const name of ["My_Server", "../escape"]) {
     await expect(
       addMcpServers(
         [{ name, definition: {}, notes: [] }] as never,
@@ -696,6 +746,8 @@ test("MCP names are checked before anything changes", async (t) => {
         home,
       ),
     ).rejects.toThrow(/can't be used as an MCP name/);
+  }
+
   expect(await readFile(join(home, ".claude.json"), "utf8")).toBe(native);
   await expect(lstat(join(folder, "org/escape.yaml"))).rejects.toThrow();
 });
@@ -716,12 +768,15 @@ test("a Cloud machine with a local folder keeps Cloud collaboration", async (t) 
     },
     home,
   );
+
   expect(await workingStatus(home, home)).toStrictEqual({
     mode: "environment",
   });
+
   await expect(listChanges({}, home)).rejects.toSatisfy(
     (error: Error) => !/no review step/.test(error.message),
   );
+
   await expect(
     pushWorkingCopy({ origin: "local" }, home, home),
   ).rejects.toThrow(/no review step/);
@@ -738,12 +793,15 @@ test("an invalid asset is reported and the installed version stays", async (t) =
   expect(
     events.flatMap((e) => (e.type === "invalid" ? [e.name] : [])).sort(),
   ).toStrictEqual(["code-review", "docs"]);
+
   expect(await installed(member, "skills/code-review/SKILL.md")).toMatch(
     /Do the thing/,
   );
+
   expect(await readFile(join(member, ".claude.json"), "utf8")).toMatch(
     /DOCS_TOKEN/,
   );
+
   expect(
     (await doctor(member)).some((check) => check.name === "Invalid asset"),
   ).toBeTruthy();
@@ -756,15 +814,18 @@ test("the session-start entry syncs in a detached process", async (t) => {
   const hooks = (await claudeSettings(member)).hooks.SessionStart as {
     hooks: { command: string }[];
   }[];
+
   const command = hooks
     .find((h) => h.hooks[0]!.command.includes("git-workspace/startup.js"))!
     .hooks[0]!.command // Sync registers the hook next to the running code; run the built copy.
     .replaceAll(sourceRoot, builtRoot);
+
   await write(
     clone,
     "org/skills/code-review/SKILL.md",
     skill("code-review", "Background."),
   );
+
   await commit(clone, "Update");
   // A fresh fetch time would make the automatic run skip the host, as designed.
   const state = join(
@@ -772,17 +833,23 @@ test("the session-start entry syncs in a detached process", async (t) => {
     ".barndog/git",
     `${await gitWorkspaceId(member)}.json`,
   );
+
   const saved = JSON.parse(await readFile(state, "utf8"));
   await writeFile(
     state,
     JSON.stringify({ ...saved, fetchedAt: "2020-01-01T00:00:00.000Z" }),
   );
+
   await execute("/bin/sh", ["-c", command]);
   for (let attempt = 0; attempt < 100; attempt++) {
     const text = await installed(member, "skills/code-review/SKILL.md");
-    if (text.includes("Background.")) return;
+    if (text.includes("Background.")) {
+      return;
+    }
+
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
+
   expect.unreachable("The background sync did not update the installed Skill");
 });
 
@@ -798,6 +865,7 @@ test("repo status answers from barndog.yaml", async (t) => {
         "repositories:\n  app:\n    gitRemote: github.com/acme/app\n    team: web",
       ),
   );
+
   await commit(clone, "Map");
   const member = join(root, "member");
   await setupGit(url, member);
@@ -822,6 +890,7 @@ test("a force push is followed like any other update", async (t) => {
     "org/skills/code-review/SKILL.md",
     skill("code-review", "Rewritten."),
   );
+
   await run(clone, "add", ".");
   await run(clone, "commit", "--amend", "-m", "Rewritten");
   await run(clone, "push", "--force", "origin", "main");
@@ -846,9 +915,11 @@ test("setup explains a repo it can't read and only clones when asked", async (t)
       confirmClone,
       choose: async () => [],
     });
+
   await expect(attempt(async () => false)).rejects.toSatisfy(
     (error: CliError) => error.hint === `git clone ${missing}`,
   );
+
   expect(lines.join("\n")).toMatch(/able to clone this repo/);
   await expect(attempt(async () => true)).rejects.toThrow(/Git couldn't clone/);
   expect(await readSettings(join(root, "home"))).toBe(null);
@@ -866,6 +937,7 @@ test("a terminal clone connects the workspace and an empty repo returns null", a
     },
     home,
   );
+
   await installSet({ origin: "org", mode: "all" }, home);
   expect(await installed(home, "skills/code-review/SKILL.md")).toMatch(/Do/);
   const empty = join(root, "empty.git");
@@ -888,6 +960,7 @@ test("starting over offers every source without contacting the saved server", as
     },
     home,
   );
+
   let offered: unknown;
   await runSetup({
     home,
@@ -898,15 +971,18 @@ test("starting over offers every source without contacting the saved server", as
     confirmRestart: async () => true,
     chooseConnection: async (current) => {
       offered = current;
+
       return { kind: "local" };
     },
     confirmApply: async () => true,
     choose: async () => ["claude"],
   });
+
   expect(offered).toStrictEqual({
     kind: "cloud",
     server: "http://127.0.0.1:9",
   });
+
   const saved = await readSettings(home);
   assert(saved?.localWorkspace);
   expect(saved.connection).toBe(undefined);
@@ -926,6 +1002,7 @@ test("--local and --repo replace a connected source once confirmed", async (t) =
     },
     home,
   );
+
   await setupGit(url, home);
   const saved = await readSettings(home);
   assert(saved?.gitWorkspace);
@@ -942,10 +1019,12 @@ test("choosing cloud clears a repo workspace and its choices", async (t) => {
     organization: { id: org, slug: "acme", name: "Acme" },
     developer: { id: dev, slug: "a", name: "A", role: "organization_admin" },
   };
+
   const server = createServer((_, response) => {
     response.setHeader("content-type", "application/json");
     response.end(JSON.stringify(context));
   });
+
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.onTestFinished(async () => void server.close());
   const origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
@@ -956,12 +1035,14 @@ test("choosing cloud clears a repo workspace and its choices", async (t) => {
       context,
     } as never;
   });
+
   await initialize({
     home,
     server: origin,
     detected: [],
     choose: async () => [],
   });
+
   const saved = await readSettings(home);
   assert(saved?.connection);
   expect(saved.gitWorkspace).toBe(undefined);
@@ -987,6 +1068,7 @@ test("sync uses the last fetch when the host is unreachable", async (t) => {
       (e) => e.type === "notice" && e.message.includes("Can't reach"),
     ),
   ).toBeTruthy();
+
   expect(await installed(member, "skills/code-review/SKILL.md")).toMatch(/Do/);
   expect(
     (await doctor(member)).find((c) => c.name === "Git access")?.status,
@@ -1002,14 +1084,17 @@ test("automatic sync reuses a recent fetch", async (t) => {
     "org/skills/code-review/SKILL.md",
     skill("code-review", "Later."),
   );
+
   await commit(clone, "Update");
   await synchronize(undefined, member, undefined, {
     refresh: "auto",
     prompt: false,
   });
+
   expect(await installed(member, "skills/code-review/SKILL.md")).not.toMatch(
     /Later/,
   );
+
   await synchronize(undefined, member);
   expect(await installed(member, "skills/code-review/SKILL.md")).toMatch(
     /Later/,
@@ -1028,6 +1113,7 @@ test("working copies push review branches and merge upstream edits", async (t) =
   const status = (await workingStatus(work, member)) as {
     changes: unknown[];
   };
+
   expect(status.changes.length).toBe(2);
   expect(renderCollaboration(status).join("\n")).toMatch(/Base: [0-9a-f]{7}/);
   const pushed = (await pushWorkingCopy(
@@ -1038,6 +1124,7 @@ test("working copies push review branches and merge upstream edits", async (t) =
     branch: string;
     commit: string;
   };
+
   expect(pushed.branch).toMatch(/^barndog\/org-code-review-[0-9a-f]{6}$/);
   expect(renderCollaboration(pushed).join("\n")).toMatch(/Open a pull request/);
   // Nothing lands on the default branch until the host merges it.
@@ -1045,6 +1132,7 @@ test("working copies push review branches and merge upstream edits", async (t) =
   expect(
     await run(clone, "show", "origin/main:org/skills/code-review/SKILL.md"),
   ).not.toMatch(/Member edit/);
+
   expect(
     await run(
       clone,
@@ -1052,16 +1140,20 @@ test("working copies push review branches and merge upstream edits", async (t) =
       `origin/${pushed.branch}:org/skills/code-review/notes.txt`,
     ),
   ).toBe("added");
+
   expect(
     await run(clone, "log", "-1", "--format=%s", `origin/${pushed.branch}`),
   ).toBe("Clarify");
+
   expect(await pushWorkingCopy({}, work, member)).toStrictEqual({
     unchanged: true,
   });
+
   await write(work, "notes.txt", "added twice");
   const again = (await pushWorkingCopy({}, work, member)) as {
     branch: string;
   };
+
   expect(again.branch).toBe(pushed.branch);
   await run(clone, "fetch", "origin");
   expect(
@@ -1072,17 +1164,20 @@ test("working copies push review branches and merge upstream edits", async (t) =
       `origin/main..origin/${pushed.branch}`,
     ),
   ).toBe("2");
+
   // The host merges it, and pull closes the review.
   await run(clone, "merge", "--no-edit", `origin/${pushed.branch}`);
   await run(clone, "push", "origin", "main");
   const pulled = (await updateWorkingCopy(work, member)) as {
     conflicts: string[];
   };
+
   expect(pulled.conflicts).toStrictEqual([]);
   const after = (await workingStatus(work, member)) as {
     review: unknown;
     changes: unknown[];
   };
+
   expect(after.review).toBe(null);
   expect(after.changes).toStrictEqual([]);
 });
@@ -1099,22 +1194,27 @@ test("pull merges upstream, conflicts block push, and resolve clears them", asyn
     "org/skills/code-review/SKILL.md",
     skill("code-review", "Upstream."),
   );
+
   await commit(clone, "Upstream");
   const result = (await updateWorkingCopy(work, member)) as {
     conflicts: string[];
   };
+
   expect(result.conflicts).toStrictEqual(["SKILL.md"]);
   await expect(pushWorkingCopy({}, work, member)).rejects.toThrow(
     /Resolve conflicts/,
   );
+
   await expect(resolveFile("SKILL.md", work, member)).rejects.toThrow(
     /conflict markers/,
   );
+
   await write(work, "SKILL.md", skill("code-review", "Merged."));
   await resolveFile("SKILL.md", work, member);
   const pushed = (await pushWorkingCopy({}, work, member)) as {
     branch: string;
   };
+
   expect(pushed.branch).toBeTruthy();
 });
 
@@ -1129,18 +1229,21 @@ test("push --publish goes straight to the default branch only when asked", async
     published: boolean;
     branch: string;
   };
+
   expect(result.published).toBe(true);
   expect(result.branch).toBe("main");
   await run(clone, "pull", "origin", "main");
   expect(
     await readFile(join(clone, "org/skills/code-review/SKILL.md"), "utf8"),
   ).toMatch(/Direct/);
+
   // A stale base must not overwrite someone else's merge.
   await write(
     clone,
     "org/skills/code-review/SKILL.md",
     skill("code-review", "Other."),
   );
+
   await commit(clone, "Other");
   await write(work, "SKILL.md", skill("code-review", "Stale."));
   await expect(
@@ -1157,9 +1260,11 @@ test("create starts a new asset in a new team scope and history is readable", as
     root,
     member,
   );
+
   const pushed = (await pushWorkingCopy({}, join(root, "fresh"), member)) as {
     branch: string;
   };
+
   expect(pushed.branch).toMatch(/^barndog\/team-mobile-fresh-/);
   await run(clone, "fetch", "origin");
   expect(
@@ -1169,24 +1274,29 @@ test("create starts a new asset in a new team scope and history is readable", as
       `origin/${pushed.branch}:teams/mobile/hooks/fresh/hook.yaml`,
     ),
   ).toMatch(/name: fresh/);
+
   await write(
     clone,
     "org/skills/code-review/SKILL.md",
     skill("code-review", "V2."),
   );
+
   await commit(clone, "Second");
   const options = { name: "code-review", origin: "org" };
   const versions = (await packageVersions(options, member)) as {
     number: number;
     description: string;
   }[];
+
   expect(versions.map((v) => [v.number, v.description])).toStrictEqual([
     [1, "Add assets"],
     [2, "Second"],
   ]);
+
   const diff = (await diffVersions({ ...options, from: 1, to: 2 }, member)) as {
     patch: string;
   }[];
+
   expect(diff[0]!.patch).toMatch(/V2/);
 });
 
@@ -1197,6 +1307,7 @@ test("review commands point to the Git host and cloud-only commands explain why"
   await expect(listChanges({}, member)).rejects.toThrow(
     /pull requests on your Git host/,
   );
+
   await expect(developers(undefined, member)).rejects.toSatisfy(
     (error: CliError) =>
       /Cloud Workspace/.test(error.message) &&
@@ -1230,6 +1341,7 @@ test("local mode delivers every kind from a folder and needs no Git", async (t) 
     confirmApply: async () => true,
     choose: async () => ["claude"],
   });
+
   const settings = await readSettings(home);
   assert(settings?.localWorkspace);
   const folder = settings.localWorkspace.path;
@@ -1238,21 +1350,26 @@ test("local mode delivers every kind from a folder and needs no Git", async (t) 
   expect(await installed(home, "skills/code-review/SKILL.md")).toMatch(
     /code-review/,
   );
+
   expect(await readFile(join(home, ".claude.json"), "utf8")).toMatch(
     /DOCS_TOKEN/,
   );
+
   expect((await knowledgeList(false, home)).map((d) => d.name)).toStrictEqual([
     "architecture",
   ]);
+
   await write(
     folder,
     "org/skills/code-review/SKILL.md",
     skill("code-review", "Edited."),
   );
+
   await synchronize(undefined, home);
   expect(await installed(home, "skills/code-review/SKILL.md")).toMatch(
     /Edited/,
   );
+
   await expect(
     pullPackage({ name: "code-review", origin: "org" }, root, home),
   ).rejects.toThrow(/Edit them directly/);
@@ -1271,6 +1388,7 @@ test("sync unlinks removed Skills and refuses to replace a link it doesn't own",
     confirmApply: async () => true,
     choose: async () => ["claude"],
   });
+
   const settings = await readSettings(home);
   assert(settings?.localWorkspace);
   const folder = settings.localWorkspace.path;
@@ -1294,6 +1412,7 @@ test("validate reports each problem for repo CI", async (t) => {
     assets: 4,
     knowledge: 1,
   });
+
   await write(clone, "org/skills/Bad_Name/SKILL.md", skill("bad"));
   await write(clone, "org/skills/mismatch/SKILL.md", skill("other"));
   await write(clone, "teams/web/knowledge/x.md", knowledgeMd);
@@ -1302,6 +1421,7 @@ test("validate reports each problem for repo CI", async (t) => {
     expect(error.message).toMatch(/Bad_Name/);
     expect(error.message).toMatch(/must match the folder/);
     expect(error.message).toMatch(/organization-wide/);
+
     return true;
   });
 });
@@ -1323,11 +1443,13 @@ test("settings allow only one workspace and repo URLs are checked", async (t) =>
       home,
     ),
   ).rejects.toThrow(/only one/);
+
   expect(() => checkRepositoryUrl("--upload-pack=evil")).toThrow(CliError);
   expect(() => checkRepositoryUrl("ext::sh -c evil")).toThrow(CliError);
   expect(() => checkRepositoryUrl("https://u:token@host/r.git")).toThrow(
     /password/,
   );
+
   expect(checkRepositoryUrl(" git@github.com:a/b.git ")).toBe(
     "git@github.com:a/b.git",
   );
@@ -1340,20 +1462,24 @@ test("the default server is set at build time and checked", async (t) => {
     execute(process.execPath, [script.pathname, root], {
       env: { ...process.env, BARNDOG_DEFAULT_SERVER: server ?? "" },
     });
+
   await write(root, "cli.js", "");
   await write(root, "config/build.js", "source default");
   await finish();
   expect(await readFile(join(root, "config/build.js"), "utf8")).toBe(
     "source default",
   );
+
   expect((await lstat(join(root, "cli.js"))).mode & 0o100).toBeTruthy();
   await finish("https://barndog.example.com/");
   expect(await readFile(join(root, "config/build.js"), "utf8")).toMatch(
     /"https:\/\/barndog\.example\.com"/,
   );
+
   await expect(finish("http://insecure.example.com")).rejects.toThrow(
     /must be an HTTPS origin/,
   );
+
   expect(defaultServer).toBe("https://barndog.dev");
 });
 
@@ -1361,9 +1487,11 @@ test("compare links cover GitHub and GitLab only", () => {
   expect(
     compareUrl("git@github.com:acme/ai.git", "main", "barndog/org-a-1"),
   ).toBe("https://github.com/acme/ai/compare/main...barndog/org-a-1?expand=1");
+
   expect(compareUrl("https://gitlab.com/g/p.git", "main", "b") ?? "").toMatch(
     /^https:\/\/gitlab\.com\/g\/p\/-\/merge_requests\/new/,
   );
+
   expect(compareUrl("/srv/git/team.git", "main", "b")).toBe(null);
   expect(compareUrl("git@example.org:a/b.git", "main", "b")).toBe(null);
 });
@@ -1386,14 +1514,18 @@ test("migrate previews, then moves assets and choices to cloud by scope and name
   const requests: string[] = [];
   const server = createServer(async (request, response) => {
     const chunks: Buffer[] = [];
-    for await (const chunk of request) chunks.push(chunk as Buffer);
+    for await (const chunk of request) {
+      chunks.push(chunk as Buffer);
+    }
+
     const url = new URL(request.url!, "http://localhost");
     requests.push(`${request.method} ${url.pathname}`);
     const send = (value: unknown) => {
       response.setHeader("content-type", "application/json");
       response.end(JSON.stringify(value));
     };
-    if (url.pathname === "/v1/context")
+
+    if (url.pathname === "/v1/context") {
       return send({
         organization: { id: org, slug: "acme", name: "Acme" },
         developer: {
@@ -1403,11 +1535,15 @@ test("migrate previews, then moves assets and choices to cloud by scope and name
           role: "organization_admin",
         },
       });
-    if (url.pathname === "/v1/scopes")
+    }
+
+    if (url.pathname === "/v1/scopes") {
       return send([
         { type: "org", id: org, slug: "acme", name: "Acme", canPublish: true },
       ]);
-    if (url.pathname === "/v1/environment/catalog")
+    }
+
+    if (url.pathname === "/v1/environment/catalog") {
       return send({
         assets: mcps.map((m) => {
           const mcp = m as {
@@ -1415,6 +1551,7 @@ test("migrate previews, then moves assets and choices to cloud by scope and name
             name: string;
             version: { id: string };
           };
+
           return {
             kind: "mcp",
             id: mcp.id,
@@ -1433,11 +1570,16 @@ test("migrate previews, then moves assets and choices to cloud by scope and name
           },
         ],
       });
-    if (url.pathname === "/v1/knowledge" && request.method === "GET")
+    }
+
+    if (url.pathname === "/v1/knowledge" && request.method === "GET") {
       return send({ documents: [], nextCursor: null, total: 0 });
+    }
+
     if (url.pathname === "/v1/knowledge/publish") {
       const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
       const documentId = randomUUID();
+
       return send({
         id: documentId,
         organizationId: org,
@@ -1451,6 +1593,7 @@ test("migrate previews, then moves assets and choices to cloud by scope and name
         },
       });
     }
+
     if (url.pathname === "/v1/mcps" && request.method === "POST") {
       const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
       const id = randomUUID();
@@ -1471,16 +1614,24 @@ test("migrate previews, then moves assets and choices to cloud by scope and name
         },
         distributions: [],
       };
+
       mcps.push(mcp);
+
       return send(mcp);
     }
+
     const mcp = mcps.find(
       (m) => url.pathname === `/v1/mcps/${(m as { id: string }).id}`,
     );
-    if (mcp) return send(mcp);
+
+    if (mcp) {
+      return send(mcp);
+    }
+
     response.writeHead(404);
     response.end("{}");
   });
+
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.onTestFinished(async () => void server.close());
   const address = server.address() as { port: number };
@@ -1499,13 +1650,16 @@ test("migrate previews, then moves assets and choices to cloud by scope and name
         },
       },
     };
+
     file.selectedServer = origin;
   });
+
   const preview = await migrate({ server: origin, dryRun: true }, home);
   expect(preview.rows.map((r) => [r.name, r.action])).toStrictEqual([
     ["docs", "publish"],
     ["architecture", "publish"],
   ]);
+
   expect(requests).not.toContain("POST /v1/mcps");
   const done = await migrate({ server: origin }, home);
   expect(done.migrated).toBe(true);
@@ -1515,6 +1669,7 @@ test("migrate previews, then moves assets and choices to cloud by scope and name
   expect(moved.environment?.subscriptions).toStrictEqual([
     { scope: { type: "org", id: org }, mode: "all", enabled: true },
   ]);
+
   expect(await readFile(join(home, ".claude.json"), "utf8")).toMatch(
     /DOCS_TOKEN/,
   );
@@ -1530,6 +1685,7 @@ test("commands the setup can't run explain why before doing anything", async (t)
       error.message.includes(folder) &&
       error.hint === "barndog init --server <url>",
   );
+
   for (const path of [
     ["whoami"],
     ["auth", "status"],
@@ -1537,25 +1693,32 @@ test("commands the setup can't run explain why before doing anything", async (t)
     ["changes", "list"],
     ["skills", "promote"],
     ["mcp", "create"],
-  ])
+  ]) {
     await expect(assertCommandAvailable(path, {}, home)).rejects.toThrow(
       /Cloud Workspace/,
     );
-  for (const path of [["push"], ["skills", "pull"], ["mcp", "versions"]])
+  }
+
+  for (const path of [["push"], ["skills", "pull"], ["mcp", "versions"]]) {
     await expect(assertCommandAvailable(path, {}, home)).rejects.toThrow(
       /Edit them directly/,
     );
+  }
+
   await expect(assertCommandAvailable(["logout"], {}, home)).rejects.toThrow(
     /aren't signed in/,
   );
+
   for (const path of [
     ["sync"],
     ["status"],
     ["skills", "list"],
     ["local", "list"],
     ["init"],
-  ])
+  ]) {
     await assertCommandAvailable(path, {}, home);
+  }
+
   let ran = false;
   const program = createProgram({
     guard: (path, options) => assertCommandAvailable(path, options, home),
@@ -1564,9 +1727,11 @@ test("commands the setup can't run explain why before doing anything", async (t)
     },
     write: () => {},
   });
+
   await expect(program.parseAsync(["login"], { from: "user" })).rejects.toThrow(
     CliError,
   );
+
   expect(ran).toBe(false);
 });
 
@@ -1577,9 +1742,11 @@ test("a Git setup sends reviews to the host and allows its own history", async (
   await expect(
     assertCommandAvailable(["changes", "list"], {}, home),
   ).rejects.toThrow(/pull requests on your Git host/);
+
   await expect(assertCommandAvailable(["login"], {}, home)).rejects.toThrow(
     /a Git repo/,
   );
+
   await assertCommandAvailable(["skills", "pull"], {}, home);
   await assertCommandAvailable(["push"], {}, home);
 });
@@ -1598,9 +1765,11 @@ test("switching keeps local assets active next to the Git workspace", async (t) 
   expect(await installed(home, "skills/code-review/SKILL.md")).toMatch(
     /code-review/,
   );
+
   expect(
     (await knowledgeList(false, home)).map((d) => d.name).sort(),
   ).toStrictEqual(["architecture", "notes"]);
+
   const items = (await inventory(home)).items;
   expect(items.find((i) => i.name === "mine")?.origin).toBe("local");
   expect(items.find((i) => i.name === "mine")?.via).toStrictEqual(["local"]);
@@ -1613,11 +1782,13 @@ test("switching keeps local assets active next to the Git workspace", async (t) 
   expect(await installed(home, "skills/from-team/SKILL.md")).toMatch(
     /from-team/,
   );
+
   await changeAsset(
     "disable",
     { kind: "skill", name: "mine", origin: "local" },
     home,
   );
+
   await expect(installed(home, "skills/mine/SKILL.md")).rejects.toThrow();
   expect(await readFile(join(folder, "org/skills/mine/SKILL.md"), "utf8")).toBe(
     skill("mine"),
@@ -1652,30 +1823,37 @@ test("moving into an empty repo commits directly", async (t) => {
   expect(
     await readFile(join(clone, "org/skills/code-review/SKILL.md"), "utf8"),
   ).toMatch(/code-review/);
+
   expect(
     await readFile(
       join(clone, "org/skills/code-review/references/a.txt"),
       "utf8",
     ),
   ).toBe("supporting");
+
   expect(await readFile(join(clone, "org/mcp/docs.yaml"), "utf8")).toMatch(
     /DOCS_TOKEN/,
   );
+
   expect(
     await readFile(join(clone, "org/knowledge/architecture.md"), "utf8"),
   ).toMatch(/# Architecture/);
+
   expect(
     (await lstat(join(clone, "org/hooks/audit/audit.sh"))).mode & 0o100,
   ).toBeTruthy();
+
   // The local copy stepped aside, so nothing clashes with what was just shared.
   const events = await synchronize(undefined, home, undefined, {
     prompt: false,
   });
+
   expect(events.some((e) => e.type === "clash")).toBeFalsy();
   expect(
     (await inventory(home)).items.filter((i) => i.name === "code-review")
       .length,
   ).toBe(1);
+
   expect(
     await readFile(join(folder, "org/skills/code-review/SKILL.md"), "utf8"),
   ).toBe(skill("code-review"));
@@ -1690,6 +1868,7 @@ test("moving into a used repo opens a review, lists clashes, and can move them l
     "org/skills/code-review/SKILL.md",
     skill("code-review", "Mine."),
   );
+
   await write(folder, "org/skills/mine/SKILL.md", skill("mine"));
   await setupGit(url, home, "keep");
   const result = await moveLocalAssets({}, home);
@@ -1697,15 +1876,18 @@ test("moving into a used repo opens a review, lists clashes, and can move them l
     ["code-review", "clash"],
     ["mine", "moved"],
   ]);
+
   expect(result.branch!).toMatch(/^barndog\/local-move-/);
   expect(renderMove(result).join("\n")).toMatch(/--as <new-name>/);
   await run(clone, "fetch", "origin");
   await expect(
     run(clone, "show", `origin/${result.branch}:org/skills/mine/SKILL.md`),
   ).resolves.toBeTypeOf("string");
+
   await expect(
     run(clone, "show", "origin/main:org/skills/mine/SKILL.md"),
   ).rejects.toThrow();
+
   // Until it merges, the local copy keeps working.
   await synchronize(undefined, home, undefined, { prompt: false });
   expect(await installed(home, "skills/mine/SKILL.md")).toMatch(/mine/);
@@ -1715,10 +1897,12 @@ test("moving into a used repo opens a review, lists clashes, and can move them l
   expect(
     (await inventory(home)).items.filter((i) => i.name === "mine").length,
   ).toBe(1);
+
   const later = await moveLocalAssets(
     { names: ["code-review"], as: "my-review" },
     home,
   );
+
   expect(later.rows.map((r) => r.status)).toStrictEqual(["moved"]);
   await run(clone, "fetch", "origin");
   expect(
@@ -1728,9 +1912,11 @@ test("moving into a used repo opens a review, lists clashes, and can move them l
       `origin/${later.branch}:org/skills/my-review/SKILL.md`,
     ),
   ).toMatch(/name: my-review/);
+
   await expect(moveLocalAssets({ names: ["nope"] }, home)).rejects.toThrow(
     /No local asset named nope/,
   );
+
   await expect(
     moveLocalAssets({ names: ["a", "b"], as: "x" }, home),
   ).rejects.toThrow(/exactly one/);
@@ -1746,11 +1932,13 @@ test("moving from a local-only machine asks for a destination first", async (t) 
       Boolean(error.hint?.includes("--repo <url>")) &&
       Boolean(error.hint?.includes("--server <url>")),
   );
+
   await expect(
     migrate({ server: "http://127.0.0.1:9" }, home),
   ).rejects.toSatisfy(
     (error: CliError) => error.hint === "barndog init --server <url>",
   );
+
   const listed = await listLocalAssets(home);
   expect(listed.assets).toStrictEqual([]);
 });
@@ -1768,29 +1956,44 @@ test("moving to cloud defaults to personal and keeps knowledge within permission
     organization: { id: org, slug: "acme", name: "Acme" },
     developer: { id: dev, slug: "a", name: "A", role: "developer" },
   };
+
   const origins: unknown[] = [];
   const server = createServer(async (request, response) => {
     const chunks: Buffer[] = [];
-    for await (const chunk of request) chunks.push(chunk as Buffer);
+    for await (const chunk of request) {
+      chunks.push(chunk as Buffer);
+    }
+
     const path = new URL(request.url!, "http://localhost").pathname;
     const send = (value: unknown) => {
       response.setHeader("content-type", "application/json");
       response.end(JSON.stringify(value));
     };
-    if (path === "/v1/context") return send(context);
-    if (path === "/v1/scopes")
+
+    if (path === "/v1/context") {
+      return send(context);
+    }
+
+    if (path === "/v1/scopes") {
       return send([
         { type: "org", id: org, slug: "acme", name: "Acme", canPublish: false },
         { type: "dev", id: dev, slug: "a", name: "A", canPublish: true },
       ]);
-    if (path === "/v1/environment/catalog")
+    }
+
+    if (path === "/v1/environment/catalog") {
       return send({ assets: [], distributions: [] });
-    if (path === "/v1/knowledge")
+    }
+
+    if (path === "/v1/knowledge") {
       return send({ documents: [], nextCursor: null, total: 0 });
+    }
+
     if (path === "/v1/mcps" && request.method === "POST") {
       const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
       origins.push(body.origin);
       const id = randomUUID();
+
       return send({
         id,
         organizationId: org,
@@ -1809,9 +2012,11 @@ test("moving to cloud defaults to personal and keeps knowledge within permission
         distributions: [],
       });
     }
+
     response.writeHead(404);
     response.end("{}");
   });
+
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.onTestFinished(async () => void server.close());
   const origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
@@ -1821,8 +2026,10 @@ test("moving to cloud defaults to personal and keeps knowledge within permission
       expiresAt: new Date(Date.now() + 1e7).toISOString(),
       context,
     } as never;
+
     file.selectedServer = origin;
   });
+
   await runSetup({
     home,
     server: origin,
@@ -1840,17 +2047,20 @@ test("moving to cloud defaults to personal and keeps knowledge within permission
     }),
     chooseLocalAssets: async () => "keep",
   });
+
   const saved = await readSettings(home);
   expect(saved?.connection && saved.localWorkspace).toBeTruthy();
   expect(await readFile(join(home, ".claude.json"), "utf8")).toMatch(
     /DOCS_TOKEN/,
   );
+
   const result = await moveLocalAssets({}, home);
   expect(origins).toStrictEqual([{ type: "dev", id: dev }]);
   expect(result.rows.map((r) => [r.name, r.status])).toStrictEqual([
     ["docs", "moved"],
     ["notes", "skipped"],
   ]);
+
   expect(result.rows[1]!.detail!).toMatch(/organization-wide/);
 });
 
@@ -1887,9 +2097,12 @@ async function sourceRepo(
   await run(root, "init", "--bare", "--initial-branch=main", url);
   const clone = join(root, `${name}-clone`);
   await run(root, "clone", url, clone);
-  for (const [path, text] of Object.entries(files))
+  for (const [path, text] of Object.entries(files)) {
     await write(clone, path, text);
+  }
+
   await commit(clone, "Add");
+
   return { url, clone };
 }
 
@@ -1897,6 +2110,7 @@ const localHome = async (t: T) => {
   const root = await temp(t);
   const home = join(root, "home");
   const folder = await setupLocal(home);
+
   return { root, home, folder };
 };
 
@@ -1905,6 +2119,7 @@ test("a local-only setup says local, not org, while keeping asset IDs", async (t
   const { url } = await sourceRepo(root, "one", {
     "SKILL.md": "---\nname: solo\ndescription: One Skill\n---\nBody\n",
   });
+
   await addSkills(url, { updates: "fork" }, quiet(home));
   const [item] = (await inventory(home)).items.filter((i) => i.name === "solo");
   expect(item?.origin).toBe("local");
@@ -1918,6 +2133,7 @@ test("a plain folder can be copied or moved into the workspace", async (t) => {
   const { root, home, folder } = await localHome(t);
   const skill = (name: string) =>
     `---\nname: ${name}\ndescription: From a folder\n---\nBody\n`;
+
   await write(root, "plain/keep/SKILL.md", skill("keep"));
   await write(root, "plain/gone/SKILL.md", skill("gone"));
   await write(root, "plain/gone/refs/note.md", "note");
@@ -1928,14 +2144,17 @@ test("a plain folder can be copied or moved into the workspace", async (t) => {
   const answering = (answer: string): Partial<AddPrompts> => ({
     chooseOne: async (message) => {
       asked = message;
+
       return answer;
     },
   });
+
   await addSkills(
     join(root, "plain/keep"),
     {},
     quiet(home, answering("copy"), true),
   );
+
   expect(asked).toMatch(/Copy or move it/);
   expect(await installed("keep")).toMatch(/name: keep/);
   expect(await readFile(join(root, "plain/keep/SKILL.md"), "utf8")).toMatch(
@@ -1947,6 +2166,7 @@ test("a plain folder can be copied or moved into the workspace", async (t) => {
     {},
     quiet(home, answering("move"), true),
   );
+
   expect(await installed("gone")).toMatch(/name: gone/);
   await expect(lstat(join(root, "plain/gone"))).rejects.toMatchObject({
     code: "ENOENT",
@@ -1965,6 +2185,7 @@ test("a plain folder can be copied or moved into the workspace", async (t) => {
   await expect(
     addSkills(join(root, "plain/keep"), { updates: "auto" }, quiet(home)),
   ).rejects.toThrow(/no history to update from/);
+
   await expect(
     addHook(join(root, "plain/keep"), {}, quiet(home)),
   ).rejects.toThrow(/isn't a Git repo/);
@@ -1994,6 +2215,7 @@ test("setup asks nothing about an empty Git repo but still follows it", async ()
     developerId: null,
     firstSetup: true,
   });
+
   expect(written.join("\n")).toMatch(/This repo has no assets yet/);
   expect(selection.subscriptions.map((s) => s.scope.id)).toStrictEqual([
     organizationId,
@@ -2004,10 +2226,12 @@ test("copies of a Skill in different folders are told apart", async (t) => {
   const { root, home, folder } = await localHome(t);
   const skill = (body: string) =>
     `---\nname: focus\ndescription: Keeps you focused\n---\n${body}\n`;
+
   const { url } = await sourceRepo(root, "copies", {
     "skills/focus/SKILL.md": skill("Main"),
     ".cursor/skills/focus/SKILL.md": skill("Cursor"),
   });
+
   const body = () =>
     readFile(join(folder, "org/skills/renamed/SKILL.md"), "utf8");
 
@@ -2015,32 +2239,39 @@ test("copies of a Skill in different folders are told apart", async (t) => {
   const pickMain: Partial<AddPrompts> = {
     chooseMany: async (_, choices) => {
       offered = choices;
+
       return ["skills/focus"];
     },
     chooseOne: async () => "manual",
   };
+
   await addSkills(url, { as: "renamed" }, quiet(home, pickMain, true));
   expect(await body()).toMatch(/Main/);
   expect(offered.map((c) => c.value).sort()).toStrictEqual([
     ".cursor/skills/focus",
     "skills/focus",
   ]);
+
   expect(
     offered.every((c) => c.description === "Description: Keeps you focused"),
   ).toBeTruthy();
+
   expect(offered.some((c) => c.short === "focus (skills/focus)")).toBeTruthy();
 
   await expect(addSkills(url, { all: true }, quiet(home))).rejects.toThrow(
     /focus is in more than one folder/,
   );
+
   await expect(
     addSkills(url, { only: ["focus"], as: "other" }, quiet(home)),
   ).rejects.toThrow(/focus is in more than one folder/);
+
   await addSkills(
     url,
     { only: [".cursor/skills/focus"], as: "by-folder", updates: "fork" },
     quiet(home),
   );
+
   expect(
     await readFile(join(folder, "org/skills/by-folder/SKILL.md"), "utf8"),
   ).toMatch(/Cursor/);
@@ -2051,12 +2282,14 @@ test("links copied from a browser are understood", () => {
     url: "https://github.com/acme/skills.git",
     rest: null,
   });
+
   expect(
     parseLocation("https://github.com/acme/skills/tree/feat/x/skills/review"),
   ).toStrictEqual({
     url: "https://github.com/acme/skills.git",
     rest: "feat/x/skills/review",
   });
+
   expect(parseLocation("git@github.com:acme/skills.git")).toStrictEqual({
     url: "git@github.com:acme/skills.git",
     rest: null,
@@ -2071,22 +2304,26 @@ test("a Skill is added from a repo, updated on request and refuses to lose edits
     "other/lint/SKILL.md": skill("lint"),
     "other/broken/SKILL.md": "no front matter",
   });
+
   await expect(addSkills(url, {}, quiet(home))).rejects.toThrow(/has 2 Skills/);
   await addSkills(url, { only: ["review"], updates: "manual" }, quiet(home));
   expect(await installed(home, "skills/review/SKILL.md")).toMatch(/review/);
   expect(
     await readFile(join(folder, "org/skills/review/notes.md"), "utf8"),
   ).toBe("notes");
+
   await expect(
     addSkills(url, { only: ["review"] }, quiet(home)),
   ).rejects.toSatisfy((error: CliError) =>
     /already exists/.test(error.message),
   );
+
   await write(
     clone,
     ".claude/skills/review/SKILL.md",
     skill("review", "Upstream."),
   );
+
   await commit(clone, "Change");
   const preview = await updateImported(
     "skill",
@@ -2094,10 +2331,12 @@ test("a Skill is added from a repo, updated on request and refuses to lose edits
     { dryRun: true },
     home,
   );
+
   expect(preview[0]!.changes.length).toBe(1);
   expect(
     await readFile(join(folder, "org/skills/review/SKILL.md"), "utf8"),
   ).not.toMatch(/Upstream/);
+
   await updateImported("skill", "review", {}, home);
   await synchronize(undefined, home);
   expect(await installed(home, "skills/review/SKILL.md")).toMatch(/Upstream/);
@@ -2105,14 +2344,17 @@ test("a Skill is added from a repo, updated on request and refuses to lose edits
   await expect(updateImported("skill", "review", {}, home)).rejects.toThrow(
     /edited locally/,
   );
+
   await addSkills(
     url,
     { only: ["lint"], updates: "fork", as: "my-lint" },
     quiet(home),
   );
+
   expect(
     await readFile(join(folder, "org/skills/my-lint/SKILL.md"), "utf8"),
   ).toMatch(/name: my-lint/);
+
   await expect(updateImported("skill", "my-lint", {}, home)).rejects.toThrow(
     /nothing to update/,
   );
@@ -2123,6 +2365,7 @@ test("automatic Skills follow their repo at sync", async (t) => {
   const { url, clone } = await sourceRepo(root, "skills", {
     "review/SKILL.md": skill("review"),
   });
+
   await addSkills(url, { updates: "auto" }, quiet(home));
   await write(clone, "review/SKILL.md", skill("review", "Followed."));
   await commit(clone, "Change");
@@ -2135,6 +2378,7 @@ test("automatic Skills follow their repo at sync", async (t) => {
       (e) => e.type === "notice" && e.message.includes("wasn't updated"),
     ),
   ).toBeTruthy();
+
   expect(await installed(home, "skills/review/SKILL.md")).toMatch(/Followed/);
 });
 
@@ -2145,6 +2389,7 @@ test("a machine with only a Git workspace gains a local folder when adding", asy
   const source = await sourceRepo(root, "extra", {
     "extra/SKILL.md": skill("extra"),
   });
+
   await addSkills(source.url, { updates: "fork" }, quiet(home));
   const settings = await readSettings(home);
   expect(settings?.gitWorkspace && settings.localWorkspace).toBeTruthy();
@@ -2157,6 +2402,7 @@ test("a repo's hook.yaml is added as it is", async (t) => {
     "audit/hook.yaml": hookYaml,
     "audit/audit.sh": "#!/bin/sh\n",
   });
+
   await addHook(url, { updates: "fork" }, quiet(home));
   expect(
     await readFile(
@@ -2169,6 +2415,7 @@ test("a repo's hook.yaml is added as it is", async (t) => {
       ),
     ),
   ).toBeTruthy();
+
   expect(JSON.stringify(await claudeSettings(home))).toMatch(/audit\.sh/);
 });
 
@@ -2198,17 +2445,20 @@ test("native hook configs pre-fill the picker and carry over", async (t) => {
     "scripts/guard.py": "print('ok')\n",
     "scripts/helper.py": "x = 1\n",
   });
+
   await addHook(url, { as: "guard", updates: "manual" }, quiet(home));
   const manifest = await readFile(
     join(folder, "org/hooks/guard/hook.yaml"),
     "utf8",
   );
+
   expect(manifest).toMatch(/matcher: Bash/);
   expect(manifest).toMatch(/python3 \$\{BARNDOG_HOOK_ROOT\}\/guard\.py/);
   expect(manifest).toMatch(/beforeShellExecution/);
   expect(
     await readFile(join(folder, "org/hooks/guard/helper.py"), "utf8"),
   ).toBe("x = 1\n");
+
   expect(JSON.stringify(await claudeSettings(home))).toMatch(/guard\.py/);
 });
 
@@ -2217,9 +2467,11 @@ test("plain scripts go through the picker for each coding tool", async (t) => {
   const { url, clone } = await sourceRepo(root, "scripts", {
     "tools/check.sh": "#!/bin/sh\n",
   });
+
   await expect(addHook(url, {}, quiet(home))).rejects.toThrow(
     /Run this in a terminal/,
   );
+
   await addHook(
     url,
     {},
@@ -2243,10 +2495,12 @@ test("plain scripts go through the picker for each coding tool", async (t) => {
       true,
     ),
   );
+
   const manifest = await readFile(
     join(folder, "org/hooks/check/hook.yaml"),
     "utf8",
   );
+
   expect(manifest).toMatch(/matcher: Bash/);
   expect(manifest).toMatch(/cursor:/);
   expect(manifest).toMatch(/\$\{BARNDOG_HOOK_ROOT\}\/check\.sh/);
@@ -2257,6 +2511,7 @@ test("plain scripts go through the picker for each coding tool", async (t) => {
   expect(
     await readFile(join(folder, "org/hooks/check/check.sh"), "utf8"),
   ).toMatch(/echo new/);
+
   expect(
     await readFile(join(folder, "org/hooks/check/hook.yaml"), "utf8"),
   ).toMatch(/matcher: Bash/);
@@ -2279,6 +2534,7 @@ test("a link to a folder reads only that folder", async (t) => {
         ],
       },
     });
+
   const { url } = await sourceRepo(root, "plugins", {
     "plugins/audit/hooks/hooks.json": settings("Stop", "guard.js"),
     "plugins/audit/guard.js": "// audit\n",
@@ -2291,6 +2547,7 @@ test("a link to a folder reads only that folder", async (t) => {
       "---\nname: review\ndescription: Reviews code\n---\n",
     "docs/README.md": "# Docs\n",
   });
+
   const at = <T>(
     path: string,
     use: Parameters<typeof fetchRemote<T>>[2],
@@ -2300,13 +2557,17 @@ test("a link to a folder reads only that folder", async (t) => {
       { allowPrompt: false },
       use,
     );
+
   await at("plugins/block", async (remote) => {
     const { candidates, skipped } = discoverHooks(remote, "block");
     expect(skipped).toStrictEqual([]);
     expect(candidates.length).toBe(1);
     const draft = candidates[0]!;
     expect(draft.type).toBe("draft");
-    if (draft.type !== "draft") return;
+    if (draft.type !== "draft") {
+      return;
+    }
+
     expect(draft.scripts).toStrictEqual(["plugins/block/guard.js"]);
     expect(draft.implementations).toStrictEqual({
       claude: [
@@ -2318,22 +2579,26 @@ test("a link to a folder reads only that folder", async (t) => {
         },
       ],
     });
+
     expect(
       discoverSkills(remote).skills.map((skill) => skill.name),
     ).toStrictEqual(["explain"]);
   });
+
   // The whole repo is still searched when the link names no folder.
   await at("", async (remote) => {
     const draft = discoverHooks(remote, "plugins").candidates[0]!;
     expect(draft.type === "draft" && draft.scripts.length).toBe(3);
     expect(discoverSkills(remote).skills.length).toBe(2);
   });
+
   // A folder with nothing in it is a miss, not a reason to look elsewhere.
   await at("docs", async (remote) => {
     expect(scopeExists(remote)).toBe(true);
     expect(discoverHooks(remote, "docs").candidates).toStrictEqual([]);
     expect(discoverSkills(remote).skills).toStrictEqual([]);
   });
+
   await at("plugins/missing", async (remote) => {
     expect(scopeExists(remote)).toBe(false);
   });
@@ -2364,6 +2629,7 @@ test("a Hook is added only for the coding tools it was written for", async (t) =
     "guard.js": "// guard\n",
     "audit.js": "// audit\n",
   });
+
   const settings = (await readSettings(home))!;
   await saveSettings({ ...settings, harnesses: ["claude", "cursor"] }, home);
   // The picker never offers a tool the Hook has no settings for.
@@ -2376,9 +2642,11 @@ test("a Hook is added only for the coding tools it was written for", async (t) =
       write: (line) => lines.push(line),
     },
   );
+
   const manifest = parse(
     await readFile(join(folder, "org/hooks/guard/hook.yaml"), "utf8"),
   ) as { implementations: Record<string, { compatibility: string }> };
+
   expect(Object.keys(manifest.implementations)).toStrictEqual(["claude"]);
   expect(manifest.implementations.claude!.compatibility).toBe("supported");
   const output = lines.join("\n");
@@ -2389,10 +2657,12 @@ test("a Hook is added only for the coding tools it was written for", async (t) =
   expect(output).toMatch(
     new RegExp(`Files: ${join(folder, "org/hooks/guard")}`),
   );
+
   expect(output).toMatch(/still follows it/);
   expect(output).toMatch(
     /Claude Code, PreToolUse, matcher "Bash": node \$\{BARNDOG_HOOK_ROOT\}\/audit\.js/,
   );
+
   expect(output).toMatch(/barndog hooks adapt guard --origin local/);
   expect(output).not.toMatch(/barndog local move/);
   // The command prints the same prompt, and one prompt names every tool asked for.
@@ -2401,6 +2671,7 @@ test("a Hook is added only for the coding tools it was written for", async (t) =
     ["claude"],
     ["cursor"],
   ]);
+
   expect(output).toContain(again.prompt!);
   const both = await adaptHook("guard", "local", ["codex", "cursor"], home);
   expect(both.prompt!).toMatch(/so it also runs in Codex and Cursor\./);
@@ -2433,6 +2704,7 @@ test("a Hook that covers this machine's coding tools needs no prompt", async (t)
     "claude/run.sh": "#!/bin/sh\n",
     "cursor/run.sh": "#!/bin/sh\n",
   });
+
   const settings = (await readSettings(home))!;
   await saveSettings({ ...settings, harnesses: ["claude", "cursor"] }, home);
   const lines: string[] = [];
@@ -2441,15 +2713,18 @@ test("a Hook that covers this machine's coding tools needs no prompt", async (t)
     { as: "both", updates: "fork" },
     { ...quiet(home), write: (line) => lines.push(line) },
   );
+
   const output = lines.join("\n");
   expect(output).not.toMatch(/Adapt the BarnDog Hook/);
   // Each tool has its own script, so changing one leaves the other behind.
   expect(output).toMatch(
     /Claude Code and Cursor run different scripts in this Hook/,
   );
+
   expect(await folderDivergence(join(folder, "org/hooks/both"))).toBe(
     "Claude Code and Cursor run different scripts in this Hook. When you change it for one, check whether the others need the same change.",
   );
+
   expect((await adaptHook("both", "local", undefined, home)).prompt).toBe(null);
 });
 
@@ -2462,12 +2737,14 @@ test("the adapt prompt follows where the Hook lives", () => {
       events: { stop: [{ command: "${BARNDOG_HOOK_ROOT}/run.sh" }] },
     },
   };
+
   const local = adaptPrompt({
     name: "tidy",
     implementations,
     targets: ["claude", "codex"],
     place: { type: "folder", path: "/work/org/hooks/tidy", shareable: true },
   });
+
   expect(local).toMatch(/written for Cursor only/);
   expect(local).toMatch(/also runs in Claude Code and Codex\./);
   expect(local).toMatch(/- Cursor, stop: \$\{BARNDOG_HOOK_ROOT\}\/run\.sh/);
@@ -2480,10 +2757,12 @@ test("the adapt prompt follows where the Hook lives", () => {
     targets: ["claude"],
     place: { type: "workspace", origin: "team/web", review: "a pull request" },
   });
+
   expect(shared).toMatch(/barndog hooks pull tidy --origin team\/web/);
   expect(shared).toMatch(
     /`barndog hooks push` to propose the change as a pull request/,
   );
+
   expect(shared).not.toMatch(/barndog sync/);
 });
 
@@ -2491,12 +2770,15 @@ test("hook commands get the root variable their coding tool sets", () => {
   expect(hookCommand("/tmp/hook", "run", "claude")).toBe(
     "export BARNDOG_HOOK_ROOT='/tmp/hook' CLAUDE_PLUGIN_ROOT='/tmp/hook'; run",
   );
+
   expect(hookCommand("/tmp/hook", "run", "codex")).toBe(
     "export BARNDOG_HOOK_ROOT='/tmp/hook' PLUGIN_ROOT='/tmp/hook'; run",
   );
+
   expect(hookCommand("/tmp/hook", "run", "cursor")).toMatch(
     /CURSOR_PLUGIN_ROOT/,
   );
+
   expect(hookCommand("/tmp/hook", "run")).toBe(
     "export BARNDOG_HOOK_ROOT='/tmp/hook'; run",
   );
@@ -2519,24 +2801,30 @@ test("events chosen for one coding tool start selected for the next", async (t) 
       home,
       {
         chooseMany: async (message, choices) => {
-          if (message.startsWith("Which coding tools"))
+          if (message.startsWith("Which coding tools")) {
             return ["claude", "codex", "cursor"];
+          }
+
           const checked = choices
             .filter((choice) => choice.checked)
             .map((choice) => choice.value);
+
           offered[message.split(":")[0]!] = checked;
+
           return message.startsWith("Claude")
             ? ["PreToolUse", "Stop", "Notification"]
             : checked;
         },
         chooseOne: async (message, _, fallback) => {
           scripts[message] = fallback;
+
           return fallback ?? "b.sh";
         },
       },
       true,
     ),
   );
+
   expect(offered["Claude Code"]).toStrictEqual([]);
   expect(offered.Codex).toStrictEqual(["PreToolUse", "Stop"]);
   expect(offered.Cursor).toStrictEqual(["preToolUse", "stop"]);
@@ -2574,6 +2862,7 @@ test("pasted MCP JSON never stores a secret and installs everywhere", async (t) 
     },
     quiet(home),
   );
+
   const docs = await readFile(join(folder, "org/mcp/docs.yaml"), "utf8");
   const local = await readFile(join(folder, "org/mcp/local.yaml"), "utf8");
   expect(docs + local).not.toMatch(/real-secret-value/);
@@ -2583,9 +2872,11 @@ test("pasted MCP JSON never stores a secret and installs everywhere", async (t) 
   expect(await readFile(join(home, ".claude.json"), "utf8")).toMatch(
     /docs\.example\.com/,
   );
+
   expect(() => parseMcpText(JSON.stringify({ command: "x" }))).toThrow(
     /without a name/,
   );
+
   expect(() => parseMcpText("{")).toThrow(/valid JSON/);
   expect(() =>
     convertServer({
@@ -2593,6 +2884,7 @@ test("pasted MCP JSON never stores a secret and installs everywhere", async (t) 
       server: { url: "https://x.example.com", type: "sse" },
     }),
   ).toThrow(/stdio and HTTP/);
+
   expect(() =>
     convertServer({
       name: "a",
@@ -2609,30 +2901,36 @@ test("importing from a harness replaces its entry and keeps a backup", async (t)
       other: { command: "x" },
     },
   };
+
   await write(home, ".claude.json", JSON.stringify(original));
   await write(
     home,
     ".codex/config.toml",
     '[mcp_servers.codexonly]\ncommand = "c"\nenv_vars = ["TOKEN"]\n',
   );
+
   expect((await harnessServers(home)).map((s) => s.name).sort()).toStrictEqual([
     "codexonly",
     "other",
     "tools",
   ]);
+
   await expect(
     addMcp("tools", { from: "claude" }, quiet(home)),
   ).rejects.toSatisfy(
     (error: CliError) => error.hint === "barndog mcp add tools --replace",
   );
+
   await expect(readFile(join(folder, "org/mcp/tools.yaml"))).rejects.toThrow();
   expect(
     JSON.parse(await readFile(join(home, ".claude.json"), "utf8")),
   ).toStrictEqual(original);
+
   await addMcp("tools", { from: "claude", replace: true }, quiet(home));
   expect(await readFile(join(folder, "org/mcp/tools.yaml"), "utf8")).toMatch(
     /t\.js/,
   );
+
   const after = JSON.parse(await readFile(join(home, ".claude.json"), "utf8"));
   expect(after.mcpServers.tools).toBeTruthy();
   expect(after.mcpServers.other).toStrictEqual({ command: "x" });
@@ -2642,6 +2940,7 @@ test("importing from a harness replaces its entry and keeps a backup", async (t)
       (s) => s.name === "tools" && s.harness === "claude",
     ),
   ).toBeFalsy();
+
   await addMcp("codexonly", { from: "codex" }, quiet(home));
   expect(
     await readFile(join(folder, "org/mcp/codexonly.yaml"), "utf8"),
@@ -2658,6 +2957,7 @@ test("a local-only machine can promote to a repo without switching", async (t) =
     { repo: url, to: "team/web", names: ["mine"] },
     home,
   );
+
   expect(result.rows.map((r) => r.status)).toStrictEqual(["moved"]);
   await run(clone, "fetch", "origin");
   expect(
@@ -2667,21 +2967,25 @@ test("a local-only machine can promote to a repo without switching", async (t) =
       `origin/${result.branch}:teams/web/skills/mine/SKILL.md`,
     ),
   ).toMatch(/mine/);
+
   const settings = await readSettings(home);
   expect(
     settings && settings.localWorkspace && !settings.gitWorkspace,
   ).toBeTruthy();
+
   expect(await installed(home, "skills/mine/SKILL.md")).toMatch(/mine/);
   await assertCommandAvailable(
     ["login"],
     { server: "https://x.example.com" },
     home,
   );
+
   await assertCommandAvailable(
     ["skills", "promote"],
     { origin: "local" },
     home,
   );
+
   await expect(
     moveLocalAssets({ server: "http://127.0.0.1:9" }, home),
   ).rejects.toSatisfy(
@@ -2706,6 +3010,7 @@ test("promote from local routes to the same move", async (t) => {
     },
     home,
   );
+
   assert(result.outcome === "moved");
   await run(clone, "fetch", "origin");
   expect(
@@ -2729,8 +3034,10 @@ test("help hides what the current setup can't run and says so at the end", async
         write: (line) => lines.push(line),
       }).parseAsync(["node", "barndog", ...args, "--help"]),
     ).rejects.toSatisfy((error: { exitCode?: number }) => error.exitCode === 0);
+
     return lines.join("\n").replace(/\s+/g, " ");
   };
+
   const listed = (text: string, command: string) =>
     new RegExp(` ${command} (\\[|<|[A-Z])`).test(
       text.split("Some commands are")[0]!,
@@ -2744,6 +3051,7 @@ test("help hides what the current setup can't run and says so at the end", async
   expect(root).toMatch(
     /Some commands are hidden in local mode because they need a Git repo or Cloud Workspace: .*login.*github/,
   );
+
   expect(root).toMatch(/Run barndog --help --list-unavailable to see them\./);
 
   const skills = await help("local", "skills");
@@ -2762,6 +3070,7 @@ test("help hides what the current setup can't run and says so at the end", async
   expect(group).toMatch(
     /Not available in local mode\. Needs a Cloud Workspace\./,
   );
+
   expect(group).not.toMatch(/Some commands are/);
 
   const gitSkills = await help("git", "skills");
@@ -2785,6 +3094,7 @@ test("a moved asset is used from its new scope once it exists there, and removin
     { names: ["mine"], to: "team/web" },
     home,
   );
+
   await run(clone, "fetch", "origin");
   await run(clone, "merge", "--no-edit", `origin/${result.branch}`);
   await run(clone, "push", "origin", "main");
@@ -2793,11 +3103,13 @@ test("a moved asset is used from its new scope once it exists there, and removin
   expect(items.map((i) => [i.origin, i.state])).toStrictEqual([
     ["team/web", "installed"],
   ]);
+
   await changeAsset(
     "remove",
     { kind: "skill", name: "mine", origin: "team/web" },
     home,
   );
+
   await synchronize(undefined, home, undefined, { prompt: false });
   expect(
     (await inventory(home)).items.filter(
@@ -2811,22 +3123,27 @@ test("internal codes and validation errors read as sentences", () => {
   expect(friendlyMessage(new Error("INVALID_SKILL_MD"))).toBe(
     "SKILL.md needs front matter with a lowercase hyphenated name and a description",
   );
+
   expect(friendlyMessage(new Error("MISSING_HOOK_SCRIPT: a.sh"))).toBe(
     "hook.yaml declares a script that isn't in the folder: a.sh",
   );
+
   expect(friendlyMessage(new Error("KNOWLEDGE_NOT_FOUND"))).toBe(
     "Knowledge not found.",
   );
+
   expect(
     friendlyMessage(
       Object.assign(new Error("x"), { code: "ENOENT", path: "/a" }),
     ),
   ).toBe("Can't find /a.");
+
   expect(
     friendlyMessage(
       Object.assign(new Error("x"), { code: "EEXIST", path: "/a" }),
     ),
   ).toBe("/a already exists. Choose another folder or remove it first.");
+
   expect(friendlyMessage(z.uuid().safeParse("x").error)).toMatch(
     /isn't a valid ID/,
   );

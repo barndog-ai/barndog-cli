@@ -31,6 +31,7 @@ export async function onboardingEnvironment(
   const repo = openRepoSource(settings, home, { refresh: "none" });
   if (repo) {
     const model = await repo.model();
+
     return {
       catalog: model.catalog,
       scopes: model.scopes,
@@ -43,17 +44,23 @@ export async function onboardingEnvironment(
       previous: selectionState(settings),
     };
   }
-  if (!settings.connection) throw new Error("A connected identity is required");
+
+  if (!settings.connection) {
+    throw new Error("A connected identity is required");
+  }
+
   const { connection, catalog } = await environmentCatalog(
     home,
     settings.connection,
   );
+
   const scopes = await request(
     connection,
     "/v1/scopes",
     z.array(scopeSchema),
     home,
   );
+
   const teams = scopes.filter((scope) => scope.type === "team");
   const memberTeamIds: string[] = [];
   // Bound concurrent requests when using servers with the existing membership API.
@@ -66,15 +73,18 @@ export async function onboardingEnvironment(
           z.array(teamMemberSchema),
           home,
         );
+
         return members.some((member) => member.id === connection.developerId)
           ? team.id
           : undefined;
       }),
     );
+
     memberTeamIds.push(
       ...memberships.filter((id): id is string => id !== undefined),
     );
   }
+
   return {
     catalog,
     scopes,
@@ -113,6 +123,7 @@ export function onboardingSources(choices: EnvironmentChoices): SetupSource[] {
     previous.subscriptions.some(
       (s) => s.scope.type === scope.type && s.scope.id === scope.id,
     );
+
   const scopes = choices.scopes.filter(
     (
       scope,
@@ -124,9 +135,11 @@ export function onboardingSources(choices: EnvironmentChoices): SetupSource[] {
         (memberTeamIds.includes(scope.id) || subscribed(scope))) ||
       (scope.type === "repo" && subscribed(scope)),
   );
+
   const own = choices.scopes.find(
     (scope) => scope.type === "dev" && scope.id === developerId,
   );
+
   const origins = [
     ...scopes.map((scope) => ({
       scope: { type: scope.type, id: scope.id },
@@ -141,15 +154,18 @@ export function onboardingSources(choices: EnvironmentChoices): SetupSource[] {
         ]
       : []),
   ];
+
   return origins.map(({ scope, label }) => {
     const distribution = catalog.distributions.find(
       (d) => d.scope.type === scope.type && d.scope.id === scope.id,
     );
+
     const assets = catalog.assets.filter((asset) =>
       scope.type === "dev"
         ? asset.origin.type === "dev" && asset.origin.id === developerId
         : distribution?.assets.some((entry) => entry.assetId === asset.id),
     );
+
     const recommendations =
       scope.type === "dev"
         ? catalog.distributions
@@ -160,20 +176,25 @@ export function onboardingSources(choices: EnvironmentChoices): SetupSource[] {
         : (distribution?.assets
             .filter((entry) => entry.mode === "recommended")
             .map((entry) => entry.assetId) ?? []);
+
     const recommendedIds = assets
       .filter((a) => recommendations.includes(a.id))
       .map((a) => a.id);
+
     const saved = previous.subscriptions.find(
       (s) => s.scope.type === scope.type && s.scope.id === scope.id,
     );
+
     const independent = assets
       .filter((a) => previous.individualAssetIds.includes(a.id))
       .map((a) => a.id);
+
     const subscribed = saved
       ? (distribution?.assets
           .filter((a) => saved.mode === "all" || a.mode === saved.mode)
           .map((a) => a.assetId) ?? [])
       : [];
+
     return {
       scope,
       label,
@@ -225,11 +246,15 @@ export function selectOnboardingSources(
           : mode === "recommended"
             ? source.recommendedIds
             : source.assets.map((a) => a.id);
-      if (ids.some((id) => !source.assets.some((a) => a.id === id)))
+
+      if (ids.some((id) => !source.assets.some((a) => a.id === id))) {
         throw new Error("Selection contains an asset outside this source");
+      }
+
       ids.forEach((id) => individualAssetIds.add(id));
     }
   }
+
   return {
     subscriptions,
     individualAssetIds: [...individualAssetIds],
@@ -254,12 +279,16 @@ export function selectedEnvironment(
     parsed.individualAssetIds.some(
       (id) => !choices.catalog.assets.some((asset) => asset.id === id),
     )
-  )
+  ) {
     throw new Error("Selection contains an unavailable scope or asset");
+  }
+
   if (
     new Set(parsed.subscriptions.map((s) => `${s.scope.type}:${s.scope.id}`))
       .size !== parsed.subscriptions.length
-  )
+  ) {
     throw new Error("Duplicate scope selection");
+  }
+
   return withSelection(settings, parsed);
 }

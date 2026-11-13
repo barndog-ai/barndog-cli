@@ -29,7 +29,9 @@ const checkPath = (home: string) => join(home, ".barndog/cloud-check.json");
 
 async function readCheck(home: string, conn: Connection) {
   const text = await readFile(checkPath(home), "utf8").catch(() => null);
-  if (!text) return undefined;
+  if (!text) {
+    return undefined;
+  }
 
   let value: unknown;
 
@@ -70,7 +72,10 @@ async function currentRevision(conn: Connection, home: string) {
 
     return revision;
   } catch (error) {
-    if (error instanceof ApiError && error.status === 404) return undefined;
+    if (error instanceof ApiError && error.status === 404) {
+      return undefined;
+    }
+
     throw error;
   }
 }
@@ -98,8 +103,9 @@ export async function autoSync(
   if (
     previous &&
     Date.now() - Date.parse(previous.checkedAt) < CHECK_INTERVAL_MS
-  )
+  ) {
     return;
+  }
 
   const record = (revision: string | undefined) =>
     writeCheck(home, {

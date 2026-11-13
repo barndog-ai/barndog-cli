@@ -20,10 +20,14 @@ export function openRepoSource(
   home: string,
   options: SourceOptions = {},
 ): RepoSource | undefined {
-  if (settings.gitWorkspace)
+  if (settings.gitWorkspace) {
     return gitRepoSource(settings.gitWorkspace, home, options);
-  if (settings.localWorkspace && !settings.connection)
+  }
+
+  if (settings.localWorkspace && !settings.connection) {
     return localRepoSource(settings.localWorkspace, home);
+  }
+
   return undefined;
 }
 
@@ -35,6 +39,8 @@ export function openWorkspaceSource(
   const primary = settings.connection
     ? cloudSource(settings.connection, home)
     : openRepoSource(settings, home, options);
+
   const overlay = localOverlay(settings, home);
+
   return primary && overlay ? withOverlay(primary, overlay) : primary;
 }

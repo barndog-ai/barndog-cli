@@ -33,31 +33,41 @@ export async function commitFiles(
   const index = join(repo, `barndog-index-${randomUUID()}`);
   const env = { GIT_INDEX_FILE: index };
   try {
-    if (parent) await git(["read-tree", parent], { repo, env });
+    if (parent) {
+      await git(["read-tree", parent], { repo, env });
+    }
+
     const updates: string[] = [];
     if (parent && change.replace) {
       const listing = await git(
         ["ls-tree", "-r", "-z", "--name-only", parent, "--", change.replace],
         { repo },
       );
-      for (const path of listing.toString("utf8").split("\0").filter(Boolean))
+
+      for (const path of listing.toString("utf8").split("\0").filter(Boolean)) {
         updates.push(`0 ${NULL_HASH}\t${path}`);
+      }
     }
+
     for (const file of change.files) {
       const hash = await gitText(["hash-object", "-w", "--stdin"], {
         repo,
         input: file.data,
       });
+
       updates.push(
         `${file.executable ? "100755" : "100644"} ${hash}\t${file.path}`,
       );
     }
+
     await git(["update-index", "-z", "--index-info"], {
       repo,
       env,
       input: updates.join("\0") + "\0",
     });
+
     const tree = await gitText(["write-tree"], { repo, env });
+
     return await gitText(
       ["commit-tree", tree, ...(parent ? ["-p", parent] : []), "-m", message],
       { repo, allowPrompt: options.allowPrompt },
@@ -80,12 +90,14 @@ export async function pushCommit(
       allowPrompt,
     });
   } catch (error) {
-    if (error instanceof GitError)
+    if (error instanceof GitError) {
       throw new CliError(
         `The Git host rejected the push to ${branch}: ${gitReason(error.stderr)}`,
         undefined,
         { cause: error },
       );
+    }
+
     throw error;
   }
 }
@@ -98,26 +110,40 @@ export async function remoteBranch(repo: string, branch: string) {
       repo,
     },
   );
+
   return parseLsRemote(output)[0]?.commit ?? null;
 }
 
 export function hostOf(url: string) {
   const remote = normalizeRepositoryRemote(url);
-  if (!remote) return null;
+  if (!remote) {
+    return null;
+  }
+
   const [host, ...path] = remote.split("/");
-  if (!host || path.length < 2) return null;
+  if (!host || path.length < 2) {
+    return null;
+  }
+
   return { host, path: path.join("/") };
 }
 
 /** A browser link that starts a pull request, for hosts with a known URL shape. */
 export function compareUrl(url: string, base: string, branch: string) {
   const remote = hostOf(url);
-  if (!remote) return null;
+  if (!remote) {
+    return null;
+  }
+
   const encoded = branch.split("/").map(encodeURIComponent).join("/");
-  if (remote.host.includes("github"))
+  if (remote.host.includes("github")) {
     return `https://${remote.host}/${remote.path}/compare/${encodeURIComponent(base)}...${encoded}?expand=1`;
-  if (remote.host.includes("gitlab"))
+  }
+
+  if (remote.host.includes("gitlab")) {
     return `https://${remote.host}/${remote.path}/-/merge_requests/new?merge_request%5Bsource_branch%5D=${encodeURIComponent(branch)}&merge_request%5Btarget_branch%5D=${encodeURIComponent(base)}`;
+  }
+
   return null;
 }
 
@@ -126,6 +152,7 @@ const signedIn = async (tool: string, host: string) => {
     await execute(tool, ["auth", "status", "--hostname", host], {
       timeout: 15_000,
     });
+
     return true;
   } catch {
     return false;
@@ -148,7 +175,11 @@ export async function openPullRequest(request: {
     url: compareUrl(url, base, branch) ?? undefined,
     opened: false,
   };
-  if (!remote) return fallback;
+
+  if (!remote) {
+    return fallback;
+  }
+
   const command = remote.host.includes("github")
     ? [
         "gh",
@@ -183,12 +214,17 @@ export async function openPullRequest(request: {
           "-y",
         ]
       : null;
+
   const [program, ...args] = command ?? [];
-  if (!program || !(await signedIn(program, remote.host))) return fallback;
+  if (!program || !(await signedIn(program, remote.host))) {
+    return fallback;
+  }
+
   try {
     const { stdout } = await execute(program, args, {
       timeout: 60_000,
     });
+
     return { url: firstUrl(stdout) ?? fallback.url, opened: true };
   } catch {
     return fallback;
@@ -198,8 +234,13 @@ export async function openPullRequest(request: {
 /** Reports branch protection where the host will say; null means it can't tell. */
 export async function branchProtected(url: string, branch: string) {
   const remote = hostOf(url);
-  if (!remote?.host.includes("github") || !(await signedIn("gh", remote.host)))
+  if (
+    !remote?.host.includes("github") ||
+    !(await signedIn("gh", remote.host))
+  ) {
     return null;
+  }
+
   try {
     const { stdout } = await execute(
       "gh",
@@ -213,6 +254,7 @@ export async function branchProtected(url: string, branch: string) {
       ],
       { timeout: 15_000 },
     );
+
     return stdout.trim() === "true";
   } catch {
     return null;

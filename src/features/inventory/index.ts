@@ -75,7 +75,10 @@ const installedSchema = z.array(
 /** What is selected and what is actually installed on this machine. */
 export async function inventory(home = homedir()): Promise<Inventory> {
   const settings = await readSettings(home);
-  if (!settings) throw new SetupRequiredError();
+  if (!settings) {
+    throw new SetupRequiredError();
+  }
+
   const statePath = join(home, ".barndog/state.json");
   const raw = await fileText(statePath);
   const state = await readState(statePath, home);
@@ -92,12 +95,16 @@ export async function inventory(home = homedir()): Promise<Inventory> {
   const modified = new Set<string>();
   for (const tree of installed) {
     const actual = await treeFingerprint(tree.path);
-    if (tree.fingerprint && actual !== null && actual !== tree.fingerprint)
+    if (tree.fingerprint && actual !== null && actual !== tree.fingerprint) {
       modified.add(tree.id);
+    }
   }
+
   for (const link of state.links) {
     const actual = await linkTarget(link.target);
-    if (actual !== null && actual !== link.source) modified.add(link.id);
+    if (actual !== null && actual !== link.source) {
+      modified.add(link.id);
+    }
   }
 
   let offline: string | null = null;
@@ -109,12 +116,15 @@ export async function inventory(home = homedir()): Promise<Inventory> {
           if (repo) {
             const model = await repo.model();
             offline = repo.notices()[0] ?? null;
+
             return {
               catalog: model.catalog,
               scopes: () => Promise.resolve(model.scopes),
             };
           }
+
           const remote = await environmentCatalog(home, conn);
+
           return {
             catalog: remote.catalog,
             scopes: () =>
@@ -126,16 +136,21 @@ export async function inventory(home = homedir()): Promise<Inventory> {
               ),
           };
         })();
+
       const overlay = localOverlay(settings, home);
       const catalog = overlay
         ? await mergeLocalCatalog(primaryCatalog, overlay)
         : primaryCatalog;
+
       const selection = selectionState(settings);
       const effective = resolveAssets(catalog, selection);
       const outcome = await resolveClashes(
         effective.assets.flatMap(({ asset, enabled }) => {
           const { kind } = asset;
-          if (!enabled || kind === "hook") return [];
+          if (!enabled || kind === "hook") {
+            return [];
+          }
+
           return [
             {
               id: asset.id,
@@ -149,6 +164,7 @@ export async function inventory(home = homedir()): Promise<Inventory> {
         }),
         localNames,
       );
+
       const clashed = new Set(outcome.skipped.map((c) => c.incoming.id));
       for (const entry of effective.assets) {
         const { asset } = entry;
@@ -163,6 +179,7 @@ export async function inventory(home = homedir()): Promise<Inventory> {
             ...entries.map((n) => n.harness).filter(isHarness),
           ]),
         ];
+
         items.push({
           id: asset.id,
           kind: asset.kind,
@@ -193,15 +210,18 @@ export async function inventory(home = homedir()): Promise<Inventory> {
           ],
         });
       }
+
       const scopes = await loadScopes();
-      for (const item of items)
+      for (const item of items) {
         item.via = item.via.map((label) => {
           const [type, id] = label.split("/");
           const scope = scopes.find(
             (s) => s.type === type && (type === "org" || s.id === id),
           );
+
           return scope ? originLabel(scope) : label;
         });
+      }
     } catch (error) {
       offline = error instanceof Error ? error.message : String(error);
     }
@@ -214,13 +234,19 @@ export async function inventory(home = homedir()): Promise<Inventory> {
       .filter((n) => n.kind !== "knowledge" && n.kind !== "sync")
       .map((n) => n.id),
   ])) {
-    if (seen.has(id)) continue;
+    if (seen.has(id)) {
+      continue;
+    }
+
     const links = linksOf(id);
     const entries = nativeOf(id);
     const [link] = links;
     const [entry] = entries;
     const kind = link ? "skill" : entry?.kind;
-    if (!isAssetKind(kind)) continue;
+    if (!isAssetKind(kind)) {
+      continue;
+    }
+
     const name = link
       ? basename(link.target)
       : kind === "mcp"
@@ -229,6 +255,7 @@ export async function inventory(home = homedir()): Promise<Inventory> {
             .find((t) => t.id === id)
             ?.path.split("/")
             .pop() ?? id);
+
     items.push({
       id,
       kind,
@@ -255,6 +282,7 @@ export async function inventory(home = homedir()): Promise<Inventory> {
       a.kind.localeCompare(b.kind) ||
       a.installedName.localeCompare(b.installedName),
   );
+
   return {
     harnesses: settings.harnesses,
     server: conn?.server ?? repo?.label ?? null,

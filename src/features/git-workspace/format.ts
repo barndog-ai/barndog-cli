@@ -75,10 +75,12 @@ export function renderConfig(
 
 export function parseConfig(text: string): WorkspaceConfig {
   const parsed = configSchema.safeParse(parse(text));
-  if (!parsed.success)
+  if (!parsed.success) {
     throw new CliError(
       `${CONFIG_FILE} is invalid: ${parsed.error.issues.map((issue) => `${issue.path.join(".") || "file"}: ${issue.message}`).join("; ")}`,
     );
+  }
+
   return parsed.data;
 }
 
@@ -88,10 +90,12 @@ export function stableId(...parts: string[]) {
     .update(parts.join("\0"))
     .digest()
     .subarray(0, 16);
+
   // A 16-byte digest always has these bytes; set the UUID version and variant bits.
   bytes.writeUInt8((bytes.readUInt8(6) & 0x0f) | 0x40, 6);
   bytes.writeUInt8((bytes.readUInt8(8) & 0x3f) | 0x80, 8);
   const hex = bytes.toString("hex");
+
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
@@ -147,7 +151,10 @@ const hidden = (name: string) => name.startsWith(".");
 
 function frontMatter(text: string) {
   const parts = splitFrontMatter(text);
-  if (!parts) throw new Error("Missing front matter");
+  if (!parts) {
+    throw new Error("Missing front matter");
+  }
+
   return { metadata: parse(parts.yaml) as unknown, body: parts.body };
 }
 
@@ -162,8 +169,11 @@ function knowledgeContent(name: string, text: string): KnowledgeContent {
     })
     .strict()
     .parse(metadata);
-  if (fields.name !== undefined && fields.name !== name)
+
+  if (fields.name !== undefined && fields.name !== name) {
     throw new Error(`name must match the file name (${name})`);
+  }
+
   return knowledgeContentSchema.parse({ ...fields, name, markdown: body });
 }
 
@@ -175,37 +185,46 @@ export async function loadWorkspace(
 ): Promise<WorkspaceModel> {
   const byPath = new Map(snapshot.entries.map((entry) => [entry.path, entry]));
   const configEntry = byPath.get(CONFIG_FILE);
-  if (!configEntry || !isBlob(configEntry.mode))
+  if (!configEntry || !isBlob(configEntry.mode)) {
     throw new CliError(
       `This isn't a BarnDog workspace: it has no ${CONFIG_FILE}.`,
     );
+  }
+
   const blobs = await snapshot.readBlobs(
     snapshot.entries
       .filter((entry) => isBlob(entry.mode))
       .map((entry) => entry.hash),
   );
+
   const blob = (entry: SnapshotEntry) =>
     defined(blobs.get(entry.hash), `Git object ${entry.hash} wasn't read`);
+
   const text = (entry: SnapshotEntry) => blob(entry).toString("utf8");
   const config = parseConfig(text(configEntry));
-  if (expectedId && config.workspaceId !== expectedId)
+  if (expectedId && config.workspaceId !== expectedId) {
     throw new CliError(
       `${CONFIG_FILE} now names a different workspace. Run setup again if this is intended.`,
       "barndog init",
     );
+  }
+
   const id = (...parts: string[]) => stableId(config.workspaceId, ...parts);
   const children = new Map<string, SnapshotEntry[]>();
   for (const entry of snapshot.entries) {
     const parent = entry.path.includes("/")
       ? entry.path.slice(0, entry.path.lastIndexOf("/"))
       : "";
+
     children.set(parent, [...(children.get(parent) ?? []), entry]);
   }
+
   const under = (path: string) =>
     (children.get(path) ?? [])
       .map((entry) => ({ entry, name: entry.path.slice(path.length + 1) }))
       .filter(({ name }) => !hidden(name))
       .sort((a, b) => a.name.localeCompare(b.name));
+
   const folders = (path: string) =>
     under(path)
       .filter(({ entry }) => entry.mode === TREE_MODE)
@@ -223,13 +242,14 @@ export async function loadWorkspace(
       ...(options.localOnly ? { localOnly: true as const } : {}),
     },
   ];
+
   for (const [type, root, declared] of [
     ["team", "teams", config.teams],
     ["repo", "repos", config.repositories],
-  ] as const)
+  ] as const) {
     for (const name of [
       ...new Set([...Object.keys(declared), ...folders(root)]),
-    ].sort())
+    ].sort()) {
       scopes.push({
         type,
         id: id("scope", type, name),
@@ -238,32 +258,43 @@ export async function loadWorkspace(
         canPublish: true,
         path: `${root}/${name}`,
       });
+    }
+  }
 
   const problems: Problem[] = [];
   const assets: RepoAsset[] = [];
   const knowledge: RepoKnowledge[] = [];
   const invalidKnowledge: { path: string; reason: string }[] = [];
   const named = (path: string, name: string) => {
-    if (validAssetName(name)) return true;
+    if (validAssetName(name)) {
+      return true;
+    }
+
     problems.push({ path, reason: NAME_RULE });
+
     return false;
   };
 
   function packageEntries(root: string) {
     const entries: PackageEntry[] = [];
     for (const entry of snapshot.entries) {
-      if (!entry.path.startsWith(`${root}/`) || entry.mode === TREE_MODE)
+      if (!entry.path.startsWith(`${root}/`) || entry.mode === TREE_MODE) {
         continue;
-      if (!isBlob(entry.mode))
+      }
+
+      if (!isBlob(entry.mode)) {
         throw new Error(
           `UNSAFE_PACKAGE_ENTRY: ${entry.path.slice(root.length + 1)} is a link`,
         );
+      }
+
       entries.push({
         path: entry.path.slice(root.length + 1),
         data: blob(entry),
         executable: entry.mode === "100755",
       });
     }
+
     return entries;
   }
 
@@ -282,6 +313,7 @@ export async function loadWorkspace(
         publishedVersion: entry.hash,
         path: entry.path,
       };
+
       try {
         assets.push({ ...base, ...read() });
       } catch (error) {
@@ -290,53 +322,84 @@ export async function loadWorkspace(
         assets.push({ ...base, description: "", entries: [], invalid: reason });
       }
     };
+
     for (const { entry, name } of under(`${scope.path}/skills`)) {
-      if (entry.mode !== TREE_MODE || !named(entry.path, name)) continue;
+      if (entry.mode !== TREE_MODE || !named(entry.path, name)) {
+        continue;
+      }
+
       add("skill", name, entry, () => {
         const entries = validatePackageEntries(packageEntries(entry.path));
         const metadata = packageMetadata(entries);
-        if (metadata.name !== name)
+        if (metadata.name !== name) {
           throw new Error(`SKILL.md name must match the folder name (${name})`);
+        }
+
         return { description: metadata.description, entries };
       });
     }
+
     for (const { entry, name } of under(`${scope.path}/hooks`)) {
-      if (entry.mode !== TREE_MODE || !named(entry.path, name)) continue;
+      if (entry.mode !== TREE_MODE || !named(entry.path, name)) {
+        continue;
+      }
+
       add("hook", name, entry, () => {
         const entries = validatePackageEntries(
           packageEntries(entry.path),
           undefined,
           "hook.yaml",
         );
+
         const manifest = hookMetadata(entries);
-        if (manifest.name !== name)
+        if (manifest.name !== name) {
           throw new Error(
             `hook.yaml name must match the folder name (${name})`,
           );
+        }
+
         return { description: manifest.description, entries };
       });
     }
+
     for (const { entry, name: file } of under(`${scope.path}/mcp`)) {
-      if (!isBlob(entry.mode) || !/\.ya?ml$/.test(file)) continue;
+      if (!isBlob(entry.mode) || !/\.ya?ml$/.test(file)) {
+        continue;
+      }
+
       const name = file.replace(/\.ya?ml$/, "");
-      if (!named(entry.path, name)) continue;
+      if (!named(entry.path, name)) {
+        continue;
+      }
+
       add("mcp", name, entry, () => {
         const definition = mcpDefinitionSchema.parse(parse(text(entry)));
+
         return { description: definition.description, entries: [], definition };
       });
     }
+
     if (scope.type !== "org") {
-      if (under(`${scope.path}/knowledge`).length)
+      if (under(`${scope.path}/knowledge`).length) {
         problems.push({
           path: `${scope.path}/knowledge`,
           reason: "Knowledge is organization-wide; move it to org/knowledge",
         });
+      }
+
       continue;
     }
+
     for (const { entry, name: file } of under(`${scope.path}/knowledge`)) {
-      if (!isBlob(entry.mode) || !file.endsWith(".md")) continue;
+      if (!isBlob(entry.mode) || !file.endsWith(".md")) {
+        continue;
+      }
+
       const name = file.replace(/\.md$/, "");
-      if (!named(entry.path, name)) continue;
+      if (!named(entry.path, name)) {
+        continue;
+      }
+
       try {
         knowledge.push({
           id: id("knowledge", name),
@@ -353,16 +416,19 @@ export async function loadWorkspace(
   }
 
   const optional = new Set(config.optional);
-  for (const path of optional)
+  for (const path of optional) {
     if (
       !assets.some(
         (asset) => asset.path === path || asset.path === `${path}.yaml`,
       )
-    )
+    ) {
       problems.push({
         path: CONFIG_FILE,
         reason: `optional names a missing asset: ${path}`,
       });
+    }
+  }
+
   const distributions = scopes.map((scope) => ({
     scope: { type: scope.type, id: scope.id },
     assets: assets
@@ -376,6 +442,7 @@ export async function loadWorkspace(
             : ("recommended" as const),
       })),
   }));
+
   return {
     config,
     organizationId,
@@ -399,14 +466,18 @@ export function validAssetName(name: string) {
 
 /** Names become folder and file names, so check them before touching the disk. */
 export function assertAssetName(name: string, fix: string) {
-  if (!validAssetName(name))
+  if (!validAssetName(name)) {
     throw new CliError(`${name} can't be used as a name. ${NAME_RULE}.`, fix);
+  }
 }
 
 /** Where a new asset belongs inside a scope: a folder per package, a file per MCP server. */
 export function assetPath(scopePath: string, kind: AssetKind, name: string) {
   const folder = `${scopePath}/${assetKinds[kind].folder}`;
-  if (kind === "mcp") return `${folder}/${name}.yaml`;
+  if (kind === "mcp") {
+    return `${folder}/${name}.yaml`;
+  }
+
   return `${folder}/${name}`;
 }
 

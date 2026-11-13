@@ -44,5 +44,6 @@ export function withSelection(
 
 export function hasRemoteSelections(settings: Settings): boolean {
   const state = selectionState(settings);
+
   return !!(state.subscriptions.length || state.individualAssetIds.length);
 }

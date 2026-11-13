@@ -17,9 +17,12 @@ export async function mcpCatalog(
       mcpListSchema,
       home,
     );
+
     for (const mcp of page.mcps) {
-      if (mcp.organizationId !== conn.organizationId)
+      if (mcp.organizationId !== conn.organizationId) {
         throw new Error("Invalid catalog organization");
+      }
+
       rows.push({
         id: mcp.id,
         kind: "mcp",
@@ -31,10 +34,17 @@ export async function mcpCatalog(
         },
       });
     }
-    if (page.nextCursor && seen.has(page.nextCursor))
+
+    if (page.nextCursor && seen.has(page.nextCursor)) {
       throw new Error("Invalid catalog pagination");
-    if (page.nextCursor) seen.add(page.nextCursor);
+    }
+
+    if (page.nextCursor) {
+      seen.add(page.nextCursor);
+    }
+
     cursor = page.nextCursor ?? undefined;
   } while (cursor);
+
   return rows;
 }

@@ -43,7 +43,9 @@ async function readDefinition(file: string) {
 export async function createMcp(input: McpWriteInput, home = homedir()) {
   const conn = await connection(home),
     scope = await selectOrigin(input.origin, conn, home);
+
   const definition = await readDefinition(input.file);
+
   return request(conn, "/v1/mcps", mcpSchema, home, "POST", {
     name: input.name,
     origin: { type: scope.type, id: scope.id },
@@ -61,6 +63,7 @@ export async function updateMcp(
   await selectOrigin(input.origin, conn, home);
   const definition = await readDefinition(input.file);
   const selected = await selectAsset("mcp", input.name, input.origin, home);
+
   return request(
     conn,
     `/v1/mcps/${selected.reference.id}/versions`,
@@ -79,10 +82,12 @@ export async function updateMcp(
 export async function showMcp(name: string, origin: string, home = homedir()) {
   const settings = await readSettings(home);
   const repo = settings && repoForOrigin(settings, home, origin);
-  if (repo)
+  if (repo) {
     return showRepoAsset(
       selectRepoAsset(await repo.model(), "mcp", name, origin),
     );
+  }
+
   return (await selectAsset("mcp", name, origin, home)).asset;
 }
 
@@ -92,13 +97,16 @@ export async function mcpVersions(
   home = homedir(),
 ) {
   const settings = await readSettings(home);
-  if (settings?.gitWorkspace)
+  if (settings?.gitWorkspace) {
     return gitVersions(
       settings.gitWorkspace,
       { name, origin, kind: "mcp" },
       home,
     );
+  }
+
   const selected = await selectAsset("mcp", name, origin, home);
+
   return request(
     selected.connection,
     `/v1/mcps/${selected.reference.id}/versions`,
@@ -134,6 +142,7 @@ export async function authenticateMcp(
   const asset = repo
     ? await (async () => {
         const found = selectRepoAsset(await repo.model(), "mcp", name, origin);
+
         return {
           id: found.id,
           name: found.name,
@@ -146,18 +155,21 @@ export async function authenticateMcp(
     : await (async () => {
         const selected = await selectAsset("mcp", name, origin, home),
           parsed = mcpSchema.parse(selected.asset);
+
         return {
           id: parsed.id,
           name: parsed.name,
           definition: parsed.version.definition,
         };
       })();
+
   const definition = asset.definition;
   if (definition.authentication !== "native-oauth") {
     const refs =
       definition.transport === "stdio"
         ? definition.environment
         : definition.headers;
+
     return {
       message:
         definition.authentication === "none"
@@ -167,24 +179,33 @@ export async function authenticateMcp(
               .join(", ")}. Credential values are never uploaded.`,
     };
   }
+
   const { native } = installedMcpSchema.parse(
     JSON.parse((await fileText(join(home, ".barndog/state.json"))) ?? "{}"),
   );
+
   const installed = native.find(
     (e) => e.id === asset.id && e.kind === "mcp" && e.harness === harness,
   );
-  if (!installed)
+
+  if (!installed) {
     throw new Error(
       "Install and enable this MCP for the selected harness before authenticating",
     );
+  }
+
   const entry: NativeEntry = { ...installed, kind: "mcp", harness };
-  if (entry.file !== nativeFile(harness, "mcp", home))
+  if (entry.file !== nativeFile(harness, "mcp", home)) {
     throw new Error("Invalid native installation state");
+  }
+
   patchNative(await fileText(entry.file), [entry], [entry]);
-  if (harness === "cursor")
+  if (harness === "cursor") {
     return {
       message: `Open Cursor → Settings → MCP and authenticate ${asset.name}. Cursor manages this login locally.`,
     };
+  }
+
   const cwd = join(home, ".barndog/native-auth");
   await mkdir(cwd, { recursive: true, mode: 0o700 });
   const command = harness === "claude" ? "claude" : "codex";
@@ -193,14 +214,18 @@ export async function authenticateMcp(
     stdio: "inherit",
     env: process.env,
   });
+
   const code = await new Promise<number>((resolve, reject) => {
     child.once("error", reject);
     child.once("exit", (code) => resolve(code ?? 1));
   });
-  if (code)
+
+  if (code) {
     throw new Error(
       `Native ${harness} authentication did not complete (${code})`,
     );
+  }
+
   return {
     message: `${harness} authentication completed. Credentials remain in native storage.`,
   };

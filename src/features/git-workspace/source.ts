@@ -44,14 +44,20 @@ function repoSource(
         localOnly: backend.localOnly ?? false,
       }),
     ));
+
   const find = async (reference: AssetReference): Promise<RepoAsset> => {
     const asset = (await model()).assets.find((a) => a.id === reference.id);
-    if (!asset || asset.publishedVersion !== reference.publishedVersion)
+    if (!asset || asset.publishedVersion !== reference.publishedVersion) {
       throw new Error("Catalog changed during staging; retry sync");
-    if (asset.invalid)
+    }
+
+    if (asset.invalid) {
       throw new CliError(`${asset.path} is invalid: ${asset.invalid}`);
+    }
+
     return asset;
   };
+
   return {
     cacheKey: backend.cacheKey,
     journal: { workspaceId: backend.workspaceId },
@@ -62,6 +68,7 @@ function repoSource(
     notices: () => backend.notices(),
     warnings: async () => {
       const { invalidKnowledge, problems } = await model();
+
       return [
         ...invalidKnowledge.map(
           (problem) =>
@@ -77,6 +84,7 @@ function repoSource(
     },
     skillOrHookPackage: async (kind, reference) => {
       const asset = await find(reference);
+
       return storePackage(
         kind,
         {
@@ -139,7 +147,10 @@ export async function readFetchState(
       JSON.parse(await readFile(statePath(workspaceId, home), "utf8")),
     );
   } catch (error) {
-    if (errorCode(error) === "ENOENT") return {};
+    if (errorCode(error) === "ENOENT") {
+      return {};
+    }
+
     throw error;
   }
 }
@@ -188,11 +199,21 @@ export function trackingRef(branch: string) {
 }
 
 const age = (fetchedAt: string | undefined) => {
-  if (!fetchedAt) return "an unknown time";
+  if (!fetchedAt) {
+    return "an unknown time";
+  }
+
   const minutes = Math.round((Date.now() - Date.parse(fetchedAt)) / 60000);
-  if (minutes < 1) return "less than a minute";
-  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+  if (minutes < 1) {
+    return "less than a minute";
+  }
+
+  if (minutes < 60) {
+    return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+  }
+
   const hours = Math.round(minutes / 60);
+
   return hours < 48 ? `${hours} hours` : `${Math.round(hours / 24)} days`;
 };
 
@@ -210,38 +231,51 @@ export function gitRepoSource(
     const recent =
       state.fetchedAt &&
       Date.now() - Date.parse(state.fetchedAt) < AUTO_FETCH_INTERVAL_MS;
+
     if (policy === "none" || (policy === "auto" && recent && state.accepted)) {
-      if (!state.accepted)
+      if (!state.accepted) {
         throw new CliError(
           "This Git workspace hasn't been fetched yet.",
           "barndog sync",
         );
+      }
+
       return state.accepted;
     }
+
     await ensureBareClone(repo, workspace.url);
     try {
       await fetchBranch(repo, workspace.branch);
     } catch (error) {
-      if (!(error instanceof GitError)) throw error;
-      if (!state.accepted)
+      if (!(error instanceof GitError)) {
+        throw error;
+      }
+
+      if (!state.accepted) {
         throw new CliError(
           `Can't fetch ${workspace.url}: ${gitReason(error.stderr)}. Make sure you can clone it on this machine; BarnDog manages it from there.`,
           `git clone ${workspace.url}`,
           { cause: error },
         );
+      }
+
       notices.push(
         `Can't reach ${workspace.url}, so this uses what was fetched ${age(state.fetchedAt)} ago.`,
       );
+
       return state.accepted;
     }
+
     const tip = await gitText(
       ["rev-parse", "--verify", trackingRef(workspace.branch)],
       { repo },
     );
+
     await writeFetchState(workspace.workspaceId, home, {
       accepted: tip,
       fetchedAt: new Date().toISOString(),
     });
+
     return tip;
   }
 

@@ -19,22 +19,33 @@ export function registerWorkspace(program: Command, context: CommandContext) {
     .description("Check a BarnDog workspace folder, for example in a repo's CI")
     .action(async (directory?: string) => {
       const result = await context.validateFolder(directory ?? ".");
-      if (context.mode.json) return context.write(json(result));
+      if (context.mode.json) {
+        return context.write(json(result));
+      }
+
       context.write(
         `${ok("✔")} ${bold(result.workspace)} is valid · ${plural(result.assets, "asset")}, ${plural(result.knowledge, "knowledge document")}`,
       );
     });
+
   const local = program
     .command("local")
     .description("See and share the assets kept in this machine's folder");
+
   local
     .command("list")
     .description("List local assets and whether they've been moved")
     .action(async () => {
       const result = await context.listLocalAssets();
-      if (context.mode.json) return context.write(json(result));
+      if (context.mode.json) {
+        return context.write(json(result));
+      }
+
       context.write(dim(result.folder));
-      if (!result.assets.length) return context.write(dim("No local assets."));
+      if (!result.assets.length) {
+        return context.write(dim("No local assets."));
+      }
+
       for (const line of table(
         result.assets.map((asset) => [
           bold(asset.name),
@@ -43,9 +54,11 @@ export function registerWorkspace(program: Command, context: CommandContext) {
           dim(asset.path),
         ]),
         { header: ["Name", "Kind", "State", "Path"] },
-      ))
+      )) {
         context.write(line);
+      }
     });
+
   local
     .command("move [names...]")
     .description("Copy local assets into your Git or Cloud workspace")
@@ -74,10 +87,17 @@ export function registerWorkspace(program: Command, context: CommandContext) {
           repo: options.repo,
           server: options.server,
         });
-        if (context.mode.json) return context.write(json(result));
-        for (const line of renderMove(result)) context.write(line);
+
+        if (context.mode.json) {
+          return context.write(json(result));
+        }
+
+        for (const line of renderMove(result)) {
+          context.write(line);
+        }
       },
     );
+
   program
     .command("migrate")
     .description(
@@ -90,10 +110,15 @@ export function registerWorkspace(program: Command, context: CommandContext) {
         server: options.to,
         dryRun: options.dryRun,
       });
-      if (context.mode.json) return context.write(json(result));
+
+      if (context.mode.json) {
+        return context.write(json(result));
+      }
+
       context.write(
         `\n${heading(options.dryRun ? "migrate --dry-run" : "migrate")}\n`,
       );
+
       for (const line of table(
         result.rows.map((row) => [
           row.action === "publish"
@@ -107,8 +132,10 @@ export function registerWorkspace(program: Command, context: CommandContext) {
           dim(row.detail ?? ""),
         ]),
         { header: ["Action", "Kind", "Name", "Origin", ""] },
-      ))
+      )) {
         context.write(line);
+      }
+
       context.write("");
       context.write(
         result.migrated

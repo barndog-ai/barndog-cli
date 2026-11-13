@@ -49,6 +49,7 @@ const plain = (lines: string[]) =>
 async function temp(t: TestContext) {
   const root = await realpath(await mkdtemp(join(tmpdir(), "barndog-cli-")));
   t.onTestFinished(() => rm(root, { recursive: true, force: true }));
+
   return root;
 }
 
@@ -66,8 +67,10 @@ async function localHome(t: TestContext) {
     confirmApply: async () => true,
     choose: async () => ["claude"],
   });
+
   const settings = await readSettings(home);
   assert(settings?.localWorkspace);
+
   return { root, home, folder: settings.localWorkspace.path };
 }
 
@@ -86,6 +89,7 @@ function program(overrides: Parameters<typeof createProgram>[0] = {}) {
     writeError: () => {},
     ...overrides,
   });
+
   return { instance, output };
 }
 
@@ -96,7 +100,9 @@ async function addSkill(root: string, home: string) {
     join(source, "SKILL.md"),
     "---\nname: review\ndescription: Reviews\n---\nBody\n",
   );
+
   await addSkills(source, { copy: true }, quiet(home));
+
   return join(home, ".barndog/installed/skills/review");
 }
 
@@ -107,16 +113,20 @@ test("mcp add takes JSON through --config, leaving --json as the output flag", a
     { config: JSON.stringify({ command: "node", args: ["server.js"] }) },
     quiet(home),
   );
+
   expect(await readFile(join(folder, "org/mcp/docs.yaml"), "utf8")).toMatch(
     /command: node/,
   );
+
   await expect(addMcp('{"command":"node"}', {}, quiet(home))).rejects.toThrow(
     /looks like the configuration/,
   );
+
   const { instance } = program({});
   const add = instance.commands
     .find((c) => c.name() === "mcp")!
     .commands.find((c) => c.name() === "add")!;
+
   expect(add.options.some((o) => o.long === "--config")).toBeTruthy();
   expect(add.options.some((o) => o.long === "--json")).toBeFalsy();
 });
@@ -127,6 +137,7 @@ test("mcp add marks OAuth servers, by flag or from the pasted JSON", () => {
     convertServer(server).definition.authentication,
     "nothing says this server signs in",
   ).toBe("none");
+
   const flagged = convertServer(server, undefined, true);
   expect(flagged.definition.authentication).toBe("native-oauth");
   expect(flagged.notes.join()).toMatch(/mcp auth docs --origin local/);
@@ -136,6 +147,7 @@ test("mcp add marks OAuth servers, by flag or from the pasted JSON", () => {
       server: { url: "https://docs.test/mcp", oauth: { clientId: "x" } },
     }).definition.authentication,
   ).toBe("native-oauth");
+
   expect(() =>
     convertServer(
       { name: "tool", server: { command: "node" } },
@@ -151,16 +163,19 @@ test("--json covers review commands and selection changes", async () => {
   await list.instance.parseAsync(["changes", "list", "--json"], {
     from: "user",
   });
+
   expect(JSON.parse(list.output.join("\n"))).toStrictEqual(change);
 
   const removed = { status: "applied", events: [] };
   const selection = program({
     changeAsset: async () => removed as never,
   });
+
   await selection.instance.parseAsync(
     ["skills", "remove", "x", "--origin", "org", "--json"],
     { from: "user" },
   );
+
   expect(JSON.parse(selection.output.join("\n"))).toStrictEqual(removed);
 });
 
@@ -169,6 +184,7 @@ test("failures render as JSON with the same fix people see", () => {
   expect(JSON.parse(renderJsonError(error))).toStrictEqual({
     error: { message: "It broke.", fix: "barndog sync" },
   });
+
   expect(
     JSON.parse(
       renderJsonError(new ApiError(403, "X", "PUBLICATION_FORBIDDEN")),
@@ -195,6 +211,7 @@ test("a change ID from the other list points there", async () => {
       throw new ApiError(404, "X", "CHANGE_NOT_FOUND");
     },
   });
+
   await expect(
     instance.parseAsync(["changes", "show", "abc"], { from: "user" }),
   ).rejects.toSatisfy(
@@ -210,9 +227,11 @@ test("skills update installs what it changed", async () => {
     updateImported: async () => [{ name: "a", commit: "c1", changes: [] }],
     synchronize: async () => {
       synced += 1;
+
       return [];
     },
   });
+
   await instance.parseAsync(["skills", "update"], { from: "user" });
   expect(synced, "nothing changed, so nothing to install").toBe(0);
   const changed = program({
@@ -234,9 +253,11 @@ test("skills update installs what it changed", async () => {
     ],
     synchronize: async () => {
       synced += 1;
+
       return [];
     },
   });
+
   await changed.instance.parseAsync(["skills", "update"], { from: "user" });
   expect(synced).toBe(1);
   expect(plain(changed.output)).toMatch(/Update installed/);
@@ -256,6 +277,7 @@ test("status flags a hand-edited install the way sync and doctor do", async (t) 
       /copy that folder somewhere else/.test(error.message) &&
       !/skills pull/.test(error.message),
   );
+
   expect(folder).toBeTruthy();
 });
 
@@ -266,6 +288,7 @@ test("a knowledge file with a bad field is reported, not dropped silently", asyn
     join(folder, "org/knowledge/guide.md"),
     "---\ndescription: Guide\naccess: always\n---\nBody\n",
   );
+
   const [problem] = await knowledgeProblems(home);
   expect(problem?.path).toBe("org/knowledge/guide.md");
   expect(problem!.reason).toMatch(/access/);
@@ -275,6 +298,7 @@ test("a knowledge file with a bad field is reported, not dropped silently", asyn
       (e) => e.type === "notice" && e.message.includes("guide.md was skipped"),
     ),
   ).toBeTruthy();
+
   expect(
     (await doctor(home)).some((c) => /guide\.md/.test(c.detail)),
   ).toBeTruthy();
@@ -287,6 +311,7 @@ test("knowledge list reflects whether session-start listing is on", async (t) =>
     join(folder, "org/knowledge/guide.md"),
     "---\ndescription: Guide\naccessMode: always\n---\nBody\n",
   );
+
   expect((await knowledgeList(false, home))[0]?.listedAtStart).toBe(true);
   const path = join(home, ".barndog/config.yaml");
   await writeFile(path, `${await readFile(path, "utf8")}\nknowledge: false\n`);
@@ -295,6 +320,7 @@ test("knowledge list reflects whether session-start listing is on", async (t) =>
     path,
     `${text.replace(/^knowledge: true\n/m, "").trimEnd()}\n`,
   );
+
   expect((await knowledgeList(false, home))[0]?.listedAtStart).toBe(false);
   const { instance, output } = program({
     knowledgeList: async () => [
@@ -311,6 +337,7 @@ test("knowledge list reflects whether session-start listing is on", async (t) =>
     ],
     knowledgeProblems: async () => [],
   });
+
   await instance.parseAsync(["knowledge", "list"], { from: "user" });
   expect(plain(output)).not.toMatch(/every session/);
   expect(plain(output)).toMatch(/barndog knowledge enable/);
@@ -322,11 +349,13 @@ test("sync doesn't call skipped or stale results up to date", () => {
       { type: "invalid", kind: "skill", name: "bad", reason: "Broken" },
     ]),
   );
+
   expect(skipped).not.toMatch(/Everything is up to date/);
   expect(skipped).toMatch(/Nothing else changed/);
   const stale = plain(
     renderSyncOutput([{ type: "notice", message: "Can't reach the repo." }]),
   );
+
   expect(stale).not.toMatch(/Everything is up to date/);
   expect(plain(renderSyncOutput([]))).toMatch(/Everything is up to date/);
 });
@@ -355,6 +384,7 @@ test("sync keeps BarnDog's own entries out of the summary", () => {
       name: "playwright",
     },
   ];
+
   const quiet = plain(renderSyncOutput(events));
   expect(quiet).toMatch(/Sync complete · 1 unchanged/);
   expect(quiet).not.toMatch(/knowledge index|workspace sync/);
@@ -365,6 +395,7 @@ test("sync keeps BarnDog's own entries out of the summary", () => {
   const installed = plain(
     renderSyncOutput([{ ...events[1]!, action: "installed" as const }]),
   );
+
   expect(installed).not.toMatch(/workspace sync|1 installed/);
   expect(installed).toMatch(/Restart your coding tools/);
 });
@@ -374,6 +405,7 @@ test("review output uses names and hides noise about new files", () => {
     renderCollaboration([
       { kind: "added", path: "a", patch: "", oldExecutable, newExecutable },
     ]).join("\n");
+
   expect(diff(null, false)).not.toMatch(/executable/);
   expect(diff(null, true)).toMatch(/executable/);
   expect(diff(false, true)).toMatch(/executable: false → true/);
@@ -386,6 +418,7 @@ test("review output uses names and hides noise about new files", () => {
       publisherName: "Alice Doe",
     },
   ]);
+
   expect(row!).toMatch(/published by Alice Doe/);
   expect(row!).not.toMatch(/uuid-1/);
 });
@@ -399,6 +432,7 @@ test("MCP details read as fields and keep variable names exact", () => {
     environment: { E2E_MCP_TOKEN: { secretRef: "E2E_MCP_TOKEN" } },
     authentication: "environment",
   });
+
   const text = plain(
     renderMcp({
       name: "docs",
@@ -406,6 +440,7 @@ test("MCP details read as fields and keep variable names exact", () => {
       version: { number: 3, definition },
     }),
   );
+
   expect(text).toMatch(/v3/);
   expect(text).toMatch(/node server\.js/);
   expect(text).toMatch(/E2E_MCP_TOKEN from \$E2E_MCP_TOKEN/);
@@ -425,13 +460,16 @@ test("assets install accepts override decisions", async () => {
   const { instance } = program({
     changeAsset: async (_, target) => {
       seen = target;
+
       return { status: "applied", events: [] };
     },
   });
+
   await instance.parseAsync(
     ["skills", "install", "x", "--origin", "org", "--overrides", "preserve"],
     { from: "user" },
   );
+
   expect(seen.overrides).toBe("preserve");
 });
 
@@ -440,6 +478,7 @@ test("an unavailable command says so before asking for its flags", async (t) => 
   const { instance } = program({
     guard: (path, options) => assertCommandAvailable(path, options, home),
   });
+
   await expect(
     instance.parseAsync(["mcp", "create", "x"], { from: "user" }),
   ).rejects.toThrow(/needs a BarnDog Cloud Workspace/);
@@ -452,12 +491,14 @@ test("Codex entries omit an empty header table", () => {
     url: "https://docs.test/mcp",
     authentication: "native-oauth",
   });
+
   const entry = mcpEntry(
     "codex",
     { id: "1", name: "docs" },
     definition,
     "/home",
   );
+
   expect("env_http_headers" in entry.value).toBe(false);
 });
 
@@ -481,6 +522,7 @@ test("cancelling first-time local setup leaves no folder behind", async (t) => {
     confirmApply: async () => false,
     choose: async () => ["claude"],
   });
+
   expect(existsSync(join(home, ".barndog/workspace"))).toBe(false);
   expect(existsSync(join(home, ".barndog/sync.lock"))).toBe(false);
 });
@@ -498,9 +540,12 @@ test("a stopped process releases the environment lock", async (t) => {
     ],
     { stdio: "ignore" },
   );
+
   const lock = join(home, ".barndog/sync.lock");
-  for (let i = 0; i < 200 && !existsSync(join(lock, "pid")); i++)
+  for (let i = 0; i < 200 && !existsSync(join(lock, "pid")); i++) {
     await sleep(25);
+  }
+
   expect(existsSync(join(lock, "pid"))).toBe(true);
   const exited = new Promise((resolve) => child.once("exit", resolve));
   child.kill("SIGTERM");

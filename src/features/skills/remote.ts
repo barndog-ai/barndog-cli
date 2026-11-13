@@ -26,6 +26,7 @@ export async function connectionContext(
   const context = contextSchema.parse(
     (await apiClient(server, home).GET("/v1/context")).data,
   );
+
   return {
     server,
     organizationId: context.organization.id,
@@ -42,10 +43,12 @@ export async function catalog(
   if (
     context.organization.id !== connection.organizationId ||
     context.developer.id !== connection.developerId
-  )
+  ) {
     throw new Error(
       "Server organization or developer changed; run initialization again",
     );
+  }
+
   const skills: Skill[] = [];
   const cursors = new Set<string>();
   let cursor: string | undefined;
@@ -57,20 +60,31 @@ export async function catalog(
         })
       ).data,
     );
+
     if (
       page.skills.some(
         (skill) => skill.organizationId !== connection.organizationId,
       )
-    )
+    ) {
       throw new Error("Invalid catalog organization");
+    }
+
     skills.push(...page.skills);
-    if (page.nextCursor && cursors.has(page.nextCursor))
+    if (page.nextCursor && cursors.has(page.nextCursor)) {
       throw new Error("Invalid catalog pagination");
-    if (page.nextCursor) cursors.add(page.nextCursor);
+    }
+
+    if (page.nextCursor) {
+      cursors.add(page.nextCursor);
+    }
+
     cursor = page.nextCursor ?? undefined;
   } while (cursor);
-  if (new Set(skills.map((skill) => skill.id)).size !== skills.length)
+
+  if (new Set(skills.map((skill) => skill.id)).size !== skills.length) {
     throw new Error("Duplicate catalog Skill");
+  }
+
   return skills;
 }
 

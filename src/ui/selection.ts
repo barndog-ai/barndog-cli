@@ -23,16 +23,24 @@ export async function runSelection(
     if (result.status !== "decision-required") {
       if (context.mode?.json) {
         context.write(json(result));
+
         return;
       }
-      for (const line of renderSyncOutput(result.events)) context.write(line);
+
+      for (const line of renderSyncOutput(result.events)) {
+        context.write(line);
+      }
+
       return;
     }
-    if (context.mode?.json || !process.stdin.isTTY || !process.stdout.isTTY)
+
+    if (context.mode?.json || !process.stdin.isTTY || !process.stdout.isTTY) {
       throw new CliError(
         "Existing exclusions or disable overrides need a decision.",
         "add --overrides preserve, --overrides clear or --decisions <file>",
       );
+    }
+
     const type = await select({
       loop: false,
       message: "Existing exclusions or disabled assets",
@@ -43,9 +51,10 @@ export async function runSelection(
         { value: "per-asset", name: "Choose for each asset" },
       ],
     });
+
     if (type === "per-asset") {
       const decisions: { assetId: string; choice: "preserve" | "clear" }[] = [];
-      for (const conflict of result.conflicts)
+      for (const conflict of result.conflicts) {
         decisions.push({
           assetId: conflict.asset.id,
           choice: (await confirm({
@@ -56,7 +65,11 @@ export async function runSelection(
             ? "clear"
             : "preserve",
         });
+      }
+
       resolution = { type: "per-asset", decisions };
-    } else resolution = { type };
+    } else {
+      resolution = { type };
+    }
   }
 }

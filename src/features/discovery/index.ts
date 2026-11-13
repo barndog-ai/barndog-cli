@@ -27,18 +27,26 @@ export async function developers(search?: string, home = homedir()) {
       ...(search ? { search } : {}),
       ...(cursor ? { cursor } : {}),
     });
+
     const page: typeof developerListSchema._output = await request(
       conn,
       `/v1/developers?${query}`,
       developerListSchema,
       home,
     );
+
     people.push(...page.developers);
-    if (page.nextCursor && seen.has(page.nextCursor))
+    if (page.nextCursor && seen.has(page.nextCursor)) {
       throw new Error("Invalid developer pagination");
-    if (page.nextCursor) seen.add(page.nextCursor);
+    }
+
+    if (page.nextCursor) {
+      seen.add(page.nextCursor);
+    }
+
     cursor = page.nextCursor;
   } while (cursor);
+
   return people;
 }
 
@@ -49,12 +57,15 @@ export async function developerAssets(
 ) {
   const people = await developers(undefined, home),
     matches = people.filter((p) => p.id === selector || p.slug === selector);
+
   const developer = only(matches);
-  if (!developer)
+  if (!developer) {
     throw new CliError(
       `No developer found with that handle.`,
       "barndog people list",
     );
+  }
+
   const conn = await connection(home);
   const assets: typeof developerAssetsSchema._output.assets = [];
   const seen = new Set<string>();
@@ -65,18 +76,26 @@ export async function developerAssets(
       ...(search ? { search } : {}),
       ...(cursor ? { cursor } : {}),
     });
+
     const page: typeof developerAssetsSchema._output = await request(
       conn,
       `/v1/developers/${developer.id}/assets?${query}`,
       developerAssetsSchema,
       home,
     );
+
     assets.push(...page.assets);
-    if (page.nextCursor && seen.has(page.nextCursor))
+    if (page.nextCursor && seen.has(page.nextCursor)) {
       throw new Error("Invalid discovery pagination");
-    if (page.nextCursor) seen.add(page.nextCursor);
+    }
+
+    if (page.nextCursor) {
+      seen.add(page.nextCursor);
+    }
+
     cursor = page.nextCursor;
   } while (cursor);
+
   return { developer, assets };
 }
 
@@ -115,12 +134,14 @@ async function copyToScope(
       home,
     ),
     scope = await selectOrigin(input.target, selected.connection, home);
+
   const schema = action === "fork" ? forkInputSchema : promotionInputSchema;
   const body = schema.parse({
     name: input.newName,
     origin: { type: scope.type, id: scope.id },
     idempotencyKey: input.key ?? randomUUID(),
   });
+
   return request(
     selected.connection,
     `/v1/environment/${input.kind}/${selected.reference.id}/${action}`,
@@ -139,7 +160,7 @@ export async function promote(
   input: PromoteInput,
   home = homedir(),
 ): Promise<PromoteResult> {
-  if (input.origin === LOCAL_ORIGIN)
+  if (input.origin === LOCAL_ORIGIN) {
     return {
       outcome: "moved",
       move: await moveLocalAssets(
@@ -152,6 +173,8 @@ export async function promote(
         home,
       ),
     };
+  }
+
   return {
     outcome: "promoted",
     promotion: await copyToScope("promote", input, home),

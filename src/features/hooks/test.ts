@@ -16,10 +16,13 @@ async function hookPackage(name: string, origin: string, home: string) {
   const repo = settings && repoForOrigin(settings, home, origin);
   if (repo) {
     const asset = selectRepoAsset(await repo.model(), "hook", name, origin);
+
     return repo.skillOrHookPackage("hook", asset);
   }
+
   const selected = await selectAsset("hook", name, origin, home),
     asset = hookSchema.parse(selected.asset);
+
   return cachedPackage("hook", asset, selected.connection, home);
 }
 
@@ -36,41 +39,65 @@ export async function testHook(
   home = homedir(),
   cwd = process.cwd(),
 ) {
-  if (process.platform === "win32")
+  if (process.platform === "win32") {
     throw new Error("Command Hook testing currently requires a POSIX shell");
+  }
+
   const root = await hookPackage(name, origin, home);
   const manifest = hookManifestSchema.parse(
     parse(await readFile(join(root, "hook.yaml"), "utf8")),
   );
+
   const implementation = manifest.implementations[options.harness];
-  if (!implementation) throw new Error(`No ${options.harness} implementation`);
+  if (!implementation) {
+    throw new Error(`No ${options.harness} implementation`);
+  }
+
   const unmet = await runtimeRequirements(
     options.harness,
     implementation.requirements,
   );
-  if (unmet) throw new Error(unmet);
+
+  if (unmet) {
+    throw new Error(unmet);
+  }
+
   const event =
     options.event ??
     (Object.keys(implementation.events).length === 1
       ? Object.keys(implementation.events)[0]
       : undefined);
-  if (!event || !implementation.events[event])
+
+  if (!event || !implementation.events[event]) {
     throw new Error(
       `Choose --event from: ${Object.keys(implementation.events).join(", ")}`,
     );
+  }
+
   const handlers = implementation.events[event].flatMap((h) =>
     "hooks" in h ? h.hooks : [h],
   );
-  if (handlers.length > 1 && options.handler === undefined)
+
+  if (handlers.length > 1 && options.handler === undefined) {
     throw new Error("Choose --handler <number> to explicitly select a command");
+  }
+
   const handler = handlers[(options.handler ?? 1) - 1];
-  if (!handler) throw new Error("Unknown Hook handler");
+  if (!handler) {
+    throw new Error("Unknown Hook handler");
+  }
+
   const input = await readFile(options.input);
-  if (input.length > 1048576) throw new Error("Hook input exceeds 1 MiB");
+  if (input.length > 1048576) {
+    throw new Error("Hook input exceeds 1 MiB");
+  }
+
   JSON.parse(input.toString("utf8"));
   const timeout = options.timeout ?? handler.timeout ?? 10;
-  if (!Number.isFinite(timeout) || timeout <= 0 || timeout > 600)
+  if (!Number.isFinite(timeout) || timeout <= 0 || timeout > 600) {
     throw new Error("Hook test timeout must be between 0 and 600 seconds");
+  }
+
   const child = spawn(
     "/bin/sh",
     ["-c", hookCommand(root, handler.command, options.harness)],
@@ -80,22 +107,27 @@ export async function testHook(
       detached: true,
     },
   );
+
   let stdout = "",
     stderr = "",
     length = 0,
     timedOut = false;
+
   const stop = () => {
-    if (child.pid)
+    if (child.pid) {
       try {
         process.kill(-child.pid, "SIGKILL");
       } catch {
         /* exited */
       }
+    }
   };
+
   const timer = setTimeout(() => {
     timedOut = true;
     stop();
   }, timeout * 1000);
+
   for (const [stream, append] of [
     [
       child.stdout,
@@ -109,12 +141,17 @@ export async function testHook(
         stderr += text;
       },
     ],
-  ] as const)
+  ] as const) {
     stream.on("data", (chunk: Buffer) => {
       length += chunk.length;
-      if (length > 1048576) stop();
-      else append(chunk.toString());
+      if (length > 1048576) {
+        stop();
+      } else {
+        append(chunk.toString());
+      }
     });
+  }
+
   child.stdin.on("error", () => undefined);
   child.stdin.end(input);
   try {
@@ -122,7 +159,11 @@ export async function testHook(
       child.once("error", reject);
       child.once("close", (code) => resolve(code ?? 1));
     });
-    if (length > 1048576) throw new Error("Hook test output exceeds 1 MiB");
+
+    if (length > 1048576) {
+      throw new Error("Hook test output exceeds 1 MiB");
+    }
+
     return {
       harness: options.harness,
       event,

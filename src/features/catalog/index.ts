@@ -36,8 +36,12 @@ export async function searchCatalog(
   const shared = await sharedCatalog(kind, home);
   const settings = await readSettings(home);
   const overlay = settings && localOverlay(settings, home);
-  if (!overlay) return shared;
+  if (!overlay) {
+    return shared;
+  }
+
   const { model, assets } = await activeLocal(overlay, shared);
+
   return [
     ...shared,
     ...assets
@@ -67,7 +71,7 @@ async function sharedCatalog(
 ): Promise<CatalogAsset[]> {
   const settings = await readSettings(home);
   const repo = settings && openRepoSource(settings, home, { refresh: "auto" });
-  if (repo)
+  if (repo) {
     return (await repo.model()).assets
       .filter((asset) => asset.kind === kind && !asset.invalid)
       .map((asset) => ({
@@ -81,10 +85,14 @@ async function sharedCatalog(
           label: asset.publishedVersion.slice(0, 7),
         },
       }));
-  if (!settings || !settings.connection)
+  }
+
+  if (!settings || !settings.connection) {
     throw new CliError(
       "This machine isn't connected to a BarnDog workspace.",
       "barndog init",
     );
+  }
+
   return catalogFetchers[kind](settings.connection, home);
 }

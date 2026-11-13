@@ -34,11 +34,13 @@ export async function executable(
     const candidate = directory ? join(directory, command) : command;
     try {
       await access(candidate, constants.X_OK);
+
       return candidate;
     } catch {
       /* next PATH entry */
     }
   }
+
   return null;
 }
 
@@ -46,28 +48,40 @@ export async function runtimeRequirements(
   harness: Harness,
   requirements: { commands: string[]; harnessVersion?: string },
 ) {
-  for (const command of requirements.commands)
-    if (!(await executable(command))) return `Missing runtime: ${command}`;
+  for (const command of requirements.commands) {
+    if (!(await executable(command))) {
+      return `Missing runtime: ${command}`;
+    }
+  }
+
   if (requirements.harnessVersion) {
-    if (!validRange(requirements.harnessVersion))
+    if (!validRange(requirements.harnessVersion)) {
       return `Invalid declared harness version requirement: ${requirements.harnessVersion}`;
+    }
+
     const command = (
       await Promise.all(adapters[harness].commands.map((c) => executable(c)))
     ).find(Boolean);
-    if (!command)
+
+    if (!command) {
       return `Cannot verify ${harness} version: harness command is missing`;
+    }
+
     try {
       const { stdout } = await execute(command, ["--version"], {
         timeout: 5000,
         maxBuffer: 4096,
       });
+
       const version = coerce(stdout);
-      if (!version || !satisfies(version, requirements.harnessVersion))
+      if (!version || !satisfies(version, requirements.harnessVersion)) {
         return `${harness} does not meet ${requirements.harnessVersion}`;
+      }
     } catch {
       return `Cannot verify ${harness} version`;
     }
   }
+
   return null;
 }
 
@@ -81,6 +95,7 @@ export function mcpEntry(
     definition.transport === "stdio"
       ? definition.environment
       : definition.headers;
+
   const env = Object.fromEntries(
     Object.entries(refs).map(([name, ref]) => [
       name,
@@ -89,8 +104,9 @@ export function mcpEntry(
         : `\${${ref.secretRef}}`,
     ]),
   );
+
   let value: Record<string, unknown>;
-  if (definition.transport === "http")
+  if (definition.transport === "http") {
     value =
       harness === "codex"
         ? {
@@ -108,12 +124,13 @@ export function mcpEntry(
             url: definition.url,
             ...(Object.keys(env).length ? { headers: env } : {}),
           };
-  else if (harness === "codex") {
+  } else if (harness === "codex") {
     // Native forwarding preserves reference-only storage. Renamed variables are
     // bound by a tiny local launcher, without writing their values to disk.
     const renamed = Object.entries(refs).some(
       ([key, ref]) => key !== ref.secretRef,
     );
+
     value = renamed
       ? {
           command: process.execPath,
@@ -128,13 +145,15 @@ export function mcpEntry(
           args: definition.args,
           env_vars: Object.values(refs).map((v) => v.secretRef),
         };
-  } else
+  } else {
     value = {
       ...(harness === "claude" ? { type: "stdio" } : {}),
       command: definition.command,
       args: definition.args,
       ...(Object.keys(env).length ? { env } : {}),
     };
+  }
+
   return {
     id: asset.id,
     kind: "mcp",
@@ -153,7 +172,10 @@ export function hookEntries(
   home: string,
 ): NativeEntry[] {
   const implementation = manifest.implementations[harness];
-  if (!implementation) return [];
+  if (!implementation) {
+    return [];
+  }
+
   return Object.entries(implementation.events).flatMap(([key, handlers]) =>
     handlers.map((handler) => ({
       id,

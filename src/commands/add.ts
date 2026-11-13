@@ -29,21 +29,28 @@ export function registerAdd(program: Command, context: CommandContext) {
       program.commands.find((c) => c.name() === name),
       `Command group ${name} isn't registered`,
     );
+
   const add = () => ({
     interactive: context.mode.interactive,
     write: context.write,
     prompts: terminalPrompts(context.write),
   });
+
   /** Adding narrates as it goes; `--json` callers get those lines as one object. */
   const reporting = async (run: (add: AddContext) => Promise<void>) => {
-    if (!context.mode.json) return run(add());
+    if (!context.mode.json) {
+      return run(add());
+    }
+
     const messages: string[] = [];
     await run({
       ...add(),
       write: (line) => messages.push(stripVTControlCharacters(line)),
     });
+
     context.write(json({ messages }));
   };
+
   group("skills")
     .command("add <source>")
     .description("Add Skills from a folder, GitHub or Git repository")
@@ -61,6 +68,7 @@ export function registerAdd(program: Command, context: CommandContext) {
     .action((url: string, options: AddOptions) =>
       reporting((context) => addSkills(url, options, context)),
     );
+
   group("hooks")
     .command("add <url>")
     .description(
@@ -73,6 +81,7 @@ export function registerAdd(program: Command, context: CommandContext) {
     .action((url: string, options: AddOptions) =>
       reporting((context) => addHook(url, options, context)),
     );
+
   group("mcp")
     .command("add [name]")
     .description("Add an MCP server from JSON or from one of your coding tools")
@@ -91,10 +100,11 @@ export function registerAdd(program: Command, context: CommandContext) {
     .action((name: string | undefined, options: AddOptions) =>
       reporting((context) => addMcp(name, options, context)),
     );
+
   for (const [name, kind] of [
     ["skills", "skill"],
     ["hooks", "hook"],
-  ] as const)
+  ] as const) {
     group(name)
       .command("update [name]")
       .description(
@@ -111,27 +121,43 @@ export function registerAdd(program: Command, context: CommandContext) {
             force: options.force,
             dryRun: options.dryRun,
           });
+
           // New files only reach coding tools through the installed copies.
           const applied =
             !options.dryRun && results.some((r) => r.changes.length > 0);
+
           const events = applied
             ? await context.synchronize(undefined, { prompt: false })
             : [];
-          if (context.mode.json) return context.write(json(results));
-          if (!results.length)
+
+          if (context.mode.json) {
+            return context.write(json(results));
+          }
+
+          if (!results.length) {
             return context.write(dim("Nothing was added from a repository."));
+          }
+
           for (const result of results) {
             context.write(
               `${result.name}: ${result.changes.length ? `${result.changes.length} file${result.changes.length === 1 ? "" : "s"} changed` : "up to date"}`,
             );
-            if (result.changes.length)
-              for (const line of renderCollaboration(result.changes))
+
+            if (result.changes.length) {
+              for (const line of renderCollaboration(result.changes)) {
                 context.write(line);
+              }
+            }
           }
+
           if (applied) {
-            for (const line of renderSyncOutput(events)) context.write(line);
+            for (const line of renderSyncOutput(events)) {
+              context.write(line);
+            }
+
             context.write(`${ok("✔")} Update installed.`);
           }
         },
       );
+  }
 }

@@ -17,8 +17,10 @@ export function gitReason(stderr: string) {
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
+
   const line =
     lines.find((text) => FAILURE_PREFIX.test(text)) ?? lines.at(-1) ?? "";
+
   return line.replace(FAILURE_PREFIX, "");
 }
 
@@ -52,8 +54,14 @@ const inherited = ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_PREFIX"];
 /** Runs system Git with repository hooks and the arbitrary-command transport disabled. */
 export function git(args: string[], options: GitOptions = {}): Promise<Buffer> {
   const env: NodeJS.ProcessEnv = { ...process.env };
-  for (const name of inherited) delete env[name];
-  if (!options.allowPrompt) env.GIT_TERMINAL_PROMPT = "0";
+  for (const name of inherited) {
+    delete env[name];
+  }
+
+  if (!options.allowPrompt) {
+    env.GIT_TERMINAL_PROMPT = "0";
+  }
+
   return new Promise((resolve, reject) => {
     const child = execFile(
       "git",
@@ -72,18 +80,24 @@ export function git(args: string[], options: GitOptions = {}): Promise<Buffer> {
         timeout: options.timeoutMs ?? 180_000,
       },
       (error, stdout, stderr) => {
-        if (!error) return resolve(stdout);
+        if (!error) {
+          return resolve(stdout);
+        }
+
         const code = errorCode(error) ?? null;
-        if (code === "ENOENT")
+        if (code === "ENOENT") {
           return reject(
             new CliError(
               "Git isn't installed or isn't on your PATH. Git repo workspaces need it.",
             ),
           );
+        }
+
         const text = stderr.toString("utf8").trim();
         reject(new GitError(text || error.message, text, code));
       },
     );
+
     child.stdin?.end(options.input);
   });
 }
@@ -91,7 +105,10 @@ export function git(args: string[], options: GitOptions = {}): Promise<Buffer> {
 /** Runs Git attached to the terminal, so its own prompts and errors reach the developer. */
 export function gitInTerminal(args: string[]): Promise<void> {
   const env: NodeJS.ProcessEnv = { ...process.env };
-  for (const name of inherited) delete env[name];
+  for (const name of inherited) {
+    delete env[name];
+  }
+
   return new Promise((resolve, reject) => {
     const child = spawn(
       "git",
@@ -104,6 +121,7 @@ export function gitInTerminal(args: string[]): Promise<void> {
       ],
       { env, stdio: "inherit" },
     );
+
     child.once("error", reject);
     child.once("exit", (code) =>
       code === 0
@@ -119,7 +137,10 @@ export const gitText = async (args: string[], options?: GitOptions) =>
 /** Lets `--repo` name a clone on disk: the workspace is the remote it came from. */
 export async function cloneOrigin(value: string): Promise<string> {
   try {
-    if (!(await stat(value.trim())).isDirectory()) return value;
+    if (!(await stat(value.trim())).isDirectory()) {
+      return value;
+    }
+
     return await gitText(["config", "--get", "remote.origin.url"], {
       repo: value.trim(),
     });
@@ -137,12 +158,16 @@ const URL_WITH_PASSWORD = /^[a-z][\d+.a-z-]*:\/\/[^/:@]*:[^/@]*@/i;
 /** Refuses URLs Git would read as options, helpers, or stored passwords. */
 export function checkRepositoryUrl(value: string): string {
   const url = value.trim();
-  if (!url || url.startsWith("-") || UNSAFE_TRANSPORT.test(url))
+  if (!url || url.startsWith("-") || UNSAFE_TRANSPORT.test(url)) {
     throw new CliError(`That isn't a Git repository URL: ${url || "(empty)"}`);
-  if (URL_WITH_PASSWORD.test(url))
+  }
+
+  if (URL_WITH_PASSWORD.test(url)) {
     throw new CliError(
       "Remove the password or token from the URL. BarnDog uses your own Git credentials and never stores them.",
     );
+  }
+
   return url;
 }
 
@@ -184,15 +209,22 @@ const HEAD_LINE = /^([\da-f]+)\s+HEAD$/m;
  * and when either line is missing.
  */
 export function parseRemoteHead(output: string, url: string): RemoteHead {
-  if (!output) return null;
+  if (!output) {
+    return null;
+  }
+
   const branch = SYMREF_LINE.exec(output)?.[1];
   const commit = HEAD_LINE.exec(output)?.[1];
-  if (commit && !GIT_OBJECT_ID.test(commit))
+  if (commit && !GIT_OBJECT_ID.test(commit)) {
     throw new CliError(
       "This repository uses SHA-256 object names, which BarnDog doesn't support yet.",
     );
-  if (!branch || !commit)
+  }
+
+  if (!branch || !commit) {
     throw new CliError(`Can't find the default branch of ${url}.`);
+  }
+
   return { branch, commit };
 }
 
@@ -208,14 +240,17 @@ export async function remoteHead(
       timeoutMs: 60_000,
     });
   } catch (error) {
-    if (error instanceof GitError)
+    if (error instanceof GitError) {
       throw new RepositoryAccessError(
         `Can't read ${url} with your Git credentials: ${gitReason(error.stderr)}`,
         `git clone ${url}`,
         { cause: error },
       );
+    }
+
     throw error;
   }
+
   return parseRemoteHead(output, url);
 }
 
@@ -229,11 +264,13 @@ export const UNKNOWN_IDENTITY = /tell me who you are/i;
 
 /** Git's "who are you" failure is common on new machines and has one clear fix. */
 export function explainIdentity(error: unknown): never {
-  if (error instanceof GitError && UNKNOWN_IDENTITY.test(error.stderr))
+  if (error instanceof GitError && UNKNOWN_IDENTITY.test(error.stderr)) {
     throw new CliError(
       "Git doesn't know who you are, so BarnDog can't make a commit.",
       identityHint,
       { cause: error },
     );
+  }
+
   throw error;
 }

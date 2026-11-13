@@ -62,6 +62,7 @@ test("prefixed names use single hyphens and the origin type and slug", () => {
   expect(prefixedName(asset("review-checklist", "team", "super-team"))).toBe(
     "team-super-team-review-checklist",
   );
+
   expect(prefixedName(asset("a--b", "dev", "John_Doe"))).toBe(
     "dev-john-doe-a-b",
   );
@@ -92,18 +93,23 @@ test("each clash choice persists as a rename or a disable", async () => {
   const incoming = asset("review", "team", "web");
   const run = (choice: Parameters<typeof resolveClashes>[2]) =>
     resolveClashes([kept, incoming], {}, choice);
+
   expect((await run(async () => "rename-incoming")).localNames).toStrictEqual({
     [incoming.id]: "team-web-review",
   });
+
   expect((await run(async () => "rename-installed")).localNames).toStrictEqual({
     [kept.id]: "dev-john-review",
   });
+
   expect(
     (await run(async () => "skip-incoming")).disabledAssetIds,
   ).toStrictEqual([incoming.id]);
+
   expect(
     (await run(async () => "replace-installed")).disabledAssetIds,
   ).toStrictEqual([kept.id]);
+
   // Local folder Skills cannot be renamed; the choice falls back to skipping.
   const local = { ...kept, renamable: false };
   expect(
@@ -123,9 +129,11 @@ test("automatic renames are restored once the clash is gone; explicit names stay
   expect(restoreNames([team], { [team.id]: "team-web-review" })).toStrictEqual(
     {},
   );
+
   expect(restoreNames([team], { [team.id]: "my-review" })).toStrictEqual({
     [team.id]: "my-review",
   });
+
   const org = asset("review", "org", "acme");
   expect(
     restoreNames([team, org, other], { [team.id]: "team-web-review" }),
@@ -145,6 +153,7 @@ test("renamed Skills rewrite only the frontmatter name", () => {
     ],
     "team-web-review",
   );
+
   expect(entry!.data.toString()).toBe(
     "---\nname: team-web-review\ndescription: Review code\n---\n# name: keep\n",
   );
@@ -166,6 +175,7 @@ test("installed folders update file by file without replacing the folder", async
       executable: true,
     },
   ]);
+
   expect((await stat(target)).ino).toBe(before);
   expect(
     (await readTree(target)).map((e) => [
@@ -188,6 +198,7 @@ test("a folder in an installed package can become a file", async (t) => {
   await mirrorTree(target, [
     { path: "docs", data: Buffer.from("file"), executable: false },
   ]);
+
   expect((await readTree(target)).map((e) => e.path)).toStrictEqual(["docs"]);
 });
 
@@ -212,6 +223,7 @@ test("a journal can't restore a kept folder that has vanished", async (t) => {
       ],
     }),
   );
+
   expect(await recover(home)).toBe(true);
   await expect(
     stat(join(home, ".barndog", "pending-sync.json")),
@@ -225,10 +237,13 @@ test("every Hook gets its own folder", () => {
     slug: string,
     extra: { kept?: string; current?: string } = {},
   ) => ({ id, name, origin: { type: "team", slug }, ...extra });
+
   const folders = (...hooks: ReturnType<typeof hook>[]) => {
     const result = hookFolders(hooks, {});
+
     return hooks.map((item) => result.get(item.id));
   };
+
   expect(
     folders(
       hook("aaaaaaaa-1", "b-c", "a"),
@@ -240,6 +255,7 @@ test("every Hook gets its own folder", () => {
     "team-a-b-c-bbbbbbbb",
     "team-web-solo",
   ]);
+
   // A kept folder and the Hook already installed there don't move for a newcomer.
   expect(
     folders(
@@ -247,18 +263,21 @@ test("every Hook gets its own folder", () => {
       hook("bbbbbbbb-2", "c", "a-b"),
     ),
   ).toStrictEqual(["team-a-b-c", "team-a-b-c-bbbbbbbb"]);
+
   expect(
     folders(
       hook("bbbbbbbb-2", "c", "a-b", { current: "team-a-b-c" }),
       hook("aaaaaaaa-1", "b-c", "a"),
     ),
   ).toStrictEqual(["team-a-b-c", "team-a-b-c-aaaaaaaa"]);
+
   // A Hook literally named like another's suffix keeps every folder distinct.
   const crowded = folders(
     hook("aaaaaaaa-1", "b-c", "a"),
     hook("bbbbbbbb-2", "c", "a-b"),
     hook("dddddddd-4", "b-c-aaaaaaaa", "a"),
   );
+
   expect(new Set(crowded).size).toBe(3);
   expect(crowded[2]).toBe("team-a-b-c-aaaaaaaa");
   // IDs that share their first characters still separate.
@@ -266,12 +285,14 @@ test("every Hook gets its own folder", () => {
     hook("aaaaaaaa-1", "b-c", "a"),
     hook("aaaaaaaa-2", "c", "a-b"),
   );
+
   expect(new Set(twins).size).toBe(2);
   // Allocating again from what's installed moves nothing, fallback folders included.
   const again = folders(
     hook("aaaaaaaa-1", "b-c", "a", { current: twins[0]! }),
     hook("aaaaaaaa-2", "c", "a-b", { current: twins[1]! }),
   );
+
   expect(again).toStrictEqual(twins);
 });
 
@@ -284,6 +305,7 @@ test("an invalid asset's automatic name survives restoring names", () => {
     installed: true,
     renamable: false,
   };
+
   expect(restoreNames([kept], { "1": "org-org-review" })).toStrictEqual({
     "1": "org-org-review",
   });
@@ -301,6 +323,7 @@ test("tables align styled cells and shrink the flexible column to fit", () => {
     ],
     { header: ["Name", "Origin", "Description"], width: 40 },
   ).map((line) => stripVTControlCharacters(line));
+
   expect(lines.every((line) => line.length <= 40)).toBeTruthy();
   expect(lines[1]!.indexOf("org")).toBe(lines[2]!.indexOf("team/web"));
   expect(lines[1]!).toMatch(/…$/);
@@ -321,9 +344,11 @@ test("sync resolves MCP name clashes, persists renames and restores the plain na
       role: "developer" as const,
     },
   };
+
   const mcp = (origin: { type: string; id: string; slug: string }) => {
     const id = randomUUID();
     const versionId = randomUUID();
+
     return {
       id,
       organizationId: org,
@@ -348,6 +373,7 @@ test("sync resolves MCP name clashes, persists renames and restores the plain na
       },
     };
   };
+
   const orgDocs = mcp({ type: "org", id: org, slug: "acme" });
   const teamDocs = mcp({ type: "team", id: team, slug: "web" });
   let published = [orgDocs, teamDocs];
@@ -355,8 +381,11 @@ test("sync resolves MCP name clashes, persists renames and restores the plain na
   const server = createServer((req, res) => {
     res.setHeader("Content-Type", "application/json");
     const send = (value: unknown) => res.end(JSON.stringify(value));
-    if (req.url === "/v1/context") return send(context);
-    if (req.url === "/v1/environment/catalog")
+    if (req.url === "/v1/context") {
+      return send(context);
+    }
+
+    if (req.url === "/v1/environment/catalog") {
       return send({
         assets: published.map((m) => ({
           id: m.id,
@@ -367,15 +396,22 @@ test("sync resolves MCP name clashes, persists renames and restores the plain na
         })),
         distributions: [],
       });
+    }
+
     const found = published.find((m) => req.url === `/v1/mcps/${m.id}`);
-    if (found) return send(found);
+    if (found) {
+      return send(found);
+    }
+
     res.statusCode = 404;
     send({ code: "NOT_FOUND", message: req.url });
   });
+
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.onTestFinished(
     () => new Promise<void>((resolve) => server.close(() => resolve())),
   );
+
   const url = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
   await updateCredentials(home, (credentials) => {
     credentials.selectedServer = url;
@@ -385,6 +421,7 @@ test("sync resolves MCP name clashes, persists renames and restores the plain na
       context,
     };
   });
+
   const settings: Settings = {
     harnesses: ["claude"],
     knowledge: false,
@@ -396,6 +433,7 @@ test("sync resolves MCP name clashes, persists renames and restores the plain na
       disabledAssetIds: [],
     },
   };
+
   await saveSettings(settings, home);
   const servers = async () =>
     Object.keys(
@@ -405,6 +443,7 @@ test("sync resolves MCP name clashes, persists renames and restores the plain na
   const skipped = await synchronize(undefined, home, undefined, {
     prompt: false,
   });
+
   const clash = skipped.find((e) => e.type === "clash");
   assert(clash && clash.type === "clash");
   // The team is the closer scope, so it keeps the name.
@@ -419,6 +458,7 @@ test("sync resolves MCP name clashes, persists renames and restores the plain na
   await synchronize(undefined, home, undefined, {
     resolveClash: async () => "rename-incoming",
   });
+
   expect((await servers()).sort()).toStrictEqual(["docs", "org-acme-docs"]);
   expect(((await readSettings(home)) as Settings).localNames).toStrictEqual({
     [orgDocs.id]: "org-acme-docs",
@@ -436,21 +476,26 @@ test("sync resolves MCP name clashes, persists renames and restores the plain na
     },
     home,
   );
+
   const restored = await synchronize(undefined, home, undefined, {
     prompt: false,
   });
+
   expect(await servers()).toStrictEqual(["docs"]);
   // Knowledge is off here, so no session-start index is registered.
   expect(
     restored.some((e) => e.type === "native" && e.kind === "knowledge"),
   ).toBeFalsy();
+
   await saveSettings(
     { ...((await readSettings(home)) as Settings), knowledge: true },
     home,
   );
+
   const withKnowledge = await synchronize(undefined, home, undefined, {
     prompt: false,
   });
+
   expect(
     withKnowledge.some(
       (e) =>
@@ -459,9 +504,11 @@ test("sync resolves MCP name clashes, persists renames and restores the plain na
         e.action === "installed",
     ),
   ).toBeTruthy();
+
   expect(
     await readFile(join(home, ".claude", "settings.json"), "utf8"),
   ).toMatch(/knowledge\/startup\.js/);
+
   expect(((await readSettings(home)) as Settings).localNames).toBe(undefined);
 });
 
@@ -474,10 +521,12 @@ test("installed folders are journaled and an interrupted copy is completed on re
     join(source, "SKILL.md"),
     "---\nname: review\ndescription: Review\n---\n",
   );
+
   const path = join(installedRoot(home, "skill"), "team-web-review");
   const after = packageFingerprint(
     await desiredEntries(source, "team-web-review"),
   );
+
   const write = {
     kind: "tree" as const,
     path,
@@ -486,16 +535,19 @@ test("installed folders are journaled and an interrupted copy is completed on re
     source,
     rename: "team-web-review",
   };
+
   await transact(home, [write]);
   expect(await readFile(join(path, "SKILL.md"), "utf8")).toMatch(
     /name: team-web-review/,
   );
+
   // Simulate a crash midway through an update, then recover from the journal.
   await writeFile(join(path, "partial.tmp"), "half written");
   await writeFile(
     join(home, ".barndog", "pending-sync.json"),
     JSON.stringify({ version: 1, writes: [{ ...write, before: "old" }] }),
   );
+
   expect(await recover(home)).toBe(true);
   expect((await readTree(path)).map((e) => e.path)).toStrictEqual(["SKILL.md"]);
 });
@@ -508,6 +560,7 @@ test("cache pruning keeps only the versions installed folders use", async (t) =>
     organizationId: randomUUID(),
     developerId: randomUUID(),
   };
+
   const root = cacheRoot(cacheKey(conn), home);
   const skill = randomUUID();
   const gone = randomUUID();
@@ -517,17 +570,21 @@ test("cache pruning keeps only the versions installed folders use", async (t) =>
   const removedAsset = join(root, gone, "c".repeat(40));
   const hookCurrent = join(root, "hooks", hook, "d".repeat(40));
   const other = join(home, ".barndog", "packages", "other-server", "x", "y");
-  for (const path of [current, old, removedAsset, hookCurrent, other])
+  for (const path of [current, old, removedAsset, hookCurrent, other]) {
     await mkdir(join(path, "pkg"), { recursive: true });
+  }
+
   await mkdir(join(root, skill, ".stage-leftover"));
   expect(
     await pruneCache(cacheKey(conn), home, new Set([current, hookCurrent])),
   ).toBe(3);
+
   const exists = (path: string) =>
     stat(path).then(
       () => true,
       () => false,
     );
+
   expect(await exists(current)).toBe(true);
   expect(await exists(hookCurrent)).toBe(true);
   expect(await exists(old)).toBe(false);

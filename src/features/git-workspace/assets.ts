@@ -21,6 +21,7 @@ export function repoForOrigin(
   origin: string,
 ) {
   const overlay = localOverlay(settings, home);
+
   return origin === LOCAL_ORIGIN && overlay
     ? overlay
     : openRepoSource(settings, home, { refresh: "auto" });
@@ -39,10 +40,16 @@ export function selectRepoAsset(
       (asset.id === name || asset.name === name) &&
       (origin === LOCAL_ORIGIN || matchesOrigin(asset.origin, origin, model)),
   );
+
   const asset = only(matches);
-  if (!asset) throw assetNotFound(kind, name, origin);
-  if (asset.invalid)
+  if (!asset) {
+    throw assetNotFound(kind, name, origin);
+  }
+
+  if (asset.invalid) {
     throw new CliError(`${asset.path} is invalid: ${asset.invalid}`);
+  }
+
   return asset;
 }
 
@@ -62,11 +69,13 @@ export function showRepoAsset(asset: RepoAsset) {
 
 export async function repoHookCompatibility(asset: RepoAsset) {
   const manifest = hookMetadata(asset.entries);
+
   return {
     version: asset.publishedVersion,
     compatibility: await Promise.all(
       (["claude", "codex", "cursor"] as const).map(async (harness) => {
         const implementation = manifest.implementations[harness] ?? null;
+
         return {
           harness,
           status: implementation?.compatibility ?? ("unsupported" as const),
@@ -84,10 +93,12 @@ export async function repoHookCompatibility(asset: RepoAsset) {
 /** Checks a workspace folder without installing anything, for use in repo CI. */
 export async function validateFolder(directory: string) {
   const model = await loadWorkspace(await folderSnapshot(resolve(directory)));
-  if (model.problems.length)
+  if (model.problems.length) {
     throw new CliError(
       `${model.problems.length} problem${model.problems.length === 1 ? "" : "s"} found:\n${model.problems.map((problem) => `  ${problem.path}: ${problem.reason}`).join("\n")}`,
     );
+  }
+
   return {
     workspace: model.config.name,
     assets: model.assets.length,

@@ -65,8 +65,10 @@ export const connectionPath = (connectionId: string) =>
 
 function repositoryTarget(options: GithubRepositoryOptions) {
   const [owner, repository, ...rest] = options.repository.split("/");
-  if (!owner || !repository || rest.length)
+  if (!owner || !repository || rest.length) {
     throw new Error("Use --repository <owner/name>");
+  }
+
   return {
     kind: options.kind ?? "skill",
     installationId: options.installation,
@@ -77,6 +79,7 @@ function repositoryTarget(options: GithubRepositoryOptions) {
 
 export async function githubList(home = homedir()) {
   const conn = await connection(home);
+
   return request(
     conn,
     "/v1/git-connections",
@@ -98,12 +101,14 @@ export async function githubConnect(
     options.origin,
     home,
   );
+
   const body = gitConnectSchema.parse({
     ...target,
     assetId: selected.reference.id,
     expectedVersionId: options.expectedVersion ?? selected.asset.version.id,
     mode: options.mode ?? "connect",
   });
+
   return request(
     conn,
     "/v1/git-connections",
@@ -127,6 +132,7 @@ export async function githubImport(
     name: options.name,
     origin: { type: scope.type, id: scope.id },
   });
+
   return request(
     conn,
     "/v1/git-connections/import",
@@ -151,6 +157,7 @@ export async function githubImportCopy(
     origin: { type: scope.type, id: scope.id },
     idempotencyKey: options.key,
   });
+
   return request(
     conn,
     "/v1/git-connections/import-copy",
@@ -174,6 +181,7 @@ export async function githubCreateRepository(
     options.origin,
     home,
   );
+
   const body = gitCreateRepositorySchema.parse({
     ...target,
     assetId: selected.reference.id,
@@ -182,6 +190,7 @@ export async function githubCreateRepository(
     visibility: options.visibility ?? "private",
     idempotencyKey: options.key,
   });
+
   return request(
     conn,
     "/v1/git-connections/create-repository",
@@ -194,12 +203,14 @@ export async function githubCreateRepository(
 
 export async function githubShow(connectionId: string, home = homedir()) {
   const conn = await connection(home);
+
   return request(conn, connectionPath(connectionId), gitConnectionSchema, home);
 }
 
 /** Syncs now instead of waiting for the server's next scheduled sync. */
 export async function githubSync(connectionId: string, home = homedir()) {
   const conn = await connection(home);
+
   return request(
     conn,
     `${connectionPath(connectionId)}/sync`,
@@ -212,6 +223,7 @@ export async function githubSync(connectionId: string, home = homedir()) {
 /** The repository's main commit as GitHub reports it now, not as last synced. */
 export async function githubRemoteHead(connectionId: string, home = homedir()) {
   const conn = await connection(home);
+
   return request(
     conn,
     `${connectionPath(connectionId)}/remote-head`,
@@ -233,6 +245,7 @@ export async function githubResolveMirror(
     expectedRemoteCommit: options.expectedRemoteCommit,
     idempotencyKey: options.key ?? randomUUID(),
   });
+
   return request(
     conn,
     `${path}/mirror-resolution`,

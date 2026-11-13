@@ -26,8 +26,10 @@ export async function openBrowser(url: string) {
       : process.platform === "win32"
         ? "rundll32"
         : "xdg-open";
+
   const args =
     process.platform === "win32" ? ["url.dll,FileProtocolHandler", url] : [url];
+
   await new Promise<void>((resolve, reject) => {
     const child = spawn(command, args, { stdio: "ignore" });
     child.once("error", reject);
@@ -64,15 +66,21 @@ export async function runLogin(
     (process.stdin.isTTY && process.stdout.isTTY
       ? await promptServer()
       : undefined);
+
   if (server && !options.force) {
     const current = await authStatus(options.home, server).catch((error) => {
-      if (error instanceof LoginRequiredError) return undefined;
+      if (error instanceof LoginRequiredError) {
+        return undefined;
+      }
+
       throw error;
     });
+
     if (current) {
       write(
         `${ok("✔")} Already signed in as ${describeIdentity(current.context)}`,
       );
+
       write(dim(`  ${current.server}`));
       write("");
       write(
@@ -81,9 +89,11 @@ export async function runLogin(
             "  to switch accounts, or barndog login --force to sign in again",
           ),
       );
+
       return;
     }
   }
+
   const controller = new AbortController();
   const cancel = () => controller.abort();
   process.once("SIGINT", cancel);
@@ -96,22 +106,26 @@ export async function runLogin(
         write(`\n${heading("sign-in")}\n`);
         write(`Verification code: ${bold(details.userCode)}`);
         write(`Open ${details.url} and confirm this code.`);
-        if (options.browser)
+        if (options.browser) {
           await openBrowser(details.browserUrl).catch(() =>
             write("Open the verification URL above to continue."),
           );
+        }
       },
     });
+
     write("");
     write(`${ok("✔")} Signed in as ${describeIdentity(result.context)}`);
     write(hint("barndog init"));
   } catch (error) {
-    if (controller.signal.aborted)
+    if (controller.signal.aborted) {
       throw new Error("Sign-in cancelled", { cause: error });
+    }
+
     if (
       error instanceof Error &&
       (error.name === "AbortError" || error.name === "TimeoutError")
-    )
+    ) {
       throw new CliError(
         "Sign-in expired before it was confirmed.",
         "barndog login",
@@ -119,6 +133,8 @@ export async function runLogin(
           cause: error,
         },
       );
+    }
+
     throw error;
   } finally {
     process.removeListener("SIGINT", cancel);
@@ -143,16 +159,23 @@ export async function showAuthStatus(
   try {
     result = await authStatus(home);
   } catch (error) {
-    if (!(error instanceof LoginRequiredError)) throw error;
+    if (!(error instanceof LoginRequiredError)) {
+      throw error;
+    }
+
     const server = await configuredServer(home).catch(() => undefined);
-    if (output.json) write(json({ signedIn: false, server: server ?? null }));
-    else {
+    if (output.json) {
+      write(json({ signedIn: false, server: server ?? null }));
+    } else {
       write(`${bad("✖")} Not signed in${server ? ` to ${server}` : ""}.`);
       write(`  ${hint(server ? "barndog login" : "barndog init", "Fix")}`);
     }
+
     process.exitCode = 1;
+
     return;
   }
+
   const credential = (await readCredentials(home)).servers[result.server];
   if (output.json) {
     write(
@@ -163,8 +186,10 @@ export async function showAuthStatus(
         ...result.context,
       }),
     );
+
     return;
   }
+
   const { developer, organization } = result.context;
   write(`${ok("✔")} Signed in`);
   write("");
@@ -185,6 +210,7 @@ export async function showAuthStatus(
         ? `expires ${new Date(credential.expiresAt).toLocaleString()}`
         : undefined,
     ],
-  ]))
+  ])) {
     write(line);
+  }
 }

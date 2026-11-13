@@ -26,8 +26,10 @@ function sourceLabels(
   const rows = sources.map(describe);
   const width = Math.max(...rows.map((row) => visibleWidth(row.name)));
   const detailWidth = Math.max(...rows.map((row) => visibleWidth(row.detail)));
+
   return sources.map((source) => {
     const row = describe(source);
+
     return `${row.name.padEnd(width)}  ${dim(row.detail.padEnd(detailWidth))}  ${dim(`${source.assets.length} ${source.assets.length === 1 ? "asset" : "assets"}`)}${source.scope.type === "org" ? `  ${dim("· suggested")}` : ""}`;
   });
 }
@@ -44,48 +46,70 @@ export function environmentChooser(
       write(
         "This repo has no assets yet. They'll install here at your next sync.",
       );
+
       write(
         dim("Add them with barndog skills create, or commit them to the repo."),
       );
+
       return selectOnboardingSources(
         sources
           .filter((source) => source.checked)
           .map((source) => ({ source, mode: source.mode })),
       );
     }
+
     const repoName = sources.find((s) => s.scope.type === "org")?.label ?? "";
     const folder = (source: SetupSource) => {
-      if (source.scope.type === "org") return "org/";
+      if (source.scope.type === "org") {
+        return "org/";
+      }
+
       const slug = choices.scopes.find((s) => s.id === source.scope.id)?.slug;
+
       return `${source.scope.type === "team" ? "teams" : "repos"}/${slug}/`;
     };
+
     // A Git repo with only shared assets has nothing to choose between.
     const single = git && sources.length === 1;
     const titled = (source: SetupSource) =>
       !git ? source.label : single ? repoName : folder(source);
-    if (!git && !choices.catalog.assets.length)
+
+    if (!git && !choices.catalog.assets.length) {
       write(
         "No published assets are available yet. Add assets in the web workspace when you're ready.",
       );
-    if (!single)
+    }
+
+    if (!single) {
       write(
         "Choose where this machine's Skills, MCP servers and Hooks come from. Anything you leave unchecked is removed.",
       );
+    }
+
     if (
       choices.developerId !== null &&
       choices.firstSetup &&
       choices.memberTeamIds.length === 1
-    )
+    ) {
       write(dim("Your team is preselected."));
-    if (choices.developerId !== null && choices.memberTeamIds.length > 1)
+    }
+
+    if (choices.developerId !== null && choices.memberTeamIds.length > 1) {
       write(dim("You belong to several teams; choose the ones you work with."));
-    if (!single)
+    }
+
+    if (!single) {
       write(
         dim(
           `Later: barndog sets switch team/<slug> or repo/<slug>, barndog sets install repo/<slug>.`,
         ),
       );
-    if (!single) write("");
+    }
+
+    if (!single) {
+      write("");
+    }
+
     const labels = sourceLabels(sources, (source) =>
       git
         ? {
@@ -94,6 +118,7 @@ export function environmentChooser(
           }
         : { name: source.label, detail: kindLabel[source.scope.type] },
     );
+
     const chosen = single
       ? sources
       : await checkbox({
@@ -110,6 +135,7 @@ export function environmentChooser(
           pageSize: 10,
           theme: checkboxTheme,
         });
+
     const selections: SourceSelection[] = [];
     for (const source of chosen) {
       write("");
@@ -127,10 +153,14 @@ export function environmentChooser(
         ],
         theme: promptTheme,
       });
+
       let assetIds: string[] | undefined;
       if (mode === "custom") {
         const width = Math.max(0, ...source.assets.map((a) => a.name.length));
-        if (source.assets.length) write("");
+        if (source.assets.length) {
+          write("");
+        }
+
         assetIds = source.assets.length
           ? await checkbox({
               loop: false,
@@ -146,20 +176,26 @@ export function environmentChooser(
             })
           : [];
       }
-      if (!source.assets.length)
+
+      if (!source.assets.length) {
         write(dim(`No published assets in ${titled(source)} yet.`));
+      }
+
       if (
         source.scope.type === "dev" &&
         mode === "recommended" &&
         !source.recommendedIds.length
-      )
+      ) {
         write(
           dim(
             "None of your personal assets are marked recommended in an organization or team set.",
           ),
         );
+      }
+
       selections.push({ source, mode, assetIds });
     }
+
     return selectOnboardingSources(selections);
   };
 }

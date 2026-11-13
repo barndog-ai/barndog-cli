@@ -27,6 +27,7 @@ export function gitObjectHash(type: "blob" | "tree", content: Buffer) {
 function treeObject(children: { name: string; mode: string; hash: string }[]) {
   const key = (child: { name: string; mode: string }) =>
     Buffer.from(child.mode === TREE_MODE ? `${child.name}/` : child.name);
+
   return Buffer.concat(
     [...children]
       .sort((a, b) => Buffer.compare(key(a), key(b)))
@@ -48,7 +49,10 @@ export async function folderSnapshot(root: string): Promise<Snapshot> {
   async function visit(relative: string): Promise<string> {
     const children: { name: string; mode: string; hash: string }[] = [];
     for (const name of await readdir(join(root, relative))) {
-      if (ignored.has(name)) continue;
+      if (ignored.has(name)) {
+        continue;
+      }
+
       const path = relative ? `${relative}/${name}` : name;
       const absolute = join(root, path);
       const info = await lstat(absolute);
@@ -64,23 +68,30 @@ export async function folderSnapshot(root: string): Promise<Snapshot> {
         hash = gitObjectHash("blob", await readFile(absolute));
         mode = info.mode & 0o111 ? "100755" : "100644";
         paths.set(hash, absolute);
-      } else continue;
+      } else {
+        continue;
+      }
+
       entries.push({ path, mode, hash });
       children.push({ name, mode, hash });
     }
+
     return gitObjectHash("tree", treeObject(children));
   }
 
   await visit("");
+
   return {
     entries,
     readBlobs: async (hashes) => {
       const blobs = new Map<string, Buffer>();
-      for (const hash of new Set(hashes))
+      for (const hash of new Set(hashes)) {
         blobs.set(
           hash,
           await readFile(defined(paths.get(hash), `Unknown blob ${hash}`)),
         );
+      }
+
       return blobs;
     },
   };
@@ -101,20 +112,28 @@ export async function gitSnapshot(
         line.slice(0, line.indexOf("\t")),
         line.slice(line.indexOf("\t") + 1),
       ];
+
       const [mode, , hash] = meta.split(" ");
-      if (!mode || !hash)
+      if (!mode || !hash) {
         throw new Error(`Unexpected git ls-tree line: ${line}`);
+      }
+
       return { path, mode, hash };
     });
+
   return {
     entries,
     readBlobs: async (hashes) => {
       const unique = [...new Set(hashes)];
-      if (!unique.length) return new Map();
+      if (!unique.length) {
+        return new Map();
+      }
+
       const output = await git(["cat-file", "--batch"], {
         repo,
         input: unique.join("\n") + "\n",
       });
+
       const blobs = new Map<string, Buffer>();
       let offset = 0;
       for (const hash of unique) {
@@ -123,6 +142,7 @@ export async function gitSnapshot(
         blobs.set(hash, output.subarray(end + 1, end + 1 + size));
         offset = end + 1 + size + 1;
       }
+
       return blobs;
     },
   };

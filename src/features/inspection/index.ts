@@ -17,11 +17,14 @@ async function declaredRepository(model: WorkspaceModel, cwd: string) {
         normalizeRepositoryRemote(repository.gitRemote) ?? "",
       ),
   );
+
   const [slug, declared] = only(matches) ?? [];
   const scope = (type: "team" | "repo", name: string | undefined) =>
     model.scopes.find((s) => s.type === type && s.slug === name);
+
   const repository = slug ? scope("repo", slug) : undefined;
   const team = scope("team", declared?.team);
+
   return {
     ...local,
     repository: repository
@@ -45,6 +48,9 @@ export async function workspaceUrl(home = homedir()) {
 export async function repoStatus(home = homedir(), cwd = process.cwd()) {
   const settings = await readSettings(home);
   const repo = settings && openRepoSource(settings, home, { refresh: "auto" });
-  if (repo) return declaredRepository(await repo.model(), cwd);
+  if (repo) {
+    return declaredRepository(await repo.model(), cwd);
+  }
+
   return repositoryContext(home, cwd);
 }

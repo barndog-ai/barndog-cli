@@ -15,12 +15,18 @@ type DetectionOptions = {
 async function exists(path: string, directory = false): Promise<boolean> {
   try {
     const info = await stat(path);
-    if (directory) return info.isDirectory();
+    if (directory) {
+      return info.isDirectory();
+    }
+
     await access(path, constants.X_OK);
+
     return info.isFile();
   } catch (error) {
-    if (["ENOENT", "ENOTDIR", "EACCES"].includes(errorCode(error) ?? ""))
+    if (["ENOENT", "ENOTDIR", "EACCES"].includes(errorCode(error) ?? "")) {
       return false;
+    }
+
     throw error;
   }
 }
@@ -34,11 +40,14 @@ export async function detectHarnesses(
   const directories = (options.path ?? process.env.PATH ?? "")
     .split(delimiter)
     .filter(Boolean);
+
   const appDirectories = options.appDirectories ?? [
     "/Applications",
     join(home, "Applications"),
   ];
+
   const extensions = platform === "win32" ? ["", ".exe", ".cmd", ".bat"] : [""];
+
   return Promise.all(
     harnesses.map(async (id) => {
       const installation = adapters[id];
@@ -52,10 +61,17 @@ export async function detectHarnesses(
               break;
             }
           }
-          if (evidence) break;
+
+          if (evidence) {
+            break;
+          }
         }
-        if (evidence) break;
+
+        if (evidence) {
+          break;
+        }
       }
+
       if (!evidence && platform === "darwin") {
         for (const directory of appDirectories) {
           const candidate = join(directory, installation.macApp);
@@ -65,6 +81,7 @@ export async function detectHarnesses(
           }
         }
       }
+
       return { id, name: installation.name, evidence };
     }),
   );

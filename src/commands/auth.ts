@@ -20,12 +20,14 @@ export function registerAuth(program: Command, context: CommandContext) {
         await context.login(options);
       },
     );
+
   program
     .command("logout")
     .description("Sign out and revoke this machine's session")
     .action(async () => {
       await context.logout();
     });
+
   program
     .command("auth")
     .description("Check your sign-in")

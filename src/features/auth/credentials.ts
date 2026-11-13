@@ -44,17 +44,26 @@ export async function readCredentials(home = homedir()): Promise<Credentials> {
   const path = join(home, ".barndog", "credentials.json");
   try {
     const info = await lstat(path);
-    if (!info.isFile() || (process.platform !== "win32" && info.mode & 0o077))
+    if (!info.isFile() || (process.platform !== "win32" && info.mode & 0o077)) {
       throw new Error(
         "Credentials file must be a regular file accessible only to its owner",
       );
+    }
+
     const parsed = credentialsSchema.safeParse(
       JSON.parse(await readFile(path, "utf8")),
     );
-    if (!parsed.success) throw new Error("Invalid credentials file");
+
+    if (!parsed.success) {
+      throw new Error("Invalid credentials file");
+    }
+
     return parsed.data;
   } catch (error) {
-    if (errorCode(error) === "ENOENT") return { version: 1, servers: {} };
+    if (errorCode(error) === "ENOENT") {
+      return { version: 1, servers: {} };
+    }
+
     throw error;
   }
 }
@@ -66,15 +75,20 @@ export async function updateCredentials(
   const root = join(home, ".barndog");
   await mkdir(root, { recursive: true, mode: 0o700 });
   const info = await lstat(root);
-  if (!info.isDirectory())
+  if (!info.isDirectory()) {
     throw new Error("Credentials directory must be a regular directory");
+  }
+
   await chmod(root, 0o700);
   const lock = join(root, "credentials.lock");
   await mkdir(lock, { mode: 0o700 }).catch((error: unknown) => {
-    if (errorCode(error) === "EEXIST")
+    if (errorCode(error) === "EEXIST") {
       throw new Error("Another login or logout is running");
+    }
+
     throw error;
   });
+
   const temporary = join(root, `credentials.${randomUUID()}.tmp`);
   try {
     const credentials = await readCredentials(home);
@@ -83,6 +97,7 @@ export async function updateCredentials(
       mode: 0o600,
       flag: "wx",
     });
+
     await rename(temporary, join(root, "credentials.json"));
   } finally {
     await rm(temporary, { force: true });

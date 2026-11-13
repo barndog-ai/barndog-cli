@@ -76,12 +76,14 @@ export async function publishPackage(
     // Stable per content, so re-running after a failure repeats rather than duplicates.
     idempotencyKey: `migrate-${asset.id}-${asset.publishedVersion}-${scope.id}-${asset.name}`,
   };
+
   const form = new FormData();
   form.set("metadata", JSON.stringify(metadata));
   form.set("package", await archive(files, home), "skill.tar.gz");
   const change = changeSchema.parse(
     (await client.POST("/v1/skill-changes", { body: form })).data,
   );
+
   await client.POST("/v1/skill-changes/{id}/merge", {
     params: { path: { id: change.id } },
     body: { expectedRevision: change.submittedRevision },
@@ -129,6 +131,7 @@ function translateSelection(
   const assetId = (id: string) => {
     const asset = assets.find((a) => a.id === id);
     const pair = asset && scopes.find((s) => s.local.id === asset.origin.id);
+
     return target.find(
       (t) =>
         t.kind === asset?.kind &&
@@ -137,11 +140,14 @@ function translateSelection(
         t.origin.id === pair.cloud.id,
     )?.id;
   };
+
   const ids = (values: readonly string[]) =>
     values.flatMap((id) => assetId(id) ?? []);
+
   return {
     subscriptions: state.subscriptions.flatMap((subscription) => {
       const pair = scopes.find((s) => s.local.id === subscription.scope.id);
+
       return pair && pair.cloud.type !== "dev"
         ? [
             {
@@ -163,9 +169,13 @@ function keepLocalChoices(
   before: SelectionState,
   kept: WorkspaceModel | undefined,
 ): SelectionState {
-  if (!kept) return next;
+  if (!kept) {
+    return next;
+  }
+
   const local = (ids: readonly string[]) =>
     ids.filter((id) => kept.assets.some((asset) => asset.id === id));
+
   return {
     subscriptions: [
       ...next.subscriptions,
@@ -198,21 +208,28 @@ export async function migrate(
 }> {
   return locked(home, async () => {
     const settings = await readSettings(home);
-    if (!settings) throw new SetupRequiredError();
+    if (!settings) {
+      throw new SetupRequiredError();
+    }
+
     const source = openRepoSource(settings, home);
     if (
       !settings.gitWorkspace &&
       settings.localWorkspace &&
       !settings.connection
-    )
+    ) {
       throw new CliError(
         "`barndog migrate` moves a team's Git repo. To bring local assets to cloud, switch first: they stay active, and you can then move them with barndog local move.",
         "barndog init --server <url>",
       );
-    if (!source)
+    }
+
+    if (!source) {
       throw new CliError(
         "This machine isn't using a Git repo, so there's nothing to migrate.",
       );
+    }
+
     const overlay = localOverlay(settings, home);
     const kept = overlay ? await overlay.model() : undefined;
     const model = await source.model();
@@ -224,14 +241,18 @@ export async function migrate(
       z.array(scopeSchema),
       home,
     );
+
     const { catalog: existing } = await environmentCatalog(home, conn);
     const existingDocs = (
       await request(conn, "/v1/knowledge?limit=100", knowledgeIndexSchema, home)
     ).documents;
+
     const pairs = model.scopes.flatMap((local) => {
       const cloud = cloudScopes.find((scope) => sameScope(scope, local));
+
       return cloud ? [{ local, cloud }] : [];
     });
+
     const rows: MigrationRow[] = [];
     const pending: (() => Promise<unknown>)[] = [];
     for (const asset of model.assets) {
@@ -240,16 +261,17 @@ export async function migrate(
         name: asset.name,
         origin: originLabel(asset.origin),
       };
+
       const pair = pairs.find((p) => p.local.id === asset.origin.id);
-      if (asset.invalid)
+      if (asset.invalid) {
         rows.push({ ...base, action: "invalid", detail: asset.invalid });
-      else if (!pair)
+      } else if (!pair) {
         rows.push({
           ...base,
           action: "missing-scope",
           detail: `Create ${originLabel(asset.origin)} in the workspace first`,
         });
-      else if (
+      } else if (
         existing.assets.some(
           (a) =>
             a.kind === asset.kind &&
@@ -257,9 +279,9 @@ export async function migrate(
             a.origin.type === pair.cloud.type &&
             a.origin.id === pair.cloud.id,
         )
-      )
+      ) {
         rows.push({ ...base, action: "exists" });
-      else {
+      } else {
         rows.push({ ...base, action: "publish" });
         pending.push(() =>
           asset.kind === "mcp"
@@ -273,25 +295,36 @@ export async function migrate(
         );
       }
     }
+
     for (const doc of model.knowledge) {
       const base = { kind: "knowledge", name: doc.content.name, origin: "org" };
-      if (existingDocs.some((d) => d.name === doc.content.name))
+      if (existingDocs.some((d) => d.name === doc.content.name)) {
         rows.push({ ...base, action: "exists" });
-      else {
+      } else {
         rows.push({ ...base, action: "publish" });
         pending.push(() => publishKnowledge(doc, conn, home));
       }
     }
-    if (options.dryRun) return { server, dryRun: true, rows, migrated: false };
+
+    if (options.dryRun) {
+      return { server, dryRun: true, rows, migrated: false };
+    }
+
     const blocked = rows.filter(
       (row) => row.action === "invalid" || row.action === "missing-scope",
     );
-    if (blocked.length)
+
+    if (blocked.length) {
       throw new CliError(
         `Nothing was published. Fix these first:\n${blocked.map((row) => `  ${row.origin}/${row.name}: ${row.detail}`).join("\n")}`,
         `barndog migrate --to ${server} --dry-run`,
       );
-    for (const publish of pending) await publish();
+    }
+
+    for (const publish of pending) {
+      await publish();
+    }
+
     const { catalog } = await environmentCatalog(home, conn);
     const next = withSelection(
       {
@@ -310,10 +343,12 @@ export async function migrate(
         kept,
       ),
     );
+
     delete next.gitWorkspace;
     delete next.localNames;
     await saveSettings(next, home);
     await synchronize(undefined, home, next, { catalog });
+
     return { server, dryRun: false, rows, migrated: true };
   });
 }

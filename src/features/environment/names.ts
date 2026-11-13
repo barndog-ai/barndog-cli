@@ -21,7 +21,10 @@ export function originLabel(origin: {
   id?: string;
   localOnly?: boolean;
 }): string {
-  if (origin.localOnly || origin.type === "local") return "local";
+  if (origin.localOnly || origin.type === "local") {
+    return "local";
+  }
+
   return origin.type === "org"
     ? "org"
     : `${origin.type}/${origin.slug ?? origin.id ?? "unknown"}`;
@@ -104,15 +107,22 @@ export function hookFolders(
     folders.set(hook.id, folder);
     used.add(folder);
   };
+
   const plain = (hook: Hook) => localNames[hook.id] ?? prefixedName(hook);
   const idText = (hook: Hook) =>
     hook.id.replace(/[^a-z0-9]/gi, "").toLowerCase();
+
   const suffixed = (hook: Hook) => `${plain(hook)}-${idText(hook).slice(0, 8)}`;
   const whole = (hook: Hook) => `${plain(hook)}-${idText(hook)}`;
   const ordered = [...hooks].sort((a, b) => a.id.localeCompare(b.id));
   const open = () => ordered.filter((hook) => !folders.has(hook.id));
-  for (const hook of ordered) if (hook.kept) claim(hook, hook.kept);
-  for (const hook of open())
+  for (const hook of ordered) {
+    if (hook.kept) {
+      claim(hook, hook.kept);
+    }
+  }
+
+  for (const hook of open()) {
     if (
       hook.current &&
       !used.has(hook.current) &&
@@ -120,20 +130,30 @@ export function hookFolders(
         hook.current === suffixed(hook) ||
         hook.current === whole(hook) ||
         withoutCopyNumber(hook.current) === whole(hook))
-    )
+    ) {
       claim(hook, hook.current);
+    }
+  }
+
   const wanting = open().map(plain);
-  for (const hook of open())
+  for (const hook of open()) {
     if (
       !used.has(plain(hook)) &&
       wanting.filter((folder) => folder === plain(hook)).length === 1
-    )
+    ) {
       claim(hook, plain(hook));
+    }
+  }
+
   for (const hook of open()) {
     let folder = used.has(suffixed(hook)) ? whole(hook) : suffixed(hook);
-    for (let n = 2; used.has(folder); n++) folder = `${whole(hook)}-${n}`;
+    for (let n = 2; used.has(folder); n++) {
+      folder = `${whole(hook)}-${n}`;
+    }
+
     claim(hook, folder);
   }
+
   return folders;
 }
 
@@ -144,16 +164,22 @@ export function restoreNames(
 ): Record<string, string> {
   const next = { ...localNames };
   for (const asset of assets) {
-    if (asset.renamable === false || next[asset.id] !== prefixedName(asset))
+    if (asset.renamable === false || next[asset.id] !== prefixedName(asset)) {
       continue;
+    }
+
     const taken = assets.some(
       (other) =>
         other.id !== asset.id &&
         other.kind === asset.kind &&
         installedName(other, next) === asset.name,
     );
-    if (!taken) delete next[asset.id];
+
+    if (!taken) {
+      delete next[asset.id];
+    }
   }
+
   return next;
 }
 
@@ -167,6 +193,7 @@ export function findClash(
     const key = `${asset.kind}\0${installedName(asset, localNames)}`;
     groups.set(key, [...(groups.get(key) ?? []), asset]);
   }
+
   for (const [, group] of [...groups].sort(([a], [b]) => a.localeCompare(b))) {
     const [installed, incoming] = [...group].sort(
       (a, b) =>
@@ -174,7 +201,11 @@ export function findClash(
         (rank[a.origin.type] ?? 9) - (rank[b.origin.type] ?? 9) ||
         a.id.localeCompare(b.id),
     );
-    if (!installed || !incoming) continue;
+
+    if (!installed || !incoming) {
+      continue;
+    }
+
     return {
       kind: installed.kind,
       name: installedName(installed, localNames),
@@ -184,6 +215,7 @@ export function findClash(
       incomingRename: prefixedName(incoming),
     };
   }
+
   return undefined;
 }
 
@@ -209,8 +241,10 @@ export async function resolveClashes(
   const skipped: Clash[] = [];
   for (let guard = 0; guard < assets.length * 4 + 4; guard++) {
     const clash = findClash(active, names);
-    if (!clash)
+    if (!clash) {
       return { localNames: names, disabledAssetIds: disabled, skipped };
+    }
+
     let choice = resolver ? await resolver(clash) : "skip-incoming";
     const rename =
       choice === "rename-incoming"
@@ -218,6 +252,7 @@ export async function resolveClashes(
         : choice === "rename-installed"
           ? clash.installed
           : undefined;
+
     if (rename) {
       const name = prefixedName(rename);
       if (
@@ -229,18 +264,24 @@ export async function resolveClashes(
             other.kind === rename.kind &&
             installedName(other, names) === name,
         )
-      )
+      ) {
         choice = "skip-incoming";
-      else {
+      } else {
         names = { ...names, [rename.id]: name };
         continue;
       }
     }
+
     const removed =
       choice === "replace-installed" ? clash.installed : clash.incoming;
+
     active = active.filter((asset) => asset.id !== removed.id);
-    if (resolver) disabled.push(removed.id);
-    else skipped.push(clash);
+    if (resolver) {
+      disabled.push(removed.id);
+    } else {
+      skipped.push(clash);
+    }
   }
+
   throw new Error("Unable to resolve installed name clashes");
 }

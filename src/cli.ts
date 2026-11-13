@@ -27,7 +27,7 @@ try {
   ) {
     // Commander already printed help or the parsing error, unless it was silenced for --json.
     process.exitCode = error.exitCode;
-    if (asJson && error.exitCode)
+    if (asJson && error.exitCode) {
       console.error(
         renderJsonError(
           new Error(
@@ -37,6 +37,7 @@ try {
           ),
         ),
       );
+    }
   } else if (error instanceof Error && error.name === "ExitPromptError") {
     console.log("Cancelled. Nothing was changed.");
     process.exitCode = 130;

@@ -27,6 +27,7 @@ test("asset browsing bounds output, sorts before paging, and combines origin and
     origin: "team/engineering",
     search: "react review",
   });
+
   expect(filtered.total).toBe(32);
   expect(filtered.rows.every((r) => r.origin.type === "team")).toBeTruthy();
   const rendered = renderCatalog(
@@ -35,6 +36,7 @@ test("asset browsing bounds output, sorts before paging, and combines origin and
     "barndog skills search",
     new Set(),
   ).join("\n");
+
   expect(rendered).toMatch(/Showing 21–40 of 65/);
   expect(rendered).toMatch(/barndog skills search --page 3/);
   expect(rendered).not.toMatch(/skill-40/);
@@ -45,6 +47,7 @@ test("a truncated cell keeps its styling", () => {
     indent: 0,
     width: 8,
   });
+
   expect(line).toBe("\u001b[2mlong de…\u001b[22m");
   const [boundary] = table(
     [["\u001b[1mabcdefg\u001b[22m\u001b[2mhijkl\u001b[22m"]],
@@ -53,6 +56,7 @@ test("a truncated cell keeps its styling", () => {
       width: 8,
     },
   );
+
   expect(boundary).toBe("\u001b[1mabcdefg\u001b[22m\u001b[2m…\u001b[22m");
 });
 
@@ -60,10 +64,12 @@ test("the version column only appears when something has a version number", () =
   const options = { page: 1, limit: 20 };
   const render = (list: typeof rows) =>
     renderCatalog(list, options, "barndog skills search", new Set()).join("\n");
+
   const hashed = {
     ...rows[0]!,
     version: { ...rows[0]!.version, label: "1e708e1" },
   };
+
   const local = render([hashed]);
   expect(local).not.toMatch(/Ver|1e708e1/);
   expect(local).toMatch(/General conventions/);
@@ -80,6 +86,7 @@ test("list output escapes terminal control sequences and reports empty pages cle
     "barndog skills search",
     new Set(),
   ).join("\n");
+
   expect(text).toContain("evil\\u001b[31m");
   expect(
     renderCatalog(
@@ -106,16 +113,19 @@ test("list shows installed, then disabled, then available, and filters each", as
     harnesses: [],
     paths: [],
   });
+
   const catalogRow = (id: string) => ({
     ...rows[0]!,
     id,
     name: id,
   });
+
   const items = [
     onMachine("off", "disabled"),
     onMachine("on", "installed"),
     onMachine("soon", "pending"),
   ];
+
   const run = async (
     args: string[],
     catalog: () => Promise<ReturnType<typeof catalogRow>[]> = async () => [
@@ -131,6 +141,7 @@ test("list shows installed, then disabled, then available, and filters each", as
       writeError: () => {},
       searchCatalog: async () => {
         loaded++;
+
         return catalog();
       },
       inventory: async () => ({
@@ -141,8 +152,10 @@ test("list shows installed, then disabled, then available, and filters each", as
         items,
       }),
     }).parseAsync(["skills", "list", ...args], { from: "user" });
+
     return { text: lines.join("\n"), loaded };
   };
+
   const names = async (...args: string[]) =>
     (
       JSON.parse((await run([...args, "--json"])).text) as { name: string }[]
@@ -157,6 +170,7 @@ test("list shows installed, then disabled, then available, and filters each", as
     "alpha",
     "zeta",
   ]);
+
   expect((await run(["--disabled"])).loaded).toBe(0);
 
   const table = (await run([])).text;
@@ -179,6 +193,7 @@ test("list shows installed, then disabled, then available, and filters each", as
       items: [],
     }),
   });
+
   const emptyLines: string[] = [];
   await nothing.parseAsync(["mcp", "list"], { from: "user" });
   expect(emptyLines.join("\n")).toMatch(/No MCP servers yet\./);
@@ -187,6 +202,7 @@ test("list shows installed, then disabled, then available, and filters each", as
   const failing = async () => {
     throw new Error("server down");
   };
+
   const partial = await run([], failing);
   expect(partial.text).toMatch(/Couldn't load available Skills: server down/);
   expect(partial.text).toMatch(/on .*installed/);
@@ -200,6 +216,7 @@ test("search flags parse for every asset type and invalid pages fail before load
     writeError: () => {},
     searchCatalog: async () => {
       loaded++;
+
       return [];
     },
     inventory: async () => ({
@@ -210,7 +227,8 @@ test("search flags parse for every asset type and invalid pages fail before load
       items: [],
     }),
   });
-  for (const kind of ["skills", "mcp", "hooks"])
+
+  for (const kind of ["skills", "mcp", "hooks"]) {
     await program.parseAsync(
       [
         kind,
@@ -225,15 +243,19 @@ test("search flags parse for every asset type and invalid pages fail before load
       ],
       { from: "user" },
     );
+  }
+
   expect(loaded).toBe(3);
   for (const args of [
     ["--limit", "101"],
     ["--page", "0"],
     ["--limit", "1.5"],
-  ])
+  ]) {
     await expect(
       program.parseAsync(["skills", "search", ...args], { from: "user" }),
     ).rejects.toThrow(CommanderError);
+  }
+
   expect(loaded).toBe(3);
 });
 
@@ -245,6 +267,7 @@ test("search returns the same matches as JSON and as a table", async () => {
     origin: { type: "org", slug: "acme", id: "org" },
     version: { number: 1, description: `${name} helper` },
   }));
+
   const run = async (...args: string[]) => {
     const lines: string[] = [];
     await createProgram({
@@ -259,8 +282,10 @@ test("search returns the same matches as JSON and as a table", async () => {
         items: [],
       }),
     }).parseAsync(["skills", "search", "review", ...args], { from: "user" });
+
     return lines.join("\n");
   };
+
   const table = await run();
   expect(table).toMatch(/review/);
   expect(table).not.toMatch(/testing/);

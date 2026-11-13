@@ -50,22 +50,28 @@ export async function ask(
   flag: string,
   fallback?: string,
 ): Promise<string> {
-  if (value) return value;
-  if (!context.mode.interactive)
+  if (value) {
+    return value;
+  }
+
+  if (!context.mode.interactive) {
     throw new CliError(
       `Add ${flag} <value> to this command, or run it in a terminal to be asked.`,
     );
+  }
+
   return (
     await input({ message, default: fallback, theme: promptTheme })
   ).trim();
 }
 
 function requireArguments(context: CommandContext, usage: string) {
-  if (!context.mode.interactive)
+  if (!context.mode.interactive) {
     throw new CliError(
       "Name the asset to act on, or run this in a terminal to choose from a list.",
       usage,
     );
+  }
 }
 
 /** Installed assets eligible for an action on this machine. */
@@ -118,6 +124,7 @@ export function registerEnvironment(program: Command, context: CommandContext) {
     const listCommand = command
       .command("list")
       .description(`List installed, disabled and available ${labels.many}`);
+
     pageOptions(listCommand)
       .option("--installed", `Only ${labels.many} installed on this machine`)
       .option("--disabled", `Only ${labels.many} you've disabled`)
@@ -131,73 +138,101 @@ export function registerEnvironment(program: Command, context: CommandContext) {
           context.inventory(),
           options.available || !narrowed
             ? context.searchCatalog(kind).catch((error: unknown) => {
-                if (onlyAvailable) throw error;
+                if (onlyAvailable) {
+                  throw error;
+                }
+
                 catalogProblem = friendlyMessage(error);
+
                 return [];
               })
             : [],
         ]);
+
         const items = inventory.items.filter((item) => item.kind === kind);
         const listing = assetListing(items, rows, options);
-        if (context.mode.json) return context.write(json(listing));
-        if (inventory.offline)
+        if (context.mode.json) {
+          return context.write(json(listing));
+        }
+
+        if (inventory.offline) {
           context.write(dim(`Showing local state only: ${inventory.offline}`));
-        else if (catalogProblem)
+        } else if (catalogProblem) {
           context.write(
             dim(`Couldn't load available ${labels.many}: ${catalogProblem}`),
           );
+        }
+
         if (!listing.length) {
           if (narrowed) {
             context.write(`No ${labels.many} match that filter.`);
+
             return;
           }
+
           if (catalogProblem || inventory.offline) {
             context.write(`No ${labels.many} on this machine yet.`);
+
             return;
           }
+
           context.write(`No ${labels.many} yet.`);
           context.write(hint(addCommand, "Next"));
+
           return;
         }
+
         const start = (options.page - 1) * options.limit;
         const page = listing.slice(start, start + options.limit);
         if (!page.length) {
           context.write(
             `Page ${options.page} is empty. Choose a page from 1 to ${Math.ceil(listing.length / options.limit)}.`,
           );
+
           return;
         }
-        for (const line of renderInventory(page, options)) context.write(line);
+
+        for (const line of renderInventory(page, options)) {
+          context.write(line);
+        }
+
         if (listing.length > options.limit) {
           const flags = (["installed", "disabled", "available"] as const)
             .filter((flag) => options[flag])
             .map((flag) => ` --${flag}`)
             .join("");
+
           context.write(
             "\n" +
               dim(
                 `Showing ${start + 1}–${start + page.length} of ${listing.length}`,
               ),
           );
-          if (start + page.length < listing.length)
+
+          if (start + page.length < listing.length) {
             context.write(
               hint(
                 `barndog ${group} list${flags} --page ${options.page + 1}`,
                 "Next",
               ),
             );
+          }
         }
+
         const onThisMachine = page.filter(
           (item): item is InventoryItem => item.state !== "available",
         );
+
         const hints = inventoryHints(onThisMachine);
-        if (hints.length) context.write(["", ...hints].join("\n"));
-        else if (!options.paths && onThisMachine.length)
+        if (hints.length) {
+          context.write(["", ...hints].join("\n"));
+        } else if (!options.paths && onThisMachine.length) {
           context.write(
             "\n" +
               hint(`barndog ${group} list --paths`, "Tip") +
               dim("  to see where each one lives"),
           );
+        }
       });
 
     const search = async (
@@ -209,13 +244,15 @@ export function registerEnvironment(program: Command, context: CommandContext) {
         context.searchCatalog(assetKind),
         context.inventory().catch(() => undefined),
       ]);
+
       const selected = new Set(
         inventory?.items
           .filter((item) => item.state !== "removing")
           .map((item) => item.id) ?? [],
       );
+
       // JSON gets the same matches the table shows, all pages at once.
-      if (context.mode.json)
+      if (context.mode.json) {
         return context.write(
           json(
             filterAssets(rows, { ...options, search: query }).map((row) => ({
@@ -224,13 +261,16 @@ export function registerEnvironment(program: Command, context: CommandContext) {
             })),
           ),
         );
+      }
+
       for (const line of renderCatalog(
         rows,
         { ...options, search: query },
         `barndog ${group} search`,
         selected,
-      ))
+      )) {
         context.write(line);
+      }
     };
 
     assetListOptions(
@@ -264,7 +304,7 @@ export function registerEnvironment(program: Command, context: CommandContext) {
             decisions?: string;
           },
         ) => {
-          if (name)
+          if (name) {
             return runSelection(context, (resolution) =>
               context.changeAsset("install", {
                 ...options,
@@ -273,24 +313,30 @@ export function registerEnvironment(program: Command, context: CommandContext) {
                 resolution,
               }),
             );
+          }
+
           requireArguments(
             context,
             `barndog ${group} install <name> --origin <origin>`,
           );
+
           const [rows, inventory] = await Promise.all([
             context.searchCatalog(kind),
             context.inventory(),
           ]);
+
           const selected = new Set(
             inventory.items
               .filter((item) => item.state !== "removing")
               .map((item) => item.id),
           );
+
           const inOrigin = rows.filter(
             (row) =>
               !options.origin ||
               originLabel(row.origin) === options.origin.replace(":", "/"),
           );
+
           const ids = await pickMany(
             `Choose ${labels.many} to install`,
             inOrigin
@@ -307,6 +353,7 @@ export function registerEnvironment(program: Command, context: CommandContext) {
                 : `No ${labels.many} available to install. Add one with ${addCommand}.`,
             },
           );
+
           await runSelection(context, (resolution) =>
             context.changeAssets("install", {
               kind,
@@ -319,7 +366,7 @@ export function registerEnvironment(program: Command, context: CommandContext) {
         },
       );
 
-    for (const action of ["remove", "enable", "disable"] as const)
+    for (const action of ["remove", "enable", "disable"] as const) {
       command
         .command(`${action} [name]`)
         .description(
@@ -332,7 +379,7 @@ export function registerEnvironment(program: Command, context: CommandContext) {
         .option("--origin <origin>", ORIGIN_HELP)
         .action(
           async (name: string | undefined, options: { origin?: string }) => {
-            if (name)
+            if (name) {
               return runSelection(context, (resolution) =>
                 context.changeAsset(action, {
                   ...options,
@@ -341,12 +388,15 @@ export function registerEnvironment(program: Command, context: CommandContext) {
                   resolution,
                 }),
               );
+            }
+
             requireArguments(context, `barndog ${group} ${action} <name>`);
             const items = localCandidates(
               (await context.inventory()).items,
               kind,
               action,
             );
+
             const chosen = await pickMany(
               `Choose ${labels.many} to ${action}`,
               items.map(localChoice),
@@ -357,6 +407,7 @@ export function registerEnvironment(program: Command, context: CommandContext) {
                     : `No ${labels.many} to ${action} on this machine.`,
               },
             );
+
             await runSelection(context, (resolution) =>
               context.changeAssets(action, {
                 kind,
@@ -366,6 +417,7 @@ export function registerEnvironment(program: Command, context: CommandContext) {
             );
           },
         );
+    }
 
     command
       .command("rename [name]")
@@ -388,6 +440,7 @@ export function registerEnvironment(program: Command, context: CommandContext) {
               context,
               `barndog ${group} rename <name> --as <new-name>`,
             );
+
             const item = await pickOne(
               `Choose ${labels.a} to rename`,
               localCandidates(
@@ -397,6 +450,7 @@ export function registerEnvironment(program: Command, context: CommandContext) {
               ).map(localChoice),
               { empty: `No ${labels.many} to rename on this machine.` },
             );
+
             target = item.id;
             const [type = "", slug = ""] = item.origin.split("/");
             suggestion = prefixedName({
@@ -404,6 +458,7 @@ export function registerEnvironment(program: Command, context: CommandContext) {
               origin: { type, slug },
             });
           }
+
           const as = options.reset
             ? undefined
             : await ask(
@@ -413,6 +468,7 @@ export function registerEnvironment(program: Command, context: CommandContext) {
                 "--as",
                 suggestion,
               );
+
           await runSelection(context, () =>
             context.renameAsset({
               kind,
@@ -422,6 +478,7 @@ export function registerEnvironment(program: Command, context: CommandContext) {
               reset: options.reset,
             }),
           );
+
           // A clash prompt during the sync may have chosen a different name.
           const renamed = target;
           const item = (await context.inventory()).items.find(
@@ -430,16 +487,18 @@ export function registerEnvironment(program: Command, context: CommandContext) {
               [entry.id, entry.name, entry.installedName].includes(renamed) &&
               (!options.origin || entry.origin === options.origin),
           );
-          if (item && !context.mode.json)
+
+          if (item && !context.mode.json) {
             context.write(
               item.installedName === item.name
                 ? `${ok("✔")} ${bold(item.name)} uses its published name.`
                 : `${ok("✔")} ${bold(item.name)} from ${item.origin} is installed as ${bold(item.installedName)}.`,
             );
+          }
         },
       );
 
-    for (const action of ["fork", "promote"] as const)
+    for (const action of ["fork", "promote"] as const) {
       command
         .command(`${action} [name]`)
         .description(
@@ -470,6 +529,7 @@ export function registerEnvironment(program: Command, context: CommandContext) {
                 context,
                 `barndog ${group} ${action} <name> --origin <origin> --target <origin> --name <new-name>`,
               );
+
               const row = await pickOne(
                 `Choose ${labels.a} to ${action}`,
                 (await context.searchCatalog(kind)).map((row) => ({
@@ -478,9 +538,11 @@ export function registerEnvironment(program: Command, context: CommandContext) {
                   hint: `${originLabel(row.origin)} · ${clean(row.version.description)}`,
                 })),
               );
+
               name = row.name;
               origin = originLabel(row.origin);
             }
+
             origin = await ask(context, origin, "Current scope", "--origin");
             const target = await ask(
               context,
@@ -489,6 +551,7 @@ export function registerEnvironment(program: Command, context: CommandContext) {
               "--target",
               action === "fork" ? "me" : undefined,
             );
+
             const newName = await ask(
               context,
               options.name,
@@ -496,6 +559,7 @@ export function registerEnvironment(program: Command, context: CommandContext) {
               "--name",
               name,
             );
+
             const input = {
               kind,
               name,
@@ -504,6 +568,7 @@ export function registerEnvironment(program: Command, context: CommandContext) {
               newName,
               key: options.key,
             };
+
             const outcome =
               action === "fork"
                 ? ({
@@ -511,18 +576,30 @@ export function registerEnvironment(program: Command, context: CommandContext) {
                     promotion: await context.fork(input),
                   } as const)
                 : await context.promote(input);
+
             if (outcome.outcome === "moved") {
-              if (context.mode.json) return context.write(json(outcome.move));
-              for (const line of renderMove(outcome.move)) context.write(line);
+              if (context.mode.json) {
+                return context.write(json(outcome.move));
+              }
+
+              for (const line of renderMove(outcome.move)) {
+                context.write(line);
+              }
+
               return;
             }
+
             const result = outcome.promotion;
-            if (context.mode.json) return context.write(json(result));
+            if (context.mode.json) {
+              return context.write(json(result));
+            }
+
             context.write(
               result.changeId
                 ? `${ok("✔")} Proposed ${bold(newName)} for ${target}. A reviewer must merge the Suggested Change.`
                 : `${ok("✔")} Created ${bold(newName)} in ${target}.`,
             );
+
             context.write(
               result.changeId
                 ? hint(`barndog changes show ${result.changeId}`)
@@ -532,7 +609,9 @@ export function registerEnvironment(program: Command, context: CommandContext) {
             );
           },
         );
+    }
   }
+
   registerSets(program, context);
 }
 
@@ -550,6 +629,7 @@ function registerSets(program: Command, context: CommandContext) {
     .description(
       "Subscribe to everything a team, repository or the organization shares",
     );
+
   const load = () => context.listSets();
   const label = (scope: { type: string; slug?: string; id: string }) =>
     originLabel(scope);
@@ -562,7 +642,10 @@ function registerSets(program: Command, context: CommandContext) {
       ),
   ).action(async (options: ListOptions) => {
     const result = await load();
-    if (context.mode.json) return context.write(json(result));
+    if (context.mode.json) {
+      return context.write(json(result));
+    }
+
     const subscribed = result.subscriptions.map((subscription) => ({
       subscription,
       scope: result.available.find(
@@ -570,6 +653,7 @@ function registerSets(program: Command, context: CommandContext) {
           s.id === subscription.scope.id && s.type === subscription.scope.type,
       ),
     }));
+
     context.write(`${section("Subscribed")} ${dim(`(${subscribed.length})`)}`);
     context.write(
       subscribed.length
@@ -588,8 +672,10 @@ function registerSets(program: Command, context: CommandContext) {
           ).join("\n")
         : dim("  None yet."),
     );
+
     const terms =
       options.search?.toLowerCase().split(/\s+/).filter(Boolean) ?? [];
+
     const available = result.available
       .filter(
         (scope) =>
@@ -607,6 +693,7 @@ function registerSets(program: Command, context: CommandContext) {
           ),
       )
       .sort((a, b) => label(a).localeCompare(label(b)));
+
     const start = (options.page - 1) * options.limit;
     const page = available.slice(start, start + options.limit);
     context.write("");
@@ -619,8 +706,11 @@ function registerSets(program: Command, context: CommandContext) {
           ).join("\n")
         : dim("  Nothing else to subscribe to."),
     );
-    if (start + options.limit < available.length)
+
+    if (start + options.limit < available.length) {
       context.write(hint(`barndog sets list --page ${options.page + 1}`));
+    }
+
     context.write("");
     context.write(hint("barndog sets install", "Tip") + dim("  to subscribe"));
   });
@@ -634,6 +724,7 @@ function registerSets(program: Command, context: CommandContext) {
     empty: string,
   ) => {
     const result = await load();
+
     return pickOne(
       message,
       result.available
@@ -671,7 +762,8 @@ function registerSets(program: Command, context: CommandContext) {
         "--origin <origin>",
         "Scope, such as org, team/engineering or repo/web-app",
       );
-    if (action === "install")
+
+    if (action === "install") {
       command
         .addOption(
           new Option(
@@ -686,6 +778,8 @@ function registerSets(program: Command, context: CommandContext) {
           ).choices(["preserve", "clear"]),
         )
         .option("--decisions <file>", "JSON per-asset override choices");
+    }
+
     command.action(async (scope: string | undefined, options: SetOptions) => {
       let origin = scope ?? options.origin;
       if (!origin) {
@@ -700,6 +794,7 @@ function registerSets(program: Command, context: CommandContext) {
             : "You have no subscriptions yet.",
         );
       }
+
       return action === "install"
         ? runSetInstall(context, { ...options, origin })
         : runSelection(context, (resolution) =>
@@ -731,11 +826,13 @@ function registerSets(program: Command, context: CommandContext) {
           scope && name === "switch-team" && !scope.includes("/")
             ? `team/${scope}`
             : scope;
+
         if (!origin) {
           requireArguments(
             context,
             "barndog sets switch <team/slug|repo/slug>",
           );
+
           origin = await chooseScope(
             "Switch to",
             (candidate, subscribed) =>
@@ -744,10 +841,12 @@ function registerSets(program: Command, context: CommandContext) {
             "There is no other team or repository to switch to.",
           );
         }
+
         await runSelection(context, (resolution) =>
           context.switchSet({ ...options, origin, resolution }),
         );
       });
+
   switchCommand("switch", false);
   switchCommand("switch-team", true);
 }

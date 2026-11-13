@@ -72,7 +72,10 @@ async function readSources(folder: string): Promise<Sources> {
       JSON.parse(await readFile(join(folder, SOURCES_FILE), "utf8")),
     );
   } catch (error) {
-    if (errorCode(error) === "ENOENT") return { imports: [] };
+    if (errorCode(error) === "ENOENT") {
+      return { imports: [] };
+    }
+
     throw error;
   }
 }
@@ -90,8 +93,12 @@ export async function importedFrom(
   home = homedir(),
 ) {
   const settings = await readSettings(home);
-  if (!settings || !settings.localWorkspace) return null;
+  if (!settings || !settings.localWorkspace) {
+    return null;
+  }
+
   const { imports } = await readSources(settings.localWorkspace.path);
+
   return imports.find((e) => e.kind === kind && e.name === name) ?? null;
 }
 
@@ -100,18 +107,26 @@ export async function ensureLocalWorkspace(
   home: string,
 ): Promise<LocalWorkspace> {
   const settings = await readSettings(home);
-  if (!settings) throw new SetupRequiredError();
-  if (settings.localWorkspace) return settings.localWorkspace;
+  if (!settings) {
+    throw new SetupRequiredError();
+  }
+
+  if (settings.localWorkspace) {
+    return settings.localWorkspace;
+  }
+
   const workspace = await localWorkspace(home);
   const kept = await localRepoSource(workspace, home).model();
   const next: Settings = {
     ...settings,
     localWorkspace: workspace,
   };
+
   await saveSettings(
     withSelection(next, withLocalSubscription(selectionState(next), kept)),
     home,
   );
+
   return workspace;
 }
 
@@ -120,17 +135,26 @@ function folderFor(kind: PackageKind, name: string) {
     name,
     `barndog ${assetKinds[kind].command} add <source> --as <new-name>`,
   );
+
   return assetPath("org", kind, name);
 }
 
 async function assertFree(root: string, kind: PackageKind, name: string) {
   try {
-    if (!(await readdir(root)).length) return;
+    if (!(await readdir(root)).length) {
+      return;
+    }
   } catch (error) {
     const code = errorCode(error);
-    if (code === "ENOENT") return;
-    if (code !== "ENOTDIR") throw error;
+    if (code === "ENOENT") {
+      return;
+    }
+
+    if (code !== "ENOTDIR") {
+      throw error;
+    }
   }
+
   throw new CliError(
     `A local ${assetKinds[kind].one} named ${name} already exists at ${root}.`,
     `barndog ${assetKinds[kind].command} add <source> --as <new-name>`,
@@ -161,6 +185,7 @@ export async function saveImported(
     sources.imports = sources.imports.filter(
       (entry) => !(entry.kind === input.kind && entry.name === input.name),
     );
+
     sources.imports.push({
       kind: input.kind,
       name: input.name,
@@ -172,8 +197,10 @@ export async function saveImported(
       ...(input.files ? { files: input.files } : {}),
       fingerprint: packageFingerprint(input.entries),
     });
+
     await writeSources(workspace.path, sources);
   }
+
   return { path: target };
 }
 
@@ -189,27 +216,33 @@ function latestEntries(
   current: PackageEntry[],
 ) {
   const all = folderEntries(remote, record.root);
-  if (!all.length)
+  if (!all.length) {
     throw new CliError(
       `${record.root || "That folder"} no longer exists in ${record.url}.`,
     );
+  }
+
   const { files } = record;
   if (files) {
     const manifest = defined(
       current.find((entry) => entry.path === "hook.yaml"),
       `${record.name} has no hook.yaml`,
     );
+
     return [...all.filter((entry) => files.includes(entry.path)), manifest];
   }
+
   if (record.kind === "skill") {
     const manifestName = /^name:\s*(\S+)/m.exec(
       all.find((entry) => entry.path === "SKILL.md")?.data.toString("utf8") ??
         "",
     )?.[1];
+
     return manifestName && manifestName !== record.name
       ? renameSkillEntries(all, record.name)
       : all;
   }
+
   return all;
 }
 
@@ -221,11 +254,13 @@ async function applyUpdate(
 ) {
   const target = join(folder, folderFor(record.kind, record.name));
   const current = await readDirectory(target);
-  if (packageFingerprint(current) !== record.fingerprint && !options.force)
+  if (packageFingerprint(current) !== record.fingerprint && !options.force) {
     throw new CliError(
       `${record.name} was edited locally, so updating would lose those edits.`,
       `barndog ${assetKinds[record.kind].command} update ${record.name} --force`,
     );
+  }
+
   return fetchRemote(
     { url: record.url, rest: null, ref: record.ref, path: record.root },
     { allowPrompt: options.allowPrompt },
@@ -239,6 +274,7 @@ async function applyUpdate(
         record.fingerprint = packageFingerprint(next);
         await writeSources(folder, sources);
       }
+
       return { name: record.name, commit: remote.commit, changes };
     },
   );
@@ -252,8 +288,10 @@ export async function updateImported(
   home = homedir(),
 ) {
   const settings = await readSettings(home);
-  if (!settings || !settings.localWorkspace)
+  if (!settings || !settings.localWorkspace) {
     throw new CliError("This machine has no assets added from a repo.");
+  }
+
   const folder = settings.localWorkspace.path;
   const sources = await readSources(folder);
   const records = sources.imports.filter(
@@ -262,18 +300,23 @@ export async function updateImported(
       // Older versions could record a name sync ignores; it mustn't stop the others.
       (name ? entry.name === name : validAssetName(entry.name)),
   );
-  if (name && !records.length)
+
+  if (name && !records.length) {
     throw new CliError(
       `${name} wasn't added from a repo, so it has nothing to update from.`,
     );
+  }
+
   const results = [];
-  for (const record of records)
+  for (const record of records) {
     results.push(
       await applyUpdate(folder, sources, record, {
         ...options,
         allowPrompt: true,
       }),
     );
+  }
+
   return results;
 }
 
@@ -287,14 +330,19 @@ export async function followImports(
   const sources = await readSources(folder);
   const followed = sources.imports.filter((entry) => entry.mode === "auto");
   const notices: string[] = [];
-  if (!followed.length || policy === "none") return notices;
+  if (!followed.length || policy === "none") {
+    return notices;
+  }
+
   if (
     policy === "auto" &&
     sources.checkedAt &&
     Date.now() - Date.parse(sources.checkedAt) < FOLLOW_INTERVAL_MS
-  )
+  ) {
     return notices;
-  for (const record of followed)
+  }
+
+  for (const record of followed) {
     await applyUpdate(folder, sources, record, { allowPrompt: false }).catch(
       (error: Error) => {
         notices.push(
@@ -302,7 +350,10 @@ export async function followImports(
         );
       },
     );
+  }
+
   sources.checkedAt = new Date().toISOString();
   await writeSources(folder, sources);
+
   return notices;
 }

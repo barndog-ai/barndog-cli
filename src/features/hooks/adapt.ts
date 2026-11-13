@@ -37,6 +37,7 @@ export type AdaptInput = {
 /** "Codex", "Codex and Cursor", "Claude Code, Codex or Cursor". */
 export function toolNames(tools: readonly Harness[], joiner = "and") {
   const names = tools.map((tool) => adapters[tool].name);
+
   return names.length < 2
     ? (names[0] ?? "")
     : `${names.slice(0, -1).join(", ")} ${joiner} ${names.at(-1)}`;
@@ -60,7 +61,10 @@ export function adaptPrompt(input: AdaptInput) {
 
 async function resolveHook(name: string, origin: string, home: string) {
   const settings = await readSettings(home);
-  if (!settings) throw new SetupRequiredError();
+  if (!settings) {
+    throw new SetupRequiredError();
+  }
+
   const local = settings.localWorkspace;
   const git = settings.gitWorkspace;
   const shared = Boolean(git || settings.connection);
@@ -69,8 +73,12 @@ async function resolveHook(name: string, origin: string, home: string) {
     const selected = await selectAsset("hook", name, origin, home);
     const asset = hookSchema.parse(selected.asset);
     const implementations: Implementations = {};
-    for (const row of asset.compatibility)
-      if (row.implementation) implementations[row.harness] = row.implementation;
+    for (const row of asset.compatibility) {
+      if (row.implementation) {
+        implementations[row.harness] = row.implementation;
+      }
+    }
+
     return {
       name: asset.name,
       implementations,
@@ -82,9 +90,11 @@ async function resolveHook(name: string, origin: string, home: string) {
       } satisfies AdaptPlace,
     };
   }
+
   const asset = selectRepoAsset(await repo.model(), "hook", name, origin);
   const { implementations } = hookMetadata(asset.entries);
   const inFolder = local && (origin === LOCAL_ORIGIN || !shared);
+
   return {
     name: asset.name,
     implementations,
@@ -126,19 +136,25 @@ export async function adaptHook(
   const hook = await resolveHook(name, origin, home);
   const written = harnesses.filter((h) => hook.implementations[h]);
   const covered = targets?.filter((h) => written.includes(h)) ?? [];
-  if (covered.length)
+  if (covered.length) {
     throw new CliError(
       `${hook.name} already has settings for ${toolNames(covered)}.`,
     );
+  }
+
   const missing = harnesses.filter(
     (h) => (targets ?? hook.machine).includes(h) && !written.includes(h),
   );
-  if (!missing.length)
+
+  if (!missing.length) {
     return { name: hook.name, written, targets: [], prompt: null };
+  }
+
   const record =
     hook.place.type === "folder"
       ? await importedFrom("hook", hook.name, home)
       : null;
+
   return {
     name: hook.name,
     written,

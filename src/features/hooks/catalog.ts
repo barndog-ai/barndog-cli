@@ -14,6 +14,7 @@ export async function publishedHooks(
   const client = apiClient(conn.server, home),
     hooks: Hook[] = [],
     seen = new Set<string>();
+
   let cursor: string | undefined;
   do {
     const page = hookListSchema.parse(
@@ -23,14 +24,25 @@ export async function publishedHooks(
         })
       ).data,
     );
-    if (page.hooks.some((hook) => hook.organizationId !== conn.organizationId))
+
+    if (
+      page.hooks.some((hook) => hook.organizationId !== conn.organizationId)
+    ) {
       throw new Error("Invalid catalog organization");
+    }
+
     hooks.push(...page.hooks);
-    if (page.nextCursor && seen.has(page.nextCursor))
+    if (page.nextCursor && seen.has(page.nextCursor)) {
       throw new Error("Invalid catalog pagination");
-    if (page.nextCursor) seen.add(page.nextCursor);
+    }
+
+    if (page.nextCursor) {
+      seen.add(page.nextCursor);
+    }
+
     cursor = page.nextCursor ?? undefined;
   } while (cursor);
+
   return hooks;
 }
 

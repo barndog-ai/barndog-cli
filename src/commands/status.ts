@@ -15,7 +15,7 @@ export function registerStatus(program: Command, context: CommandContext) {
     .action(async (options: { paths?: boolean }) => {
       const working = await context.workingStatus();
       const inventory = await context.inventory();
-      if (context.mode.json)
+      if (context.mode.json) {
         return context.write(
           json(
             "changes" in working
@@ -23,10 +23,16 @@ export function registerStatus(program: Command, context: CommandContext) {
               : inventory,
           ),
         );
+      }
+
       if ("changes" in working) {
-        for (const line of renderCollaboration(working)) context.write(line);
+        for (const line of renderCollaboration(working)) {
+          context.write(line);
+        }
+
         context.write("");
       }
+
       context.write(`${heading("status")}\n`);
       for (const line of fields([
         ["Workspace", inventory.server ?? dim("local only")],
@@ -42,10 +48,14 @@ export function registerStatus(program: Command, context: CommandContext) {
               : dim("off")
             : undefined,
         ],
-      ]))
+      ])) {
         context.write(line);
-      if (inventory.offline)
+      }
+
+      if (inventory.offline) {
         context.write(dim(`\nShowing local state only: ${inventory.offline}`));
+      }
+
       for (const kind of assetKindList) {
         const items = inventory.items.filter((item) => item.kind === kind);
         context.write("");
@@ -56,26 +66,35 @@ export function registerStatus(program: Command, context: CommandContext) {
               `  None. ${`barndog ${assetKinds[kind].command} install`} to add some.`,
             ),
           );
+
           continue;
         }
+
         for (const line of renderInventory(items, {
           heading: assetKinds[kind].many,
           paths: options.paths,
-        }))
+        })) {
           context.write(line);
+        }
       }
+
       const hints = inventoryHints(inventory.items);
       context.write("");
-      if (hints.length) for (const line of hints) context.write(line);
+      if (hints.length) {
+        for (const line of hints) {
+          context.write(line);
+        }
+      }
       // Without the workspace, BarnDog only knows what is installed, not whether it's current.
-      else if (inventory.offline)
+      else if (inventory.offline) {
         context.write(
           `${plural(inventory.items.length, "asset")} installed. ${dim("Couldn't check for updates; run barndog sync once the workspace is reachable.")}`,
         );
-      else
+      } else {
         context.write(
           `${ok("✔")} ${plural(inventory.items.length, "asset")} up to date.` +
             (options.paths ? "" : `  ${hint("barndog status --paths", "Tip")}`),
         );
+      }
     });
 }

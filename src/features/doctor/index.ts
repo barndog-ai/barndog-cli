@@ -38,8 +38,10 @@ async function gitChecks(workspace: GitWorkspace, home: string) {
     });
   } catch (error) {
     checks.push({ name: "Git access", status: "fail", ...failure(error) });
+
     return checks;
   }
+
   const state = await readFetchState(workspace.workspaceId, home);
   checks.push({
     name: "Last fetch",
@@ -49,11 +51,13 @@ async function gitChecks(workspace: GitWorkspace, home: string) {
       : "Never fetched.",
     fix: state.fetchedAt ? undefined : "barndog sync",
   });
+
   const protectedBranch = await branchProtected(
     workspace.url,
     workspace.branch,
   );
-  if (protectedBranch !== true)
+
+  if (protectedBranch !== true) {
     checks.push({
       name: "Branch protection",
       status: "warn",
@@ -62,6 +66,8 @@ async function gitChecks(workspace: GitWorkspace, home: string) {
           ? `${workspace.branch} isn't protected, so anyone who can push can install code on every teammate's machine. Protect it on the Git host.`
           : `BarnDog can't tell whether ${workspace.branch} is protected on this host. Make sure it is.`,
     });
+  }
+
   return checks;
 }
 
@@ -73,8 +79,10 @@ export async function doctor(home = homedir()): Promise<Check[]> {
     settings = await readSettings(home);
   } catch (error) {
     checks.push({ name: "Configuration", status: "fail", ...failure(error) });
+
     return checks;
   }
+
   if (!settings) {
     checks.push({
       name: "Configuration",
@@ -82,13 +90,16 @@ export async function doctor(home = homedir()): Promise<Check[]> {
       detail: "BarnDog isn't set up on this machine.",
       fix: "barndog init",
     });
+
     return checks;
   }
+
   checks.push({
     name: "Configuration",
     status: "ok",
     detail: settingsPath(home),
   });
+
   const detected = await detectHarnesses({ home });
   for (const harness of settings.harnesses) {
     const found = detected.find((d) => d.id === harness)?.evidence;
@@ -101,6 +112,7 @@ export async function doctor(home = homedir()): Promise<Check[]> {
       fix: found ? undefined : "barndog init",
     });
   }
+
   const connected = settings.connection;
   if (connected) {
     try {
@@ -118,16 +130,21 @@ export async function doctor(home = homedir()): Promise<Check[]> {
           ? { detail: "Not signed in.", fix: "barndog login" }
           : failure(error)),
       });
+
       return checks;
     }
   }
-  if (settings.gitWorkspace)
+
+  if (settings.gitWorkspace) {
     checks.push(...(await gitChecks(settings.gitWorkspace, home)));
+  }
+
   try {
     const events = await synchronize(undefined, home, undefined, {
       dryRun: true,
       prompt: false,
     });
+
     const pending = events.filter(
       (e) =>
         e.type === "installed" ||
@@ -135,6 +152,7 @@ export async function doctor(home = homedir()): Promise<Check[]> {
         e.type === "removed" ||
         (e.type === "native" && e.action !== "unchanged"),
     ).length;
+
     checks.push({
       name: "Installation",
       status: pending ? "warn" : "ok",
@@ -143,31 +161,40 @@ export async function doctor(home = homedir()): Promise<Check[]> {
         : "Everything selected is installed and up to date.",
       fix: pending ? "barndog sync" : undefined,
     });
+
     for (const event of events) {
-      if (event.type === "notice")
+      if (event.type === "notice") {
         checks.push({ name: "Notice", status: "warn", detail: event.message });
-      if (event.type === "clash")
+      }
+
+      if (event.type === "clash") {
         checks.push({
           name: "Name clash",
           status: "warn",
           detail: `${event.skipped.origin} ${event.skipped.name} is skipped: ${event.installed.origin} already installs ${assetKinds[event.kind].a} with that name.`,
           fix: `barndog ${assetKinds[event.kind].command} rename ${event.skipped.name} --origin ${event.skipped.origin} --as ${event.skipped.rename}`,
         });
-      if (event.type === "invalid")
+      }
+
+      if (event.type === "invalid") {
         checks.push({
           name: "Invalid asset",
           status: "warn",
           detail: `${event.kind} ${event.name}: ${event.reason}. The installed version stays in place.`,
         });
-      if (event.type === "unsupported")
+      }
+
+      if (event.type === "unsupported") {
         checks.push({
           name: "Unsupported",
           status: "warn",
           detail: `${event.kind} ${event.name} on ${adapters[event.harness].name}: ${event.reason}`,
         });
+      }
     }
   } catch (error) {
     checks.push({ name: "Installation", status: "fail", ...failure(error) });
   }
+
   return checks;
 }

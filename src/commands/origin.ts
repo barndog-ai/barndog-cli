@@ -17,23 +17,34 @@ export async function resolveOrigin(
   origin: string | undefined,
   usage: string,
 ): Promise<string> {
-  if (origin) return origin;
+  if (origin) {
+    return origin;
+  }
+
   const rows = (await context.searchCatalog(kind)).filter(
     (row) => row.name === name || row.id === name,
   );
-  if (!rows.length)
+
+  if (!rows.length) {
     throw new CliError(
       `No ${assetKinds[kind].one} named ${name} is available to you.`,
       `barndog ${assetKinds[kind].command} search ${name}`,
     );
+  }
+
   const labels = [...new Set(rows.map((row) => originLabel(row.origin)))];
   const single = only(labels);
-  if (single) return single;
-  if (!context.mode.interactive)
+  if (single) {
+    return single;
+  }
+
+  if (!context.mode.interactive) {
     throw new CliError(
       `${name} exists in several scopes: ${labels.join(", ")}. Choose one with --origin.`,
       `${usage} --origin ${labels[0]}`,
     );
+  }
+
   return pickOne(
     `${name} exists in several scopes. Which one?`,
     labels.map((label) => ({
@@ -53,14 +64,17 @@ export async function pickInstalled(
   kind: AssetKind,
   usage: string,
 ): Promise<{ name: string; origin: string }> {
-  if (!context.mode.interactive)
+  if (!context.mode.interactive) {
     throw new CliError(
       `Name the ${assetKinds[kind].one} to use, or run this in a terminal to choose from a list.`,
       usage,
     );
+  }
+
   const items = (await context.inventory()).items.filter(
     (item) => item.kind === kind && item.origin !== "—",
   );
+
   const item = await pickOne(
     `Choose a ${assetKinds[kind].one}`,
     items.map((item) => ({
@@ -70,5 +84,6 @@ export async function pickInstalled(
     })),
     { empty: `No ${assetKinds[kind].one}s are installed on this machine.` },
   );
+
   return { name: item.name, origin: item.origin };
 }

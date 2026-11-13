@@ -77,9 +77,13 @@ const isEnvironmentPreview = (value: unknown): value is EnvironmentPreview =>
 
 function files(value: unknown): string[] {
   const parsed = filesSchema.safeParse(value);
-  if (!parsed.success) return [];
+  if (!parsed.success) {
+    return [];
+  }
+
   return parsed.data.flatMap((file) => {
     const text = textContent(Buffer.from(file.content, "base64"));
+
     return [
       primary(`${safe(file.path)}${file.executable ? " (executable)" : ""}`),
       text === null ? "Binary file" : safe(text),
@@ -89,9 +93,14 @@ function files(value: unknown): string[] {
 
 /** Mode changes are worth a mention; a new file having no old mode isn't. */
 function executableNote(previous: unknown, next: unknown) {
-  if (previous === next || next === null || next === undefined) return "";
-  if (previous === null || previous === undefined)
+  if (previous === next || next === null || next === undefined) {
+    return "";
+  }
+
+  if (previous === null || previous === undefined) {
     return next ? "  executable" : "";
+  }
+
   return `  executable: ${safe(previous)} → ${safe(next)}`;
 }
 
@@ -101,25 +110,38 @@ export function renderCollaboration(
   options: { details?: boolean } = {},
 ): string[] {
   if (Array.isArray(value)) {
-    if (!value.length) return ["No changes."];
+    if (!value.length) {
+      return ["No changes."];
+    }
+
     return value.flatMap((row: unknown) => {
-      if (!isRecord(row)) return [safe(JSON.stringify(row, null, 2))];
-      if ("patch" in row)
+      if (!isRecord(row)) {
+        return [safe(JSON.stringify(row, null, 2))];
+      }
+
+      if ("patch" in row) {
         return [
           `${safe(row.kind)}  ${safe(row.path)}${row.binary ? " (binary)" : ""}${executableNote(row.oldExecutable, row.newExecutable)}`,
           safe(row.patch),
         ].filter(Boolean);
-      if ("status" in row)
+      }
+
+      if ("status" in row) {
         return [
           `${safe(row.name)}  ${safe(row.status)}  revision ${safe(row.revision)}\n  ${safe(row.id)}  ${safe(row.title)}`,
         ];
-      if ("number" in row)
+      }
+
+      if ("number" in row) {
         return [
           `v${safe(row.number)}  ${safe(row.commit)}\n  ${safe(row.description)}  published by ${safe(row.publisherName ?? row.publishedBy)}`,
         ];
+      }
+
       return [safe(JSON.stringify(row, null, 2))];
     });
   }
+
   const parsed = changeSchema.safeParse(value);
   if (parsed.success) {
     const change = parsed.data;
@@ -131,6 +153,7 @@ export function renderCollaboration(
         `${change.title}  ·  ${change.status}  ·  revision ${change.revision}`,
       ),
     ];
+
     if (options.details) {
       const shown = detailsSchema.safeParse(value);
       const details = shown.success ? shown.data : {};
@@ -139,37 +162,58 @@ export function renderCollaboration(
         `Author: ${person(change.authorId)}`,
         `Base: ${details.baseVersionNumber ? `v${details.baseVersionNumber}` : (change.baseVersionId ?? "new package")}`,
       );
-      for (const review of change.reviews)
+
+      for (const review of change.reviews) {
         rows.push(
           `Review: ${review.decision}  revision ${review.revision}  ${person(review.developerId)}`,
         );
+      }
+
       for (const thread of change.threads) {
         rows.push(
           `\nDiscussion ${thread.id}  revision ${thread.revision}${thread.outdated ? " (outdated)" : ""}${thread.resolved ? " (resolved)" : ""}${thread.path ? `  ${safe(thread.path)}:${thread.startLine}-${thread.endLine} (${thread.side})` : ""}`,
         );
-        for (const comment of thread.comments)
+
+        for (const comment of thread.comments) {
           rows.push(`  ${person(comment.authorId)}: ${safe(comment.body)}`);
-        if (thread.replacement !== null)
+        }
+
+        if (thread.replacement !== null) {
           rows.push("  Suggested replacement:", safe(thread.replacement));
+        }
       }
-      if (value && typeof value === "object" && "files" in value)
+
+      if (value && typeof value === "object" && "files" in value) {
         rows.push("", ...files(value.files));
+      }
     }
+
     return rows;
   }
+
   if (value && typeof value === "object") {
-    if (isEnvironmentPreview(value))
+    if (isEnvironmentPreview(value)) {
       return renderSyncOutput(value.events, {
         title: "preview",
         preview: true,
       });
-    if ("files" in value) return files(value.files);
-    if ("unchanged" in value) return ["Package unchanged."];
+    }
+
+    if ("files" in value) {
+      return files(value.files);
+    }
+
+    if ("unchanged" in value) {
+      return ["Package unchanged."];
+    }
+
     const pushedResult = pushedSchema.safeParse(value);
     if (pushedResult.success) {
       const pushed = pushedResult.data;
-      if (pushed.published)
+      if (pushed.published) {
         return [primary(`Pushed to ${safe(pushed.branch)}`), pushed.commit];
+      }
+
       return [
         primary(`Pushed ${safe(pushed.branch)}`),
         pushed.url
@@ -177,9 +221,11 @@ export function renderCollaboration(
           : "Open a pull request from this branch on your Git host.",
       ];
     }
+
     const statusResult = statusSchema.safeParse(value);
     if (statusResult.success) {
       const status = statusResult.data;
+
       return [
         primary(`${safe(status.name)}  ${safe(status.root)}`),
         `Base: ${status.baseCommit ? status.baseCommit.slice(0, 7) : status.baseVersion ? `v${status.baseVersion}` : "new package"}`,
@@ -207,9 +253,11 @@ export function renderCollaboration(
         ),
       ];
     }
+
     const workingCopy = workingCopySchema.safeParse(value);
     if (workingCopy.success) {
       const result = workingCopy.data;
+
       return [
         `Working copy: ${safe(result.root)}`,
         ...(result.commit
@@ -225,7 +273,11 @@ export function renderCollaboration(
           : []),
       ];
     }
-    if ("resolved" in value) return [`Resolved: ${safe(value.resolved)}`];
+
+    if ("resolved" in value) {
+      return [`Resolved: ${safe(value.resolved)}`];
+    }
   }
+
   return [safe(JSON.stringify(value, null, 2))];
 }

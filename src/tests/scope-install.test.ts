@@ -8,22 +8,27 @@ function fixture() {
     name: "review",
     origin: { type: "repo", slug: "dashboard" },
   };
+
   const applied = () => ({ status: "applied" as const, events: [] });
   const context = {
     write: () => {},
     installSet: async (options: object) => {
       calls.push({ action: "install", options });
+
       return applied();
     },
     previewSet: async (origin: string) => {
       calls.push({ action: "preview", options: { origin } });
+
       return { assets: [asset], selectedAssetIds: [] } as never;
     },
     installSetAssets: async (options: object) => {
       calls.push({ action: "install-assets", options });
+
       return applied();
     },
   };
+
   return { context, calls, asset };
 }
 
@@ -36,6 +41,7 @@ test("scope install requires a mode outside a terminal and explicit modes never 
       { interactive: false },
     ),
   ).rejects.toThrow(/--mode/);
+
   expect(f.calls).toStrictEqual([]);
   await runSetInstall(
     f.context,
@@ -47,6 +53,7 @@ test("scope install requires a mode outside a terminal and explicit modes never 
       },
     },
   );
+
   expect(f.calls).toStrictEqual([
     {
       action: "install",
@@ -65,24 +72,29 @@ test("scope install prompts for a mode and custom selection applies once", async
       mode: async () => "custom",
       assets: async (assets) => {
         expect(assets).toStrictEqual([f.asset]);
+
         return [f.asset.id];
       },
     },
   );
+
   expect(f.calls.map((call) => call.action)).toStrictEqual([
     "preview",
     "install-assets",
   ]);
+
   expect(f.calls[1]!.options).toStrictEqual({
     origin: "repo/dashboard",
     assetIds: [f.asset.id],
   });
+
   f.calls.length = 0;
   await runSetInstall(
     f.context,
     { origin: "repo/dashboard" },
     { interactive: true, mode: async () => "recommended" },
   );
+
   expect(f.calls).toStrictEqual([
     {
       action: "install",
@@ -102,6 +114,7 @@ test("empty or cancelled custom selection never writes", async () => {
     { origin: "repo/dashboard" },
     { interactive: true, mode: async () => "custom", assets: async () => [] },
   );
+
   expect(f.calls.map((call) => call.action)).toStrictEqual(["preview"]);
   f.calls.length = 0;
   await expect(
@@ -117,5 +130,6 @@ test("empty or cancelled custom selection never writes", async () => {
       },
     ),
   ).rejects.toThrow(/cancelled/);
+
   expect(f.calls.map((call) => call.action)).toStrictEqual(["preview"]);
 });

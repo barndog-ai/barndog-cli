@@ -66,6 +66,7 @@ const writeSchema = z.union([
     })
     .strict(),
 ]);
+
 const journalSchema = z
   .object({
     version: z.literal(1),
@@ -80,16 +81,22 @@ const journalSchema = z
     workspaceId: z.uuid().optional(),
   })
   .strict();
+
 const locks = new AsyncLocalStorage<ReadonlySet<string>>();
 
 export async function fileText(path: string): Promise<string | null> {
   try {
     const info = await lstat(path);
-    if (!info.isFile() || info.isSymbolicLink())
+    if (!info.isFile() || info.isSymbolicLink()) {
       throw new Error(`Refusing non-regular configuration file: ${path}`);
+    }
+
     return await readFile(path, "utf8");
   } catch (error) {
-    if (errorCode(error) === "ENOENT") return null;
+    if (errorCode(error) === "ENOENT") {
+      return null;
+    }
+
     throw error;
   }
 }
@@ -97,13 +104,18 @@ export async function fileText(path: string): Promise<string | null> {
 export async function linkTarget(path: string): Promise<string | null> {
   try {
     const info = await lstat(path);
-    if (!info.isSymbolicLink())
+    if (!info.isSymbolicLink()) {
       throw new Error(
         `Existing unmanaged or externally changed Skill: ${path}`,
       );
+    }
+
     return resolve(dirname(path), await readlink(path));
   } catch (error) {
-    if (errorCode(error) === "ENOENT") return null;
+    if (errorCode(error) === "ENOENT") {
+      return null;
+    }
+
     throw error;
   }
 }
@@ -128,10 +140,13 @@ function validateWrites(writes: Write[], home: string) {
       nativeFile(h, "hook", home),
     ]),
   ]);
+
   const paths = new Set<string>();
   for (const write of writes) {
-    if (paths.has(write.path) || resolve(write.path) !== write.path)
+    if (paths.has(write.path) || resolve(write.path) !== write.path) {
       throw new Error("Invalid or duplicate sync destination");
+    }
+
     paths.add(write.path);
     if (write.kind === "tree") {
       if (
@@ -142,10 +157,13 @@ function validateWrites(writes: Write[], home: string) {
         (write.source !== null && !isAbsolute(write.source)) ||
         (write.after !== null) !== (write.source !== null) ||
         (write.rename !== null && !NAME.test(write.rename))
-      )
+      ) {
         throw new Error("Invalid sync journal destination; refusing recovery");
+      }
+
       continue;
     }
+
     if (
       write.kind === "file"
         ? !files.has(write.path)
@@ -153,8 +171,9 @@ function validateWrites(writes: Write[], home: string) {
             (h) => dirname(write.path) === skillDirectory(h, home),
           ) ||
           [write.before, write.after].some((v) => v !== null && !isAbsolute(v))
-    )
+    ) {
       throw new Error("Invalid sync journal destination; refusing recovery");
+    }
   }
 }
 
@@ -169,15 +188,22 @@ async function current(write: Write) {
 async function applyTree(write: Extract<Write, { kind: "tree" }>) {
   if (write.source === null) {
     await rm(write.path, { recursive: true, force: true });
+
     return;
   }
+
   // A folder kept in place has no other copy to restore; the next sync reinstalls it.
-  if (write.source === write.path) return;
+  if (write.source === write.path) {
+    return;
+  }
+
   const entries = await desiredEntries(write.source, write.rename);
-  if (packageFingerprint(entries) !== write.after)
+  if (packageFingerprint(entries) !== write.after) {
     throw new Error(
       `Cached package changed before installation: ${write.source}`,
     );
+  }
+
   await mirrorTree(write.path, entries);
 }
 
@@ -191,7 +217,10 @@ async function apply(
   // Check the entire recovery plan before writing any remaining destination.
   for (const write of writes) {
     // An interrupted in-place copy leaves a BarnDog-owned folder half written.
-    if (write.kind === "tree" && recovering) continue;
+    if (write.kind === "tree" && recovering) {
+      continue;
+    }
+
     const value = await current(write);
     if (
       value !== write.before &&
@@ -202,21 +231,29 @@ async function apply(
         write.before !== null &&
         write.after !== null
       )
-    )
+    ) {
       throw new Error(
         `Sync destination changed; preserve your edits before recovery: ${write.path}`,
       );
+    }
   }
+
   for (const [index, write] of writes.entries()) {
     const value = await current(write);
-    if (value === write.after) continue;
+    if (value === write.after) {
+      continue;
+    }
+
     if (write.kind === "tree") {
-      if (value !== write.before && !recovering)
+      if (value !== write.before && !recovering) {
         throw new Error(`Sync destination changed: ${write.path}`);
+      }
+
       await applyTree(write);
       await checkpoint?.(index);
       continue;
     }
+
     if (
       value !== write.before &&
       !(
@@ -225,16 +262,27 @@ async function apply(
         write.before !== null &&
         write.after !== null
       )
-    )
+    ) {
       throw new Error(`Sync destination changed: ${write.path}`);
+    }
+
     await mkdir(dirname(write.path), { recursive: true, mode: 0o700 });
     if (write.kind === "file") {
-      if (write.after === null) await unlink(write.path);
-      else await atomicFile(write.path, write.after);
+      if (write.after === null) {
+        await unlink(write.path);
+      } else {
+        await atomicFile(write.path, write.after);
+      }
     } else {
-      if (value !== null) await unlink(write.path);
-      if (write.after !== null) await symlink(write.after, write.path, "dir");
+      if (value !== null) {
+        await unlink(write.path);
+      }
+
+      if (write.after !== null) {
+        await symlink(write.after, write.path, "dir");
+      }
     }
+
     await checkpoint?.(index);
   }
 }
@@ -242,18 +290,25 @@ async function apply(
 export async function recover(home: string) {
   const path = join(home, ".barndog/pending-sync.json"),
     text = await fileText(path);
-  if (text === null) return false;
+
+  if (text === null) {
+    return false;
+  }
+
   const journal = journalSchema.parse(JSON.parse(text));
   if (journal.connection) {
     const actual = await connectionContext(journal.connection.server, home);
     if (
       actual.organizationId !== journal.connection.organizationId ||
       actual.developerId !== journal.connection.developerId
-    )
+    ) {
       throw new Error("Sync recovery belongs to another identity");
+    }
   }
+
   await apply(journal.writes, home, undefined, true);
   await unlink(path);
+
   return true;
 }
 
@@ -264,7 +319,10 @@ export async function transact(
   checkpoint?: (index: number) => Promise<void>,
 ) {
   writes = writes.filter((w) => w.before !== w.after);
-  if (!writes.length) return;
+  if (!writes.length) {
+    return;
+  }
+
   validateWrites(writes, home);
   const config = writes.find((w) => w.path === settingsPath(home));
   if (config?.before) {
@@ -273,11 +331,15 @@ export async function transact(
       ".barndog/migrations",
       `config-${createHash("sha256").update(config.before).digest("hex")}.yaml`,
     );
+
     const previous = await fileText(backup);
-    if (previous === null) await atomicFile(backup, config.before);
-    else if (previous !== config.before)
+    if (previous === null) {
+      await atomicFile(backup, config.before);
+    } else if (previous !== config.before) {
       throw new Error("Configuration migration backup was changed");
+    }
   }
+
   const path = join(home, ".barndog/pending-sync.json");
   await atomicFile(
     path,
@@ -287,6 +349,7 @@ export async function transact(
         : { version: 1, writes, connection: identity },
     ),
   );
+
   await apply(writes, home, checkpoint);
   await unlink(path);
 }
@@ -296,21 +359,35 @@ const INTERRUPTS: NodeJS.Signals[] = ["SIGINT", "SIGTERM", "SIGHUP"];
 const interruptions = new Set<() => void>();
 
 function interrupted(signal: NodeJS.Signals) {
-  for (const cleanup of interruptions) cleanup();
+  for (const cleanup of interruptions) {
+    cleanup();
+  }
+
   interruptions.clear();
-  for (const name of INTERRUPTS) process.removeListener(name, interrupted);
+  for (const name of INTERRUPTS) {
+    process.removeListener(name, interrupted);
+  }
+
   process.kill(process.pid, signal);
 }
 
 /** Runs `cleanup` if the process is told to stop; call the result once it's no longer needed. */
 export function cleanUpIfInterrupted(cleanup: () => void) {
-  if (!interruptions.size)
-    for (const name of INTERRUPTS) process.on(name, interrupted);
+  if (!interruptions.size) {
+    for (const name of INTERRUPTS) {
+      process.on(name, interrupted);
+    }
+  }
+
   interruptions.add(cleanup);
+
   return () => {
     interruptions.delete(cleanup);
-    if (!interruptions.size)
-      for (const name of INTERRUPTS) process.removeListener(name, interrupted);
+    if (!interruptions.size) {
+      for (const name of INTERRUPTS) {
+        process.removeListener(name, interrupted);
+      }
+    }
   };
 }
 
@@ -319,41 +396,59 @@ export async function locked<T>(
   run: () => Promise<T>,
 ): Promise<T> {
   home = resolve(home);
-  if (locks.getStore()?.has(home)) return run();
+  if (locks.getStore()?.has(home)) {
+    return run();
+  }
+
   const path = join(home, ".barndog/sync.lock");
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
   try {
     await mkdir(path);
   } catch (error) {
-    if (errorCode(error) !== "EEXIST") throw error;
+    if (errorCode(error) !== "EEXIST") {
+      throw error;
+    }
+
     const pid = Number(
       await readFile(join(path, "pid"), "utf8").catch(() => "0"),
     );
-    if (!pid)
+
+    if (!pid) {
       throw new Error(
         `Another sync is starting. If an old process crashed, check and remove ${path}`,
         { cause: error },
       );
+    }
+
     try {
       process.kill(pid, 0);
     } catch (failure) {
-      if (errorCode(failure) !== "ESRCH") throw failure;
+      if (errorCode(failure) !== "ESRCH") {
+        throw failure;
+      }
+
       await rm(path, { recursive: true });
+
       return locked(home, run);
     }
+
     throw new Error("Another BarnDog environment operation is running", {
       cause: error,
     });
   }
+
   const release = cleanUpIfInterrupted(() =>
     rmSync(path, { recursive: true, force: true }),
   );
+
   try {
     await writeFile(join(path, "pid"), String(process.pid), { mode: 0o600 });
+
     return await locks.run(
       new Set([...(locks.getStore() ?? []), home]),
       async () => {
         await recover(home);
+
         return run();
       },
     );

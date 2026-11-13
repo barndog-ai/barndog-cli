@@ -36,6 +36,7 @@ export function folderEntries(
   root: string,
 ): PackageEntry[] {
   const prefix = root ? `${root}/` : "";
+
   return remote.snapshot.entries
     .filter((entry) => entry.path.startsWith(prefix) && isBlob(entry.mode))
     .map((entry) => ({
@@ -72,11 +73,20 @@ export function discoverSkills(remote: RemoteRepo) {
   const skills: SkillCandidate[] = [];
   const skipped: Skipped[] = [];
   for (const entry of remote.snapshot.entries) {
-    if (fileName(entry.path) !== "SKILL.md" || !isBlob(entry.mode)) continue;
+    if (fileName(entry.path) !== "SKILL.md" || !isBlob(entry.mode)) {
+      continue;
+    }
+
     const root = parentOf(entry.path);
-    if (!inScope(remote, root) && !inScope(remote, entry.path)) continue;
+    if (!inScope(remote, root) && !inScope(remote, entry.path)) {
+      continue;
+    }
+
     try {
-      if (hasLink(remote, root)) throw new Error("It contains a symbolic link");
+      if (hasLink(remote, root)) {
+        throw new Error("It contains a symbolic link");
+      }
+
       const entries = validatePackageEntries(folderEntries(remote, root));
       const metadata = packageMetadata(entries);
       skills.push({ ...metadata, root, entries });
@@ -84,6 +94,7 @@ export function discoverSkills(remote: RemoteRepo) {
       skipped.push({ path: entry.path, reason: friendlyMessage(error) });
     }
   }
+
   return { skills, skipped };
 }
 
@@ -119,6 +130,7 @@ const fileName = (path: string) => path.slice(path.lastIndexOf("/") + 1);
 const extensionOf = (path: string) => {
   const name = fileName(path);
   const dot = name.lastIndexOf(".");
+
   return dot > 0 ? name.slice(dot) : "";
 };
 
@@ -152,6 +164,7 @@ export function plainCommand(script: string, executable: boolean) {
   const interpreter = executable
     ? ""
     : (interpreters[extensionOf(script)] ?? "");
+
   return `${interpreter}@@${script}`;
 }
 
@@ -161,27 +174,36 @@ function nativeHooks(entry: SnapshotEntry, text: string) {
   const parsed: unknown = entry.path.endsWith(".toml")
     ? parseToml(text)
     : parseJsonc(text);
+
   const found: NativeHook[] = [];
   for (const [event, groups] of Object.entries(
     asRecord(asRecord(parsed).hooks),
   )) {
-    if (!Array.isArray(groups)) continue;
+    if (!Array.isArray(groups)) {
+      continue;
+    }
+
     for (const group of groups.filter(isRecord)) {
       const matcher =
         typeof group.matcher === "string" && group.matcher
           ? group.matcher
           : undefined;
+
       const handlers = Array.isArray(group.hooks)
         ? group.hooks.filter(isRecord)
         : [group];
-      for (const handler of handlers)
+
+      for (const handler of handlers) {
         if (
           typeof handler.command === "string" &&
           (handler.type ?? "command") === "command"
-        )
+        ) {
           found.push({ event, matcher, command: handler.command });
+        }
+      }
     }
   }
+
   return found;
 }
 
@@ -208,14 +230,20 @@ export function scriptPath(token: string) {
 function rewriteCommand(command: string, blobs: string[], scope: string) {
   for (const token of command.split(/\s+/)) {
     const relative = scriptPath(token);
-    if (!relative || !relative.includes(".")) continue;
+    if (!relative || !relative.includes(".")) {
+      continue;
+    }
+
     const script =
       blobs.find((path) => path === relative) ??
       blobs.find((path) => scope && path === `${scope}/${relative}`) ??
       blobs.find((path) => path.endsWith(`/${relative}`));
-    if (script)
+
+    if (script) {
       return { script, command: command.replace(token, () => `@@${script}`) };
+    }
   }
+
   return null;
 }
 
@@ -223,16 +251,26 @@ export function discoverHooks(remote: RemoteRepo, fallbackName: string) {
   const packages: HookCandidate[] = [];
   const skipped: Skipped[] = [];
   for (const entry of remote.snapshot.entries) {
-    if (fileName(entry.path) !== "hook.yaml" || !isBlob(entry.mode)) continue;
+    if (fileName(entry.path) !== "hook.yaml" || !isBlob(entry.mode)) {
+      continue;
+    }
+
     const root = parentOf(entry.path);
-    if (!inScope(remote, root) && !inScope(remote, entry.path)) continue;
+    if (!inScope(remote, root) && !inScope(remote, entry.path)) {
+      continue;
+    }
+
     try {
-      if (hasLink(remote, root)) throw new Error("It contains a symbolic link");
+      if (hasLink(remote, root)) {
+        throw new Error("It contains a symbolic link");
+      }
+
       const entries = validatePackageEntries(
         folderEntries(remote, root),
         undefined,
         "hook.yaml",
       );
+
       const manifest = hookMetadata(entries);
       packages.push({
         type: "package",
@@ -245,36 +283,47 @@ export function discoverHooks(remote: RemoteRepo, fallbackName: string) {
       skipped.push({ path: entry.path, reason: friendlyMessage(error) });
     }
   }
-  if (packages.length) return { candidates: packages, skipped };
+
+  if (packages.length) {
+    return { candidates: packages, skipped };
+  }
+
   const blobEntries = remote.snapshot.entries.filter(
     (e) => isBlob(e.mode) && inScope(remote, e.path),
   );
+
   const blobPaths = blobEntries.map((e) => e.path);
   const implementations: Partial<Record<Harness, DraftEvent[]>> = {};
   for (const entry of blobEntries) {
     const harness = hookSettingsOwner(entry.path);
-    if (!harness) continue;
+    if (!harness) {
+      continue;
+    }
+
     let hooks: NativeHook[] = [];
     try {
       hooks = nativeHooks(entry, blobOf(remote, entry).toString("utf8"));
     } catch (error) {
       skipped.push({ path: entry.path, reason: friendlyMessage(error) });
     }
+
     for (const hook of hooks) {
       const rewritten = rewriteCommand(hook.command, blobPaths, remote.path);
-      if (!rewritten)
+      if (!rewritten) {
         skipped.push({
           path: entry.path,
           reason: `${hook.event}: "${hook.command}" doesn't run a script in this ${remote.path ? "folder" : "repo"}`,
         });
-      else
+      } else {
         (implementations[harness] ??= []).push({
           event: hook.event,
           matcher: hook.matcher,
           ...rewritten,
         });
+      }
     }
   }
+
   const scripts = [
     ...new Set([
       ...Object.values(implementations)
@@ -285,7 +334,11 @@ export function discoverHooks(remote: RemoteRepo, fallbackName: string) {
         .map((e) => e.path),
     ]),
   ];
-  if (!scripts.length) return { candidates: [], skipped };
+
+  if (!scripts.length) {
+    return { candidates: [], skipped };
+  }
+
   return {
     candidates: [
       {
@@ -304,12 +357,15 @@ const commonFolder = (paths: string[]) => {
   const parts = paths.map((path) => path.split("/").slice(0, -1));
   const first = parts[0] ?? [];
   let length = first.length;
-  for (const other of parts)
+  for (const other of parts) {
     while (
       length &&
       other.slice(0, length).join("/") !== first.slice(0, length).join("/")
-    )
+    ) {
       length--;
+    }
+  }
+
   return first.slice(0, length).join("/");
 };
 
@@ -327,6 +383,7 @@ export function buildHookPackage(
   const root = commonFolder(scripts);
   const relative = (path: string) =>
     root ? path.slice(root.length + 1) : path;
+
   // Helpers usually sit beside a script; a script at the repo root travels alone.
   const folders = [...new Set(scripts.map(parentOf))];
   const files = remote.snapshot.entries
@@ -343,16 +400,21 @@ export function buildHookPackage(
       data: blobOf(remote, entry),
       executable: entry.mode === "100755" || scripts.includes(entry.path),
     }));
+
   const implementations: HookManifest["implementations"] = {};
   for (const harness of harnesses) {
     const events = input.implementations[harness] ?? [];
-    if (!events.length) continue;
+    if (!events.length) {
+      continue;
+    }
+
     const byEvent: Record<string, unknown[]> = {};
     for (const draft of events) {
       const command = draft.command.replace(
         `@@${draft.script}`,
         () => `${ROOT_TOKEN}/${relative(draft.script)}`,
       );
+
       (byEvent[draft.event] ??= []).push(
         harness === "cursor"
           ? { command, ...(draft.matcher ? { matcher: draft.matcher } : {}) }
@@ -362,6 +424,7 @@ export function buildHookPackage(
             },
       );
     }
+
     implementations[harness] = {
       compatibility: "supported",
       scripts: [...new Set(events.map((e) => relative(e.script)))],
@@ -369,11 +432,13 @@ export function buildHookPackage(
       events: hookImplementationSchema.shape.events.parse(byEvent),
     };
   }
+
   const manifest = {
     name: input.name,
     description: input.description,
     implementations,
   };
+
   const entries: PackageEntry[] = [
     ...files.filter((file) => file.path !== "hook.yaml"),
     {
@@ -382,6 +447,8 @@ export function buildHookPackage(
       executable: false,
     },
   ];
+
   hookMetadata(validatePackageEntries(entries, undefined, "hook.yaml"));
+
   return { root, entries, files: files.map((file) => file.path) };
 }

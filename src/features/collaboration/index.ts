@@ -44,7 +44,10 @@ const developerNames = (home: string): Promise<Record<string, string>> =>
  * count it's kept when it really is content: a range that ends on an empty line.
  */
 export function selectedText(text: string, lines?: number) {
-  if (!text.endsWith("\n")) return text;
+  if (!text.endsWith("\n")) {
+    return text;
+  }
+
   return lines === undefined || text.split("\n").length > lines
     ? text.slice(0, -1)
     : text;
@@ -111,14 +114,18 @@ type Backend =
 
 async function backend(home: string, origin?: string): Promise<Backend> {
   const settings = await readSettings(home);
-  if (settings?.gitWorkspace)
+  if (settings?.gitWorkspace) {
     return { type: "git", workspace: settings.gitWorkspace };
+  }
+
   if (
     settings &&
     settings.localWorkspace &&
     (!settings.connection || origin === LOCAL_ORIGIN)
-  )
+  ) {
     return { type: "local", path: settings.localWorkspace.path };
+  }
+
   return { type: "cloud" };
 }
 
@@ -130,12 +137,17 @@ const noLocalReview = (path: string) =>
 
 async function cloudConnection(home: string, origin?: string) {
   const where = await backend(home, origin);
-  if (where.type === "git")
+  if (where.type === "git") {
     throw new CliError(
       "Reviews happen as pull requests on your Git host in a Git repo workspace.",
       "barndog status",
     );
-  if (where.type === "local") throw noLocalReview(where.path);
+  }
+
+  if (where.type === "local") {
+    throw noLocalReview(where.path);
+  }
+
   return connection(home);
 }
 
@@ -145,14 +157,19 @@ export async function createPackage(
   home = homedir(),
 ) {
   const where = await backend(home, target.origin);
-  if (where.type === "local") throw noLocalReview(where.path);
-  if (where.type === "git")
+  if (where.type === "local") {
+    throw noLocalReview(where.path);
+  }
+
+  if (where.type === "git") {
     return createGitAsset(
       where.workspace,
       { ...target, target: target.directory },
       cwd,
       home,
     );
+  }
+
   return createWorkspace(
     target.name,
     target.origin,
@@ -169,14 +186,19 @@ export async function pullPackage(
   home = homedir(),
 ) {
   const where = await backend(home, target.origin);
-  if (where.type === "local") throw noLocalReview(where.path);
-  if (where.type === "git")
+  if (where.type === "local") {
+    throw noLocalReview(where.path);
+  }
+
+  if (where.type === "git") {
     return pullGitAsset(
       where.workspace,
       { ...target, target: target.directory },
       cwd,
       home,
     );
+  }
+
   return pullSkill(
     target.name,
     target.origin,
@@ -189,7 +211,10 @@ export async function pullPackage(
 
 export async function updateWorkingCopy(cwd = process.cwd(), home = homedir()) {
   const where = await backend(home);
-  if (where.type === "local") throw noLocalReview(where.path);
+  if (where.type === "local") {
+    throw noLocalReview(where.path);
+  }
+
   return where.type === "git"
     ? updateGitWorkingCopy(cwd, home)
     : updateWorkspace(cwd, home);
@@ -204,13 +229,19 @@ export async function workingStatus(
   | EnvironmentStatus
 > {
   const where = await backend(home);
-  if (where.type === "local") return { mode: "environment" };
+  if (where.type === "local") {
+    return { mode: "environment" };
+  }
+
   try {
     return where.type === "git"
       ? await gitWorkingStatus(cwd, home)
       : await workspaceStatus(cwd, home);
   } catch (error) {
-    if (!(error instanceof NoWorkingCopyError)) throw error;
+    if (!(error instanceof NoWorkingCopyError)) {
+      throw error;
+    }
+
     return { mode: "environment" };
   }
 }
@@ -223,7 +254,10 @@ export async function workingDiff(
   Awaited<ReturnType<typeof workspaceStatus>>["changes"] | EnvironmentPreview
 > {
   const status = await workingStatus(cwd, home);
-  if ("changes" in status) return status.changes;
+  if ("changes" in status) {
+    return status.changes;
+  }
+
   return {
     mode: "environment-preview",
     events: await synchronize(undefined, home, undefined, { dryRun: true }),
@@ -236,7 +270,10 @@ export async function pushWorkingCopy(
   home = homedir(),
 ) {
   const where = await backend(home, options.origin);
-  if (where.type === "local") throw noLocalReview(where.path);
+  if (where.type === "local") {
+    throw noLocalReview(where.path);
+  }
+
   return where.type === "git"
     ? pushGitWorkingCopy(where.workspace, options, cwd, home)
     : pushWorkspace(options, cwd, home);
@@ -248,7 +285,10 @@ export async function resolveFile(
   home = homedir(),
 ) {
   const where = await backend(home);
-  if (where.type === "local") throw noLocalReview(where.path);
+  if (where.type === "local") {
+    throw noLocalReview(where.path);
+  }
+
   return where.type === "git"
     ? resolveGitConflict(path, cwd, home)
     : resolveConflict(path, cwd, home);
@@ -256,9 +296,16 @@ export async function resolveFile(
 
 async function publishedPackage(target: PackageTarget, home: string) {
   const where = await backend(home, target.origin);
-  if (where.type === "local") throw noLocalReview(where.path);
-  if (where.type === "git") return where;
+  if (where.type === "local") {
+    throw noLocalReview(where.path);
+  }
+
+  if (where.type === "git") {
+    return where;
+  }
+
   const conn = await connection(home);
+
   return {
     type: "cloud" as const,
     client: collaborationClient(conn.server, home, target.kind),
@@ -275,13 +322,17 @@ async function publishedPackage(target: PackageTarget, home: string) {
 /** Newest last. */
 export async function packageVersions(target: PackageTarget, home = homedir()) {
   const where = await publishedPackage(target, home);
-  if (where.type === "git") return gitVersions(where.workspace, target, home);
+  if (where.type === "git") {
+    return gitVersions(where.workspace, target, home);
+  }
+
   const [rows, names] = await Promise.all([
     where.client.GET("/v1/skills/{id}/versions", {
       params: { path: { id: where.skill.id } },
     }),
     developerNames(home),
   ]);
+
   return responseData(rows).map((row) => ({
     ...row,
     publisherName: names[row.publishedBy],
@@ -293,8 +344,10 @@ export async function versionFiles(
   home = homedir(),
 ) {
   const where = await publishedPackage(target, home);
-  if (where.type === "git")
+  if (where.type === "git") {
     return gitVersionFiles(where.workspace, target, home);
+  }
+
   return responseData(
     await where.client.GET("/v1/skills/{id}/content", {
       params: {
@@ -310,8 +363,10 @@ export async function diffVersions(
   home = homedir(),
 ) {
   const where = await publishedPackage(target, home);
-  if (where.type === "git")
+  if (where.type === "git") {
     return gitVersionDiff(where.workspace, target, home);
+  }
+
   return responseData(
     await where.client.GET("/v1/skills/{id}/diff", {
       params: {
@@ -331,6 +386,7 @@ export async function listChanges(
     home,
     kind,
   );
+
   const result: Change[] = [];
   let cursor: string | undefined;
   const seen = new Set<string>();
@@ -338,12 +394,19 @@ export async function listChanges(
     const page = responseData(
       await client.GET("/v1/skill-changes", { params: { query: { cursor } } }),
     );
+
     result.push(...page.changes.map((c) => changeSchema.parse(c)));
-    if (page.nextCursor && seen.has(page.nextCursor))
+    if (page.nextCursor && seen.has(page.nextCursor)) {
       throw new Error("Invalid pagination");
-    if (page.nextCursor) seen.add(page.nextCursor);
+    }
+
+    if (page.nextCursor) {
+      seen.add(page.nextCursor);
+    }
+
     cursor = page.nextCursor ?? undefined;
   } while (cursor);
+
   return result;
 }
 
@@ -375,6 +438,7 @@ export async function showChange(
           )
       : [],
   ]);
+
   return {
     ...change,
     names,
@@ -402,6 +466,7 @@ export async function changeDiff(
     home,
     target.kind,
   );
+
   return responseData(
     await client.GET("/v1/skill-changes/{id}/diff", {
       params: {
@@ -435,6 +500,7 @@ export async function reviewChange(
   home = homedir(),
 ) {
   const { client, id, body } = await changeAtRevision(target, home);
+
   return responseData(
     await client.POST("/v1/skill-changes/{id}/reviews", {
       params: { path: { id } },
@@ -448,6 +514,7 @@ export async function reviewChange(
 
 export async function rejectChange(target: ChangeRevision, home = homedir()) {
   const { client, id, body } = await changeAtRevision(target, home);
+
   return responseData(
     await client.POST("/v1/skill-changes/{id}/reject", {
       params: { path: { id } },
@@ -458,6 +525,7 @@ export async function rejectChange(target: ChangeRevision, home = homedir()) {
 
 export async function mergeChange(target: ChangeRevision, home = homedir()) {
   const { client, id, body } = await changeAtRevision(target, home);
+
   return responseData(
     await client.POST("/v1/skill-changes/{id}/merge", {
       params: { path: { id } },
@@ -474,9 +542,12 @@ export async function commentOnChange(
   const text = options.bodyFile
     ? await readFile(options.bodyFile, "utf8")
     : options.body;
-  if (!text?.trim())
+
+  if (!text?.trim()) {
     throw new Error("Supply --body <text> or --body-file <path>");
-  if (options.thread)
+  }
+
+  if (options.thread) {
     return responseData(
       await client.POST(
         "/v1/skill-changes/{id}/discussions/{threadId}/comments",
@@ -486,6 +557,8 @@ export async function commentOnChange(
         },
       ),
     );
+  }
+
   return responseData(
     await client.POST("/v1/skill-changes/{id}/discussions", {
       params: { path: { id } },
@@ -518,6 +591,7 @@ export async function applySuggestion(
   home = homedir(),
 ) {
   const { client, id, body } = await changeAtRevision(target, home);
+
   return responseData(
     await client.POST("/v1/skill-changes/{id}/discussions/{threadId}/apply", {
       params: { path: { id, threadId: z.uuid().parse(target.thread) } },
@@ -531,6 +605,7 @@ export async function setDiscussionResolved(
   home = homedir(),
 ) {
   const { client, id, body } = await changeAtRevision(target, home);
+
   return responseData(
     await client.POST("/v1/skill-changes/{id}/discussions/{threadId}/resolve", {
       params: { path: { id, threadId: z.uuid().parse(target.thread) } },

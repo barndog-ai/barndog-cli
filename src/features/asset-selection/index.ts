@@ -20,7 +20,10 @@ import { UUID_V4 } from "../../shared/patterns.js";
 export type * from "./types.js";
 
 function id(value: string): string {
-  if (!UUID_V4.test(value)) throw new Error(`Expected UUIDv4: ${value}`);
+  if (!UUID_V4.test(value)) {
+    throw new Error(`Expected UUIDv4: ${value}`);
+  }
+
   return value.toLowerCase();
 }
 
@@ -45,11 +48,15 @@ function normalizeState(state: SelectionState): SelectionState {
     ...subscription,
     scope: origin(subscription.scope),
   }));
+
   const keys = subscriptions.map((subscription) =>
     scopeKey(subscription.scope),
   );
-  if (new Set(keys).size !== keys.length)
+
+  if (new Set(keys).size !== keys.length) {
     throw new Error("Only one subscription per scope is allowed");
+  }
+
   return {
     subscriptions: subscriptions.sort((a, b) =>
       compare(scopeKey(a.scope), scopeKey(b.scope)),
@@ -64,30 +71,38 @@ function prepare(catalog: AssetCatalog, input: SelectionState) {
   const assets = new Map<string, AssetReference>();
   for (const asset of catalog.assets) {
     const assetId = id(asset.id);
-    if (assets.has(assetId))
+    if (assets.has(assetId)) {
       throw new Error(`Duplicate catalogue asset ID: ${assetId}`);
+    }
+
     assets.set(assetId, {
       ...asset,
       id: assetId,
       origin: origin(asset.origin),
     });
   }
+
   const distributions = new Map<string, Distribution>();
   for (const distribution of catalog.distributions) {
     const scope = origin(distribution.scope);
     const key = scopeKey(scope);
-    if (distributions.has(key))
+    if (distributions.has(key)) {
       throw new Error(`Duplicate distribution scope: ${key}`);
+    }
+
     const entries = new Map<string, "recommended" | "optional">();
     for (const entry of distribution.assets) {
       const assetId = id(entry.assetId);
       const previous = entries.get(assetId);
-      if (previous && previous !== entry.mode)
+      if (previous && previous !== entry.mode) {
         throw new Error(
           `Conflicting recommendation modes: ${assetId} in ${key}`,
         );
+      }
+
       entries.set(assetId, entry.mode);
     }
+
     distributions.set(key, {
       scope,
       assets: [...entries]
@@ -95,6 +110,7 @@ function prepare(catalog: AssetCatalog, input: SelectionState) {
         .map(([assetId, mode]) => ({ assetId, mode })),
     });
   }
+
   return { assets, distributions, state: normalizeState(input) };
 }
 
@@ -120,9 +136,14 @@ export function resolveAssets(
   function contribute(assetId: string, contribution: Contribution) {
     if (!assets.has(assetId)) {
       missingAssets.add(assetId);
+
       return;
     }
-    if (excluded.has(assetId)) return;
+
+    if (excluded.has(assetId)) {
+      return;
+    }
+
     const sources = contributions.get(assetId) ?? [];
     sources.push(contribution);
     contributions.set(assetId, sources);
@@ -134,15 +155,22 @@ export function resolveAssets(
       diagnostics.push({ type: "missing-scope", scope: subscription.scope });
       continue;
     }
+
     for (const entry of distribution.assets) {
-      if (matches(subscription.mode, entry.mode))
+      if (matches(subscription.mode, entry.mode)) {
         contribute(entry.assetId, { type: "subscription", ...subscription });
+      }
     }
   }
-  for (const assetId of state.individualAssetIds)
+
+  for (const assetId of state.individualAssetIds) {
     contribute(assetId, { type: "individual" });
-  for (const assetId of [...missingAssets].sort(compare))
+  }
+
+  for (const assetId of [...missingAssets].sort(compare)) {
     diagnostics.push({ type: "missing-asset", assetId });
+  }
+
   const effective: EffectiveAsset[] = [...contributions]
     .sort(([a], [b]) => compare(a, b))
     .map(([assetId, sources]) => ({
@@ -158,6 +186,7 @@ export function resolveAssets(
       individuallyDisabled: disabled.has(assetId),
       contributions: sources,
     }));
+
   return { assets: effective, diagnostics };
 }
 
@@ -182,7 +211,10 @@ export function applySelectionAction(
       action.type === "switch-scope"
     ) {
       const distribution = distributions.get(key);
-      if (!distribution) throw new Error(`Unknown scope: ${key}`);
+      if (!distribution) {
+        throw new Error(`Unknown scope: ${key}`);
+      }
+
       const conflicts = distribution.assets
         .filter((entry) => matches(action.mode, entry.mode))
         .filter(
@@ -190,32 +222,40 @@ export function applySelectionAction(
         )
         .map((entry) => {
           const asset = assets.get(entry.assetId);
-          if (!asset)
+          if (!asset) {
             throw new Error(
               `Cannot resolve overrides for missing asset: ${entry.assetId}`,
             );
+          }
+
           return {
             asset,
             excluded: excluded.has(entry.assetId),
             individuallyDisabled: disabled.has(entry.assetId),
           };
         });
+
       const decisions = new Map<string, "preserve" | "clear">();
       if (resolution?.type === "per-asset") {
         for (const decision of resolution.decisions) {
           const assetId = id(decision.assetId);
-          if (decisions.has(assetId))
+          if (decisions.has(assetId)) {
             throw new Error(`Duplicate override decision: ${assetId}`);
+          }
+
           decisions.set(assetId, decision.choice);
         }
       }
+
       if (
         conflicts.length &&
         (!resolution ||
           (resolution.type === "per-asset" &&
             conflicts.some(({ asset }) => !decisions.has(asset.id))))
-      )
+      ) {
         return { status: "decision-required", conflicts };
+      }
+
       for (const { asset } of conflicts) {
         if (
           resolution?.type === "clear-all" ||
@@ -225,11 +265,13 @@ export function applySelectionAction(
           disabled.delete(asset.id);
         }
       }
+
       subscriptions = subscriptions.filter((subscription) =>
         action.type === "switch-team" || action.type === "switch-scope"
           ? subscription.scope.type !== scope.type
           : scopeKey(subscription.scope) !== key,
       );
+
       subscriptions.push({ scope, mode: action.mode, enabled: true });
     } else if (action.type === "remove-scope") {
       subscriptions = subscriptions.filter(
@@ -240,8 +282,10 @@ export function applySelectionAction(
         !subscriptions.some(
           (subscription) => scopeKey(subscription.scope) === key,
         )
-      )
+      ) {
         throw new Error(`Scope is not selected: ${key}`);
+      }
+
       subscriptions = subscriptions.map((subscription) =>
         scopeKey(subscription.scope) === key
           ? { ...subscription, enabled: action.enabled }
@@ -251,7 +295,10 @@ export function applySelectionAction(
   } else {
     const assetId = id(action.assetId);
     if (action.type === "install-asset") {
-      if (!assets.has(assetId)) throw new Error(`Unknown asset: ${assetId}`);
+      if (!assets.has(assetId)) {
+        throw new Error(`Unknown asset: ${assetId}`);
+      }
+
       individual.add(assetId);
       excluded.delete(assetId);
       disabled.delete(assetId);
@@ -264,6 +311,7 @@ export function applySelectionAction(
       disabled.add(assetId);
     }
   }
+
   return {
     status: "applied",
     state: normalizeState({

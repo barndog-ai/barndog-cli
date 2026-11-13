@@ -23,6 +23,7 @@ describe("readSettings", () => {
   const read = async (settings: Record<string, unknown>) => {
     const path = join(home, "config.yaml");
     await writeFile(path, stringify({ ...base, ...settings }));
+
     return readSettings(home, path);
   };
 
@@ -62,6 +63,7 @@ describe("readSettings", () => {
       localNames: { [workspaceId]: "code-review" },
       knowledge: true,
     });
+
     expect(settings).toMatchObject({
       gitWorkspace: { url: "https://x/r.git", branch: "main", workspaceId },
       localNames: { [workspaceId]: "code-review" },
@@ -82,6 +84,7 @@ describe("readSettings", () => {
         { kind: "local", id: workspaceId, source: "./x", enabled: true },
       ],
     });
+
     expect(settings).toStrictEqual(base);
     expect(settings && settingsText(settings)).not.toMatch(/version|skills/);
   });

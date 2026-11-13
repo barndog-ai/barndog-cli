@@ -18,6 +18,7 @@ export function renderHookCompatibility(
   const missing = result.compatibility
     .filter((row) => row.status === "unsupported")
     .map((row) => row.harness);
+
   return [
     // A content hash is long; its first 7 characters identify it, as Git shows them.
     ...fields([

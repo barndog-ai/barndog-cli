@@ -19,8 +19,10 @@ async function currentAsset(
     data.version.id !== reference.publishedVersion ||
     data.name !== reference.name ||
     data.organizationId !== conn.organizationId
-  )
+  ) {
     throw new Error("Catalog changed during staging; retry sync");
+  }
+
   return data;
 }
 
@@ -31,6 +33,7 @@ export function cloudSource(conn: Connection, home: string): WorkspaceSource {
     catalog: async () => (await environmentCatalog(home, conn)).catalog,
     skillOrHookPackage: async (kind, reference) => {
       const data = await currentAsset(kind, reference, conn, home);
+
       return cachedPackage(
         kind,
         assetKinds[kind].schema.parse(data),

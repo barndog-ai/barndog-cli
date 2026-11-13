@@ -20,12 +20,15 @@ export async function hookCompatibility(
 ) {
   const settings = await readSettings(home);
   const repo = settings && repoForOrigin(settings, home, origin);
-  if (repo)
+  if (repo) {
     return repoHookCompatibility(
       selectRepoAsset(await repo.model(), "hook", name, origin),
     );
+  }
+
   const selected = await selectAsset("hook", name, origin, home);
   const asset = hookSchema.parse(selected.asset);
+
   return {
     version: asset.version.number,
     compatibility: await Promise.all(

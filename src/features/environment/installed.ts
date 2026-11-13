@@ -35,18 +35,22 @@ export async function readTree(directory: string): Promise<PackageEntry[]> {
     for (const child of (await readdir(join(directory, base))).sort()) {
       const path = base ? `${base}/${child}` : child;
       const info = await lstat(join(directory, path));
-      if (info.isDirectory()) await visit(path);
-      else if (info.isFile())
+      if (info.isDirectory()) {
+        await visit(path);
+      } else if (info.isFile()) {
         entries.push({
           path,
           data: await readFile(join(directory, path)),
           executable: !!(info.mode & 0o111),
         });
-      else throw new Error(`Unexpected file type in ${join(directory, path)}`);
+      } else {
+        throw new Error(`Unexpected file type in ${join(directory, path)}`);
+      }
     }
   }
 
   await visit("");
+
   return entries;
 }
 
@@ -54,11 +58,17 @@ export async function readTree(directory: string): Promise<PackageEntry[]> {
 export async function treeFingerprint(directory: string) {
   try {
     const info = await lstat(directory);
-    if (!info.isDirectory()) return `not-a-directory:${info.mode}`;
+    if (!info.isDirectory()) {
+      return `not-a-directory:${info.mode}`;
+    }
   } catch (error) {
-    if (errorCode(error) === "ENOENT") return null;
+    if (errorCode(error) === "ENOENT") {
+      return null;
+    }
+
     throw error;
   }
+
   try {
     return packageFingerprint(await readTree(directory));
   } catch {
@@ -72,10 +82,17 @@ export function renameSkillEntries(
   name: string,
 ): PackageEntry[] {
   return entries.map((entry) => {
-    if (entry.path !== "SKILL.md") return entry;
+    if (entry.path !== "SKILL.md") {
+      return entry;
+    }
+
     const parts = splitFrontMatter(entry.data.toString("utf8"));
-    if (!parts) return entry;
+    if (!parts) {
+      return entry;
+    }
+
     const { open, yaml, close, body } = parts;
+
     return {
       ...entry,
       data: Buffer.from(`${open}${setYamlName(yaml, name)}${close}${body}`),
@@ -88,6 +105,7 @@ export async function desiredEntries(
   rename: string | null,
 ): Promise<PackageEntry[]> {
   const entries = await readTree(source);
+
   return rename ? renameSkillEntries(entries, rename) : entries;
 }
 
@@ -96,7 +114,9 @@ async function removeEmptyDirectories(directory: string) {
     const path = join(directory, child);
     if ((await lstat(path)).isDirectory()) {
       await removeEmptyDirectories(path);
-      if (!(await readdir(path)).length) await rmdir(path);
+      if (!(await readdir(path)).length) {
+        await rmdir(path);
+      }
     }
   }
 }
@@ -115,9 +135,13 @@ export async function mirrorTree(directory: string, entries: PackageEntry[]) {
     await rm(directory, { recursive: true, force: true });
     await mkdir(directory, { recursive: true, mode: 0o755 });
   }
-  for (const existing of current)
-    if (!wanted.has(existing.path))
+
+  for (const existing of current) {
+    if (!wanted.has(existing.path)) {
       await rm(join(directory, existing.path), { force: true });
+    }
+  }
+
   // Emptied folders must go first: a new file may take one's exact path.
   await removeEmptyDirectories(directory);
   for (const entry of entries) {
@@ -125,9 +149,13 @@ export async function mirrorTree(directory: string, entries: PackageEntry[]) {
     const existing = current.find((item) => item.path === entry.path);
     const mode = entry.executable ? 0o755 : 0o644;
     if (existing?.data.equals(entry.data)) {
-      if (existing.executable !== entry.executable) await chmod(path, mode);
+      if (existing.executable !== entry.executable) {
+        await chmod(path, mode);
+      }
+
       continue;
     }
+
     await mkdir(dirname(path), { recursive: true, mode: 0o755 });
     const temp = `${path}.${randomUUID()}.tmp`;
     try {

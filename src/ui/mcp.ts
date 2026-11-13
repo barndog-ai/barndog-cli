@@ -30,19 +30,28 @@ const signIn = {
 /** An MCP configuration as a person reads it; secret references print by name. */
 export function renderMcp(value: unknown): string[] {
   const shown = shownMcpSchema.safeParse(value);
-  if (!shown.success) return renderValue(value);
+  if (!shown.success) {
+    return renderValue(value);
+  }
+
   const mcp = shown.data;
   const definition =
     mcp.definition ??
     (typeof mcp.version === "object" ? mcp.version.definition : undefined);
-  if (!definition) return renderValue(value);
+
+  if (!definition) {
+    return renderValue(value);
+  }
+
   const references =
     definition.transport === "stdio"
       ? definition.environment
       : definition.headers;
+
   const variables = Object.entries(references).map(
     ([key, reference]) => `${clean(key)} from $${reference.secretRef}`,
   );
+
   return fields([
     ["Name", clean(mcp.name)],
     [

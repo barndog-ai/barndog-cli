@@ -23,9 +23,11 @@ function setup() {
     },
     synchronize: async (path) => {
       syncs.push(path);
+
       return [];
     },
   });
+
   return { program, output, errors, setups, syncs };
 }
 
@@ -34,6 +36,7 @@ test("bare command prints grouped help without running setup; init requests conf
   await expect(bare.program.parseAsync([], { from: "user" })).rejects.toSatisfy(
     (error) => error instanceof CommanderError && error.exitCode === 0,
   );
+
   expect(bare.setups).toStrictEqual([]);
   const help = bare.output.join("\n");
   for (const heading of [
@@ -41,11 +44,14 @@ test("bare command prints grouped help without running setup; init requests conf
     "Assets:",
     "Working copy & review",
     "Workspace:",
-  ])
+  ]) {
     expect(help, heading).toContain(heading);
+  }
+
   expect(
     help.indexOf("Assets:") < help.indexOf("Working copy & review"),
   ).toBeTruthy();
+
   const init = setup();
   await init.program.parseAsync(["init"], { from: "user" });
   expect(init.setups).toStrictEqual([true]);
@@ -66,8 +72,12 @@ for (const args of [
     ).rejects.toSatisfy(
       (error) => error instanceof CommanderError && error.exitCode === 0,
     );
+
     expect(f.output.join("\n")).toMatch(/Usage: barndog/);
-    if (args.includes("sync")) expect(f.output.join("\n")).toMatch(/--config/);
+    if (args.includes("sync")) {
+      expect(f.output.join("\n")).toMatch(/--config/);
+    }
+
     expect(f.setups).toStrictEqual([]);
     expect(f.syncs).toStrictEqual([]);
     expect(f.errors).toStrictEqual([]);
@@ -108,6 +118,7 @@ for (const args of [
     ).rejects.toSatisfy(
       (error) => error instanceof CommanderError && error.exitCode !== 0,
     );
+
     expect(f.errors).not.toHaveLength(0);
     expect(f.setups).toStrictEqual([]);
     expect(f.syncs).toStrictEqual([]);
@@ -123,9 +134,11 @@ test("async feature failures propagate without a success message; UI supplies fo
       throw failure;
     },
   });
+
   await expect(
     program.parseAsync(["sync"], { from: "user" }),
   ).rejects.toSatisfy((error) => error === failure);
+
   expect(output).toStrictEqual([]);
   expect(renderError(failure)).toMatch(/barndog init/);
 });
@@ -136,6 +149,7 @@ test("CLI returns correct exit codes for help and parsing errors", () => {
     encoding: "utf8",
     timeout: 5000,
   });
+
   expect(help.status).toBe(0);
   expect(help.stdout).toMatch(/--config/);
   expect(help.stderr).toBe("");
@@ -144,6 +158,7 @@ test("CLI returns correct exit codes for help and parsing errors", () => {
     [executable, "sync", "--config"],
     { encoding: "utf8", timeout: 5000 },
   );
+
   expect(invalid.status).toBe(1);
   expect(invalid.stderr).toMatch(/argument missing/);
   expect(invalid.stdout).not.toMatch(/Sync complete/);
@@ -157,19 +172,23 @@ test("init forwards an explicit server through the confirmed setup workflow", as
     },
     write: () => {},
   });
+
   await program.parseAsync(["init", "--server", "http://127.0.0.1:3000"], {
     from: "user",
   });
+
   expect(calls).toStrictEqual([
     [true, "http://127.0.0.1:3000", { local: undefined, browser: true }],
   ]);
 });
+
 test("asset search never synchronizes and install forwards name and origin", async () => {
   const calls: unknown[] = [];
   let searched = false;
   const program = createProgram({
     searchCatalog: async () => {
       searched = true;
+
       return [];
     },
     inventory: async () => ({
@@ -181,6 +200,7 @@ test("asset search never synchronizes and install forwards name and origin", asy
     }),
     changeAsset: async (...args) => {
       calls.push(args);
+
       return { status: "applied", events: [] };
     },
     synchronize: async () => {
@@ -189,6 +209,7 @@ test("asset search never synchronizes and install forwards name and origin", asy
     write: () => {},
     interactive: false,
   });
+
   await program.parseAsync(["skills", "search"], { from: "user" });
   expect(searched).toBe(true);
   expect(calls).toStrictEqual([]);
@@ -196,6 +217,7 @@ test("asset search never synchronizes and install forwards name and origin", asy
     ["skills", "install", "example", "--origin", "team:engineering"],
     { from: "user" },
   );
+
   expect(calls).toStrictEqual([
     [
       "install",
@@ -213,6 +235,7 @@ test("missing asset names fail with a usage hint instead of prompting off a term
   const unexpected = async () => {
     throw new Error("Unexpected operation");
   };
+
   const program = createProgram({
     write: () => {},
     interactive: false,
@@ -221,15 +244,17 @@ test("missing asset names fail with a usage hint instead of prompting off a term
     installSet: unexpected,
     changeSet: unexpected,
   });
+
   for (const args of [
     ["skills", "install"],
     ["mcp", "disable"],
     ["hooks", "remove"],
     ["sets", "install"],
-  ])
+  ]) {
     await expect(program.parseAsync(args, { from: "user" })).rejects.toSatisfy(
       (error) => error instanceof CliError && /barndog/.test(error.hint ?? ""),
     );
+  }
 });
 
 test("login, logout and auth status route to their handlers; whoami matches auth status", async () => {
@@ -246,14 +271,17 @@ test("login, logout and auth status route to their handlers; whoami matches auth
       calls.push(["status"]);
     },
   });
+
   for (const args of [
     ["login", "--force"],
     ["logout"],
     ["auth", "status"],
     ["auth"],
     ["whoami"],
-  ])
+  ]) {
     await program.parseAsync(args, { from: "user" });
+  }
+
   expect(calls).toStrictEqual([
     ["login", { browser: true, force: true }],
     ["logout"],
@@ -276,14 +304,17 @@ test("collaboration commands pass parsed arguments without performing workflow I
     (name: string) =>
     async (...args: unknown[]) => {
       calls.push([name, ...args]);
+
       return { unchanged: true } as never;
     };
+
   const program = createProgram({
     write: () => {},
     pullPackage: record("pullPackage"),
     pushWorkingCopy: record("pushWorkingCopy"),
     reviewChange: record("reviewChange"),
   });
+
   await program.parseAsync(
     [
       "skills",
@@ -296,30 +327,37 @@ test("collaboration commands pass parsed arguments without performing workflow I
     ],
     { from: "user" },
   );
+
   expect(calls.pop()).toStrictEqual([
     "pullPackage",
     { name: "review", origin: "team/frontend", directory: "editable" },
   ]);
+
   await program.parseAsync(
     ["push", "--publish", "--new", "--title", "Improve instructions"],
     { from: "user" },
   );
+
   expect(calls.pop()).toStrictEqual([
     "pushWorkingCopy",
     { publish: true, new: true, title: "Improve instructions" },
   ]);
+
   await program.parseAsync(["changes", "approve", "id", "--revision", "3"], {
     from: "user",
   });
+
   expect(calls.pop()).toStrictEqual([
     "reviewChange",
     "approve",
     { id: "id", revision: 3 },
   ]);
+
   await program.parseAsync(
     ["skills", "changes", "approve", "id", "--revision", "4"],
     { from: "user" },
   );
+
   expect(calls.pop()).toStrictEqual([
     "reviewChange",
     "approve",
@@ -331,8 +369,10 @@ test("review commands require an explicit positive revision before workflow IO",
   let calls = 0;
   const count = async () => {
     calls++;
+
     return {} as never;
   };
+
   for (const args of [
     ["changes", "approve", "id"],
     ["changes", "merge", "id", "--revision", "0"],
@@ -345,10 +385,12 @@ test("review commands require an explicit positive revision before workflow IO",
       rejectChange: count,
       mergeChange: count,
     });
+
     await expect(program.parseAsync(args, { from: "user" })).rejects.toThrow(
       CommanderError,
     );
   }
+
   expect(calls).toBe(0);
 });
 
@@ -361,17 +403,21 @@ test("init forwards local and browser-free setup options and rejects conflicting
       calls.push(args);
     },
   });
+
   await program.parseAsync(["init", "--local", "--no-browser"], {
     from: "user",
   });
+
   expect(calls).toStrictEqual([
     [true, undefined, { local: true, browser: false }],
   ]);
+
   await expect(
     program.parseAsync(["init", "--local", "--server", "https://example.com"], {
       from: "user",
     }),
   ).rejects.toThrow(CommanderError);
+
   expect(calls.length).toBe(1);
 });
 
@@ -380,6 +426,7 @@ test("a failed Hook test sets the exit code with or without --json", async (t) =
   t.onTestFinished(() => {
     process.exitCode = previous;
   });
+
   const run = async (...extra: string[]) => {
     process.exitCode = undefined;
     const lines: string[] = [];
@@ -410,8 +457,10 @@ test("a failed Hook test sets the exit code with or without --json", async (t) =
       ],
       { from: "user" },
     );
+
     return { code: process.exitCode, text: lines.join("\n") };
   };
+
   const plain = await run();
   expect(plain.code).toBe(7);
   expect(plain.text).toMatch(/exited 7/);
@@ -447,6 +496,7 @@ test("offline status reports what is installed without claiming it is current", 
       ],
     }),
   }).parseAsync(["status"], { from: "user" });
+
   const text = lines.join("\n");
   expect(text).toMatch(/Showing local state only: fetch failed/);
   expect(text).toMatch(/1 asset installed\. Couldn't check for updates/);
@@ -459,15 +509,18 @@ test("--version prints the package version and build details", async () => {
     write: (line) => lines.push(line),
     writeError: () => {},
   });
+
   await expect(
     program.parseAsync(["--version"], { from: "user" }),
   ).rejects.toSatisfy(
     (error: { code?: string; exitCode?: number }) =>
       error.code === "commander.version" && error.exitCode === 0,
   );
+
   const { version } = JSON.parse(
     await readFile(new URL("../../package.json", import.meta.url), "utf8"),
   ) as { version: string };
+
   expect(lines.join("\n")).toMatch(new RegExp(`^barndog ${version}\\n`));
   expect(lines.join("\n")).toMatch(/Node\.js v\d.* on \w+ \w+/);
   expect(lines.join("\n")).toMatch(/Default server https?:\/\//);
@@ -482,6 +535,7 @@ test("lookup commands infer --origin when one scope has the name", async () => {
     origin: { type, id: `${type}-${slug}`, slug },
     version: { number: 1, description: name },
   });
+
   const program = createProgram({
     write: () => {},
     interactive: false,
@@ -495,17 +549,21 @@ test("lookup commands infer --origin when one scope has the name", async () => {
     ],
     hookCompatibility: async (...args) => {
       calls.push(args);
+
       return { version: 1, compatibility: [] };
     },
   });
+
   await program.parseAsync(["hooks", "compatibility", "guard"], {
     from: "user",
   });
+
   expect(calls.pop()).toStrictEqual(["guard", "local"]);
   await program.parseAsync(
     ["hooks", "compatibility", "lint", "--origin", "team/web"],
     { from: "user" },
   );
+
   expect(calls.pop()).toStrictEqual(["lint", "team/web"]);
   await expect(
     program.parseAsync(["hooks", "compatibility", "lint"], { from: "user" }),
@@ -515,6 +573,7 @@ test("lookup commands infer --origin when one scope has the name", async () => {
       /several scopes: org, team\/web/.test(error.message) &&
       error.hint === "barndog hooks compatibility lint --origin org",
   );
+
   await expect(
     program.parseAsync(["hooks", "compatibility", "missing"], {
       from: "user",
@@ -524,7 +583,8 @@ test("lookup commands infer --origin when one scope has the name", async () => {
       error instanceof CliError &&
       error.hint === "barndog hooks search missing",
   );
-  for (const command of ["compatibility", "adapt"])
+
+  for (const command of ["compatibility", "adapt"]) {
     await expect(
       program.parseAsync(["hooks", command], { from: "user" }),
     ).rejects.toSatisfy(
@@ -532,6 +592,8 @@ test("lookup commands infer --origin when one scope has the name", async () => {
         error instanceof CliError &&
         error.hint === `barndog hooks ${command} <name>`,
     );
+  }
+
   expect(calls.length).toBe(0);
 });
 
@@ -569,8 +631,10 @@ test("Hook compatibility shows support and readiness with a short version", asyn
     }).parseAsync(["hooks", "compatibility", "guard", "--origin", "org"], {
       from: "user",
     });
+
     return stripVTControlCharacters(lines.join("\n"));
   };
+
   const text = await run(3);
   expect(text).toMatch(/Version\s+3/);
   expect(text).toMatch(/Tool\s+Support\s+Ready on this machine/);

@@ -20,8 +20,11 @@ const capitalized = (word: string) =>
   `${word.charAt(0).toUpperCase()}${word.slice(1)}`;
 
 function fields(value: unknown, from: string, to: string): unknown {
-  if (Array.isArray(value)) return value.map((v) => fields(v, from, to));
-  if (value && typeof value === "object")
+  if (Array.isArray(value)) {
+    return value.map((v) => fields(v, from, to));
+  }
+
+  if (value && typeof value === "object") {
     return Object.fromEntries(
       Object.entries(value).map(([key, val]) => [
         key === from
@@ -32,6 +35,8 @@ function fields(value: unknown, from: string, to: string): unknown {
         fields(val, from, to),
       ]),
     );
+  }
+
   return value;
 }
 
@@ -48,6 +53,7 @@ export function collaborationClient(
   kind: PackageKind = "skill",
 ) {
   const transport = serverFetch(server, home);
+
   return createApiClient({
     baseUrl: normalizeServer(server),
     fetch: async (input, init) => {
@@ -61,18 +67,23 @@ export function collaborationClient(
           if (headers.get("content-type")?.includes("multipart/form-data")) {
             const form = await request.formData();
             const metadata = form.get("metadata");
-            if (typeof metadata === "string")
+            if (typeof metadata === "string") {
               form.set(
                 "metadata",
                 JSON.stringify(
                   fields(JSON.parse(metadata), "skillId", "hookId"),
                 ),
               );
+            }
+
             headers.delete("content-type");
             headers.delete("content-length");
             body = form;
-          } else body = await request.text();
+          } else {
+            body = await request.text();
+          }
         }
+
         request = new Request(url, {
           method: request.method,
           headers,
@@ -80,12 +91,15 @@ export function collaborationClient(
           signal: request.signal,
         });
       }
+
       const response = await transport(request);
       if (
         kind !== "hook" ||
         !response.headers.get("content-type")?.includes("application/json")
-      )
+      ) {
         return response;
+      }
+
       let data = fields(await response.json(), "hookId", "skillId");
       if (
         data &&
@@ -97,8 +111,10 @@ export function collaborationClient(
         const { hooks, ...rest } = data;
         data = { ...rest, skills: hooks };
       }
+
       const headers = new Headers(response.headers);
       headers.delete("content-length");
+
       return new Response(JSON.stringify(data), {
         status: response.status,
         headers,
@@ -108,18 +124,29 @@ export function collaborationClient(
 }
 
 export function metadata(entries: PackageEntry[], kind: PackageKind = "skill") {
-  if (kind === "skill") return packageMetadata(entries);
-  if (!entries.some((e) => e.path === "hook.yaml"))
+  if (kind === "skill") {
+    return packageMetadata(entries);
+  }
+
+  if (!entries.some((e) => e.path === "hook.yaml")) {
     throw new Error("MISSING_PACKAGE_MANIFEST: hook.yaml");
+  }
+
   const manifest = hookManifestSchema.parse(
     parse(
       entries.find((e) => e.path === "hook.yaml")?.data.toString("utf8") ?? "",
     ),
   );
-  for (const implementation of Object.values(manifest.implementations))
-    if (implementation)
-      for (const script of implementation.scripts)
-        if (!entries.some((e) => e.path === script))
+
+  for (const implementation of Object.values(manifest.implementations)) {
+    if (implementation) {
+      for (const script of implementation.scripts) {
+        if (!entries.some((e) => e.path === script)) {
           throw new Error(`Missing Hook script: ${script}`);
+        }
+      }
+    }
+  }
+
   return manifest;
 }

@@ -62,6 +62,7 @@ import { NAME, splitOrigin } from "../../shared/patterns.js";
 
 async function latest(workspace: GitWorkspace, home: string) {
   const model = await gitRepoSource(workspace, home).model();
+
   return {
     model,
     commit: defined(
@@ -83,8 +84,12 @@ function selectAsset(
       asset.name === name &&
       matchesOrigin(asset.origin, origin, model),
   );
+
   const match = only(matches);
-  if (!match) throw assetNotFound(kind, name, origin);
+  if (!match) {
+    throw assetNotFound(kind, name, origin);
+  }
+
   return match;
 }
 
@@ -92,11 +97,14 @@ export function selectScope(model: WorkspaceModel, origin: string) {
   const matches = model.scopes.filter((scope) =>
     matchesOrigin(scope, origin, model),
   );
+
   const { type, value: slug } = splitOrigin(origin);
-  if (origin === "me" || (type === "dev" && slug !== undefined))
+  if (origin === "me" || (type === "dev" && slug !== undefined)) {
     throw new CliError(
       "Personal scopes don't exist in a Git repo workspace. Use org, team/<slug> or repo/<slug>.",
     );
+  }
+
   if (!matches.length && (type === "team" || type === "repo") && slug) {
     return {
       type,
@@ -104,11 +112,14 @@ export function selectScope(model: WorkspaceModel, origin: string) {
       path: `${type === "team" ? "teams" : "repos"}/${slug}`,
     } as const;
   }
+
   const match = only(matches);
-  if (!match)
+  if (!match) {
     throw new CliError(
       `No scope named ${origin}. Use org, team/<slug> or repo/<slug>.`,
     );
+  }
+
   return pickScope(match);
 }
 
@@ -119,10 +130,12 @@ const pickScope = (scope: RepoScope) => ({
 });
 
 const usable = (asset: RepoAsset) => {
-  if (asset.invalid)
+  if (asset.invalid) {
     throw new CliError(
       `${asset.path} is invalid: ${asset.invalid}. Fix it on the Git host first.`,
     );
+  }
+
   return asset;
 };
 
@@ -131,6 +144,7 @@ async function newFolder(cwd: string, target: string) {
   await mkdir(dirname(path), { recursive: true });
   // Never overwrite an existing directory, even if it appears empty.
   await mkdir(path);
+
   return realpath(path);
 }
 
@@ -165,11 +179,13 @@ export function pullGitAsset(
   home = homedir(),
 ) {
   const kind = options.kind ?? "skill";
+
   return locked(home, async () => {
     const { model, commit } = await latest(workspace, home);
     const asset = usable(
       selectAsset(model, kind, options.name, options.origin),
     );
+
     const root = await newFolder(cwd, options.target ?? options.name);
     await startWorkingCopy(
       root,
@@ -184,6 +200,7 @@ export function pullGitAsset(
       asset.entries,
       home,
     );
+
     return { root, commit };
   });
 }
@@ -200,9 +217,12 @@ export function createGitAsset(
   home = homedir(),
 ) {
   const kind = options.kind ?? "skill";
+
   return locked(home, async () => {
-    if (!NAME.test(options.name))
+    if (!NAME.test(options.name)) {
       throw new Error("Use a lowercase hyphenated package name");
+    }
+
     const { model, commit } = await latest(workspace, home);
     const scope = selectScope(model, options.origin);
     const root = await newFolder(cwd, options.target ?? options.name);
@@ -213,6 +233,7 @@ export function createGitAsset(
       [],
       home,
     );
+
     return { root, kind, name: options.name };
   });
 }
@@ -220,6 +241,7 @@ export function createGitAsset(
 export function gitWorkingStatus(cwd: string, home = homedir()) {
   return locked(home, async () => {
     const work = await findGit(cwd, home);
+
     return {
       root: work.root,
       name: work.name,
@@ -254,14 +276,19 @@ async function branchFiles(work: GitWorkingCopy, head: string, home: string) {
     work.review,
     "This working copy has no review branch",
   );
+
   const repo = gitDirectory(work.git.workspaceId, home);
   await git(
     ["fetch", "--quiet", "--no-tags", "origin", `refs/heads/${branch}`],
     { repo },
   );
+
   const model = await loadWorkspace(await gitSnapshot(repo, head));
   const asset = assetIn(model, work);
-  if (!asset) throw new CliError(`${branch} no longer contains ${work.name}.`);
+  if (!asset) {
+    throw new CliError(`${branch} no longer contains ${work.name}.`);
+  }
+
   return usable(asset).entries;
 }
 
@@ -269,8 +296,10 @@ export function updateGitWorkingCopy(cwd: string, home = homedir()) {
   return locked(home, async () => {
     const work = await findGit(cwd, home);
     const previous = structuredClone(work);
-    if (work.conflicts.length)
+    if (work.conflicts.length) {
       throw new Error("Resolve existing conflicts before pulling again");
+    }
+
     const repo = gitDirectory(work.git.workspaceId, home);
     const { model, commit } = await latest(work.git, home);
     let entries = await readDirectory(work.root);
@@ -280,6 +309,7 @@ export function updateGitWorkingCopy(cwd: string, home = homedir()) {
       entries = merged.entries;
       merged.conflicts.forEach((path) => conflicts.add(path));
     };
+
     if (work.review) {
       const head = await remoteBranch(repo, work.review.branch);
       if (head && head !== work.review.head) {
@@ -292,22 +322,28 @@ export function updateGitWorkingCopy(cwd: string, home = homedir()) {
         };
       }
     }
+
     const current = assetIn(model, work);
     if (current) {
       const incoming = usable(current).entries;
-      if (fingerprint(incoming) !== fingerprint(decodeFiles(work.base)))
+      if (fingerprint(incoming) !== fingerprint(decodeFiles(work.base))) {
         await merge(decodeFiles(work.base), incoming);
+      }
+
       work.base = encodeFiles(incoming);
       // The review is over once its content is what the default branch holds.
       if (
         work.review &&
         fingerprint(incoming) === fingerprint(decodeFiles(work.review.files))
-      )
+      ) {
         delete work.review;
+      }
     }
+
     work.baseCommit = commit;
     work.conflicts = [...conflicts];
     await applyFiles(work, entries, home, previous);
+
     return {
       root: work.root,
       conflicts: work.conflicts,
@@ -346,7 +382,10 @@ export function pushGitWorkingCopy(
     try {
       work = await findGit(cwd, home);
     } catch (error) {
-      if (!options.origin || !(error instanceof CliError)) throw error;
+      if (!options.origin || !(error instanceof CliError)) {
+        throw error;
+      }
+
       const root = await realpath(cwd);
       const kind = options.kind ?? "skill";
       work = {
@@ -359,27 +398,40 @@ export function pushGitWorkingCopy(
         base: [],
         conflicts: [],
       };
+
       await save(work, home);
     }
-    if (options.kind && work.kind !== options.kind)
+
+    if (options.kind && work.kind !== options.kind) {
       throw new Error("Working copy belongs to a different asset kind");
-    if (options.name && work.name !== options.name)
+    }
+
+    if (options.name && work.name !== options.name) {
       throw new Error("Working-copy name does not match the requested asset");
-    if (work.git.workspaceId !== workspace.workspaceId)
+    }
+
+    if (work.git.workspaceId !== workspace.workspaceId) {
       throw new CliError(
         "This working copy belongs to a different Git workspace.",
       );
-    if (work.conflicts.length)
+    }
+
+    if (work.conflicts.length) {
       throw new Error(
         "Resolve conflicts with barndog resolve <path> before pushing",
       );
+    }
+
     const files = validatePackageEntries(
       await readDirectory(work.root),
       undefined,
       assetKinds[work.kind].manifest,
     );
-    if (packageMetadataFor(files, work.kind).name !== work.name)
+
+    if (packageMetadataFor(files, work.kind).name !== work.name) {
       throw new Error("Package name cannot change in this working copy");
+    }
+
     const repo = gitDirectory(workspace.workspaceId, home);
     const path = assetPath(work.scope.path, work.kind, work.name);
     const change = {
@@ -389,6 +441,7 @@ export function pushGitWorkingCopy(
         path: `${path}/${file.path}`,
       })),
     };
+
     const title = options.title ?? `Update ${work.name}`;
 
     if (options.publish) {
@@ -396,50 +449,64 @@ export function pushGitWorkingCopy(
       if (
         fingerprint(current?.entries ?? []) !==
         fingerprint(decodeFiles(work.base))
-      )
+      ) {
         throw new CliError(
           `${work.name} changed on ${workspace.branch} since you pulled it.`,
           "barndog pull",
         );
-      if (fingerprint(files) === fingerprint(decodeFiles(work.base)))
+      }
+
+      if (fingerprint(files) === fingerprint(decodeFiles(work.base))) {
         return { unchanged: true };
+      }
+
       const commit = await commitFiles(repo, tip, change, title);
       await pushCommit(repo, commit, workspace.branch);
       await git(["update-ref", trackingRef(workspace.branch), commit], {
         repo,
       });
+
       await recordFetch(workspace, commit, home);
       work.base = encodeFiles(files);
       work.baseCommit = commit;
       delete work.review;
       await save(work, home);
+
       return { branch: workspace.branch, commit, published: true };
     }
 
     let review = options.new ? undefined : work.review;
     if (review) {
       const head = await remoteBranch(repo, review.branch);
-      if (head === null) review = undefined;
-      else if (head !== review.head)
+      if (head === null) {
+        review = undefined;
+      } else if (head !== review.head) {
         throw new CliError(
           `${review.branch} changed on the Git host.`,
           "barndog pull",
         );
+      }
     }
+
     const previous = review
       ? decodeFiles(review.files)
       : decodeFiles(work.base);
-    if (fingerprint(files) === fingerprint(previous))
+
+    if (fingerprint(files) === fingerprint(previous)) {
       return { unchanged: true };
+    }
+
     const branch =
       review?.branch ??
       `barndog/${work.scope.type === "org" ? "org" : `${work.scope.type}-${work.scope.slug}`}-${work.name}-${randomBytes(3).toString("hex")}`;
+
     const commit = await commitFiles(
       repo,
       review?.head ?? work.baseCommit,
       change,
       title,
     );
+
     await pushCommit(repo, commit, branch);
     const opened = review?.url
       ? { url: review.url, opened: false }
@@ -449,13 +516,16 @@ export function pushGitWorkingCopy(
           branch,
           title,
         });
+
     work.review = {
       branch,
       head: commit,
       files: encodeFiles(files),
       ...(opened.url ? { url: opened.url } : {}),
     };
+
     await save(work, home);
+
     return { branch, commit, url: opened.url ?? null, opened: opened.opened };
   });
 }
@@ -466,13 +536,16 @@ async function assetHistory(repo: string, commit: string, path: string) {
     ["log", "--reverse", "--format=%H%x00%ct%x00%an%x00%s", commit, "--", path],
     { repo },
   );
+
   return output
     .split("\n")
     .filter(Boolean)
     .map((line, index) => {
       const [hash, time, author, subject] = line.split("\0");
-      if (!hash || author === undefined || subject === undefined)
+      if (!hash || author === undefined || subject === undefined) {
         throw new Error(`Unexpected git log line: ${line}`);
+      }
+
       return {
         number: index + 1,
         commit: hash,
@@ -497,7 +570,9 @@ async function filesAt(repo: string, commit: string, path: string) {
             ...entry,
             path: entry.path.slice(path.length + 1),
           }));
+
   const blobs = await snapshot.readBlobs(members.map((entry) => entry.hash));
+
   return members.map((entry): PackageEntry => ({
     path: entry.path,
     data: defined(
@@ -523,13 +598,18 @@ async function history(
     target.name,
     target.origin,
   );
+
   const repo = gitDirectory(workspace.workspaceId, home);
   const versions = await assetHistory(repo, commit, asset.path);
   const filesOf = (number = versions.length) => {
     const version = versions[number - 1];
-    if (!version) throw new CliError(`${asset.name} has no version ${number}.`);
+    if (!version) {
+      throw new CliError(`${asset.name} has no version ${number}.`);
+    }
+
     return filesAt(repo, version.commit, asset.path);
   };
+
   return { versions, filesOf };
 }
 
@@ -547,6 +627,7 @@ export async function gitVersionFiles(
   home = homedir(),
 ) {
   const { filesOf } = await history(workspace, target, home);
+
   return { files: encodeFiles(await filesOf(target.version)) };
 }
 
@@ -556,5 +637,6 @@ export async function gitVersionDiff(
   home = homedir(),
 ) {
   const { filesOf } = await history(workspace, target, home);
+
   return diffEntries(await filesOf(target.from), await filesOf(target.to));
 }

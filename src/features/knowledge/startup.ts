@@ -6,12 +6,13 @@ const timer = setTimeout(() => {
   console.error(
     "BarnDog knowledge index timed out; use barndog knowledge list.",
   );
+
   process.exit(0);
 }, 5000);
 
 try {
   const text = knowledgeIndexText(await knowledgeList(true, process.argv[3]));
-  if (text)
+  if (text) {
     console.log(
       JSON.stringify(
         process.argv[2] === "cursor"
@@ -24,6 +25,7 @@ try {
             },
       ),
     );
+  }
 } catch {
   console.error(
     "BarnDog knowledge index is unavailable; use barndog knowledge list after reconnecting.",

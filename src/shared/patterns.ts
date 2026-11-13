@@ -57,8 +57,12 @@ export type FrontMatter = {
 /** Splits a Markdown file into its front matter and body; null when there is none. */
 export function splitFrontMatter(text: string): FrontMatter | null {
   const match = FRONT_MATTER.exec(text);
-  if (!match) return null;
+  if (!match) {
+    return null;
+  }
+
   const [whole, open = "", yaml = "", close = ""] = match;
+
   return { open, yaml, close, body: text.slice(whole.length) };
 }
 
@@ -96,6 +100,7 @@ export type OriginSelector = { type: string; value?: string };
  */
 export function splitOrigin(selector: string): OriginSelector {
   const separator = selector.search(/[/:]/);
+
   return separator < 0
     ? { type: selector }
     : {

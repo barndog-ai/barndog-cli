@@ -25,7 +25,9 @@ async function setup(t: TestContext) {
   const home = await realpath(
     await mkdtemp(join(tmpdir(), "barndog-onboarding-")),
   );
+
   t.onTestFinished(() => rm(home, { recursive: true, force: true }));
+
   return home;
 }
 
@@ -40,6 +42,7 @@ test("detection uses executable PATH entries and macOS app installations, not sk
   await mkdir(join(apps, "Cursor.app", "Contents", "MacOS"), {
     recursive: true,
   });
+
   await mkdir(join(home, ".claude", "skills"), { recursive: true });
   const found = await detectHarnesses({
     home,
@@ -47,10 +50,12 @@ test("detection uses executable PATH entries and macOS app installations, not sk
     platform: "darwin",
     appDirectories: [apps],
   });
+
   expect(found.find((item) => item.id === "claude")!.evidence).toBe(null);
   expect(found.find((item) => item.id === "codex")!.evidence).toBe(
     join(bin, "codex"),
   );
+
   expect(found.find((item) => item.id === "cursor")!.evidence).toBe(
     join(apps, "Cursor.app"),
   );
@@ -65,12 +70,15 @@ test("first onboarding requires explicit selection and saves machine settings; r
     choose: async (choices) => {
       expect(choices.every((choice) => !choice.checked)).toBeTruthy();
       expect(choices.every((choice) => choice.evidence === null)).toBeTruthy();
+
       return ["codex"];
     },
   });
+
   expect(await readSettings(home)).toStrictEqual({
     harnesses: ["codex"],
   });
+
   await initialize({
     home,
     detected,
@@ -78,12 +86,15 @@ test("first onboarding requires explicit selection and saves machine settings; r
       expect(choices.find((choice) => choice.value === "codex")!.checked).toBe(
         true,
       );
+
       expect(choices.find((choice) => choice.value === "claude")!.checked).toBe(
         false,
       );
+
       return ["claude", "codex"];
     },
   });
+
   expect((await readSettings(home))!.harnesses).toStrictEqual([
     "claude",
     "codex",
@@ -96,15 +107,18 @@ test("cancelling onboarding preserves previous settings or leaves first-time set
   const choose = async (): Promise<never> => {
     throw new Error("cancelled");
   };
+
   await expect(initialize({ home, detected, choose })).rejects.toThrow(
     /cancelled/,
   );
+
   expect(await readSettings(home)).toBe(null);
   await saveSettings({ harnesses: ["cursor"] }, home);
   const original = await readFile(settingsPath(home), "utf8");
   await expect(initialize({ home, detected, choose })).rejects.toThrow(
     /cancelled/,
   );
+
   expect(await readFile(settingsPath(home), "utf8")).toBe(original);
 });
 
@@ -114,6 +128,7 @@ test("empty selection persists and invalid settings never default to all harness
   expect(await readSettings(home)).toStrictEqual({
     harnesses: [],
   });
+
   for (const content of [
     "harnesses: [unknown]\n",
     "harnesses: [codex, codex]\n",
@@ -129,12 +144,14 @@ test("CLI help is noninteractive; explicit onboarding refuses piped input withou
   const help = execFileSync(process.execPath, [executable, "--help"], {
     encoding: "utf8",
   });
+
   expect(help).toMatch(/init/);
   for (const args of [["init"]]) {
     const result = spawnSync(process.execPath, [executable, ...args], {
       encoding: "utf8",
       timeout: 5000,
     });
+
     expect(result.status).toBe(1);
     expect(result.stderr).toMatch(/interactive terminal/);
   }
@@ -156,6 +173,7 @@ test("bare invocation reports existing configuration without prompting or rewrit
       throw new Error("Must not confirm");
     },
   });
+
   expect(messages.join("\n")).toMatch(/Configuration already exists/);
   expect(messages.join("\n")).toMatch(/barndog init/);
   expect(await readFile(settingsPath(home), "utf8")).toBe(original);
@@ -175,6 +193,7 @@ test("declining or cancelling restart leaves the configuration untouched", async
       throw new Error("Must not select harnesses");
     },
   };
+
   await runSetup({ ...options, confirmRestart: async () => false });
   expect(messages.join("\n")).toMatch(/Configuration was not changed/);
   await expect(
@@ -185,6 +204,7 @@ test("declining or cancelling restart leaves the configuration untouched", async
       },
     }),
   ).rejects.toThrow(/cancelled/);
+
   expect(await readFile(settingsPath(home), "utf8")).toBe(original);
 });
 
@@ -201,15 +221,18 @@ test("confirmed restart reopens harness selection while preserving saved setting
     write: () => {},
     confirmRestart: async () => {
       confirmed = true;
+
       return true;
     },
     detected: [{ id: "codex", name: "Codex", evidence: "/bin/codex" }],
     choose: async (choices) => {
       expect(confirmed).toBe(true);
       expect(choices[0]!.checked).toBe(true);
+
       return ["claude"];
     },
   });
+
   const saved = await readSettings(home);
   expect(saved?.harnesses).toStrictEqual(["claude"]);
   expect(saved?.knowledge).toBe(false);
@@ -221,6 +244,7 @@ test("first setup skips restart confirmation and still requires an interactive t
   await expect(runSetup({ home, interactive: false })).rejects.toThrow(
     /interactive terminal/,
   );
+
   await runSetup({
     home,
     restart: true,
@@ -234,6 +258,7 @@ test("first setup skips restart confirmation and still requires an interactive t
     },
     choose: async () => ["codex"],
   });
+
   const saved = await readSettings(home);
   expect(saved?.harnesses).toStrictEqual(["codex"]);
   assert(saved?.localWorkspace);

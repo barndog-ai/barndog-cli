@@ -57,13 +57,16 @@ export async function createGitWorkspace(
       "Set up BarnDog workspace",
       { allowPrompt: true },
     );
+
     await pushCommit(staging, commit, DEFAULT_BRANCH, true);
     await git(["update-ref", trackingRef(DEFAULT_BRANCH), commit], {
       repo: staging,
     });
+
     await adoptClone(staging, workspaceId, home);
     const workspace = { url, branch: DEFAULT_BRANCH, workspaceId };
     await recordFetch(workspace, commit, home);
+
     return workspace;
   } finally {
     await rm(staging, { recursive: true, force: true });
@@ -83,6 +86,7 @@ export async function connectGitWorkspace(
     const commit = await gitText(["rev-parse", trackingRef(branch)], {
       repo: staging,
     });
+
     let text: string;
     try {
       text = await gitText(["show", `${commit}:${CONFIG_FILE}`], {
@@ -95,10 +99,12 @@ export async function connectGitWorkspace(
         { cause: error },
       );
     }
+
     const { workspaceId } = parseConfig(text);
     await adoptClone(staging, workspaceId, home);
     const workspace = { url, branch, workspaceId };
     await recordFetch(workspace, commit, home);
+
     return workspace;
   } finally {
     await rm(staging, { recursive: true, force: true });
@@ -125,18 +131,21 @@ export async function cloneGitWorkspace(
         { cause: error },
       );
     }
+
     let commit: string;
     let branch: string;
     try {
       commit = await gitText(["rev-parse", "--verify", "HEAD"], {
         repo: staging,
       });
+
       branch = await gitText(["symbolic-ref", "--short", "HEAD"], {
         repo: staging,
       });
     } catch {
       return null;
     }
+
     await git(["update-ref", trackingRef(branch), commit], { repo: staging });
     let text: string;
     try {
@@ -150,10 +159,12 @@ export async function cloneGitWorkspace(
         { cause: error },
       );
     }
+
     const { workspaceId } = parseConfig(text);
     await adoptClone(staging, workspaceId, home);
     const workspace = { url, branch, workspaceId };
     await recordFetch(workspace, commit, home);
+
     return workspace;
   } finally {
     await rm(staging, { recursive: true, force: true });
@@ -172,15 +183,20 @@ export async function localWorkspace(
     const { workspaceId } = parseConfig(
       await readFile(join(path, CONFIG_FILE), "utf8"),
     );
+
     return { path, workspaceId };
   } catch (error) {
-    if (errorCode(error) !== "ENOENT") throw error;
+    if (errorCode(error) !== "ENOENT") {
+      throw error;
+    }
   }
+
   const workspaceId = randomUUID();
   for (const file of skeleton({ workspaceId, name: "My workspace" })) {
     const target = join(path, file.path);
     await mkdir(dirname(target), { recursive: true });
     await writeFile(target, file.data, { flag: "wx" });
   }
+
   return { path, workspaceId };
 }

@@ -28,20 +28,25 @@ async function connectedHome(t: TestContext, extra: Partial<Settings> = {}) {
       role: "developer" as const,
     },
   };
+
   const backend = {
     revision: "one" as string | null,
     status: 200,
     requests: 0,
   };
+
   const server = createServer((req, res) => {
     res.setHeader("Content-Type", "application/json");
 
     const send = (value: unknown) => res.end(JSON.stringify(value));
 
-    if (req.url === "/v1/context") return send(context);
+    if (req.url === "/v1/context") {
+      return send(context);
+    }
 
-    if (req.url === "/v1/environment/catalog")
+    if (req.url === "/v1/environment/catalog") {
       return send({ assets: [], distributions: [] });
+    }
 
     if (req.url === "/v1/environment/catalog/revision") {
       backend.requests += 1;
@@ -99,12 +104,15 @@ async function connectedHome(t: TestContext, extra: Partial<Settings> = {}) {
     check.checkedAt = new Date(Date.now() - 6 * 60 * 1000).toISOString();
     await writeFile(path, JSON.stringify(check));
   };
+
   let syncs = 0;
   const run = (fail = false) =>
     autoSync(async () => {
       syncs += 1;
 
-      if (fail) throw new Error("sync failed");
+      if (fail) {
+        throw new Error("sync failed");
+      }
     }, home);
 
   return { home, backend, expire, run, syncs: () => syncs };

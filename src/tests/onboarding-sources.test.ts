@@ -11,6 +11,7 @@ function fixture(): EnvironmentChoices {
     team = randomUUID(),
     other = randomUUID(),
     developerId = randomUUID();
+
   const origin = { type: "org" as const, id: org, slug: "acme" };
   const assets = ["recommended", "optional"].map((name) => ({
     id: randomUUID(),
@@ -19,6 +20,7 @@ function fixture(): EnvironmentChoices {
     origin,
     publishedVersion: randomUUID(),
   }));
+
   const own = {
     id: randomUUID(),
     kind: "mcp" as const,
@@ -26,6 +28,7 @@ function fixture(): EnvironmentChoices {
     origin: { type: "dev" as const, id: developerId, slug: "alice" },
     publishedVersion: randomUUID(),
   };
+
   return {
     scopes: [
       { type: "org", id: org, slug: "acme", name: "Acme", canPublish: false },
@@ -84,15 +87,18 @@ test("setup defaults organization and sole membership team, regardless of other 
     "team",
     "dev",
   ]);
+
   expect(sources.map((s) => s.checked)).toStrictEqual([true, true, false]);
   choices.memberTeamIds = choices.scopes
     .filter((s) => s.type === "team")
     .map((s) => s.id);
+
   expect(
     onboardingSources(choices)
       .filter((s) => s.scope.type === "team")
       .map((s) => s.checked),
   ).toStrictEqual([false, false]);
+
   choices.firstSetup = false;
   expect(onboardingSources(choices).every((s) => !s.checked)).toBeTruthy();
 });
@@ -111,11 +117,13 @@ test("setup replaces the environment with exactly the chosen sources", () => {
     excludedAssetIds: [choices.catalog.assets[0]!.id],
     disabledAssetIds: [choices.catalog.assets[1]!.id],
   };
+
   const sources = onboardingSources(choices);
   // A subscribed repository is offered so leaving it unchecked removes it.
   expect(
     sources.some((s) => s.scope.type === "repo" && s.checked),
   ).toBeTruthy();
+
   const selected = selectOnboardingSources([
     {
       source: sources[0]!,
@@ -123,12 +131,14 @@ test("setup replaces the environment with exactly the chosen sources", () => {
       assetIds: [choices.catalog.assets[1]!.id],
     },
   ]);
+
   expect(selected).toStrictEqual({
     subscriptions: [],
     individualAssetIds: [choices.catalog.assets[1]!.id],
     excludedAssetIds: [],
     disabledAssetIds: [],
   });
+
   expect(() =>
     selectOnboardingSources([
       { source: sources[0]!, mode: "custom", assetIds: [outside] },
@@ -144,6 +154,7 @@ test("own assets offer all, recommended, and custom without including other deve
     id: randomUUID(),
     origin: { type: "dev", id: randomUUID(), slug: "bob" },
   });
+
   const sources = onboardingSources(choices);
   const personal = sources.find((s) => s.scope.type === "dev")!;
   expect(personal.assets.map((a) => a.id)).toStrictEqual([own.id]);
@@ -152,6 +163,7 @@ test("own assets offer all, recommended, and custom without including other deve
     const state = selectOnboardingSources([
       { source: personal, mode, assetIds: [own.id] },
     ]);
+
     expect(state.individualAssetIds).toStrictEqual([own.id]);
     expect(state.subscriptions).toStrictEqual([]);
   }
@@ -169,11 +181,13 @@ test("legacy optional selections reopen as custom and a re-chosen subscription i
       },
     ],
   };
+
   const sources = onboardingSources(choices);
   expect(sources[0]!.mode).toBe("custom");
   expect(sources[0]!.selectedIds).toStrictEqual([
     choices.catalog.assets[1]!.id,
   ]);
+
   const next = selectOnboardingSources([{ source: sources[0]!, mode: "all" }]);
   expect(next.subscriptions[0]!.enabled).toBe(true);
 });
@@ -187,12 +201,14 @@ test("reopening a subscribed source keeps its subscription and drops earlier ind
     subscriptions: [{ scope, mode: "recommended", enabled: true }],
     individualAssetIds: [individual],
   };
+
   choices.firstSetup = false;
   const sources = onboardingSources(choices);
   expect(sources[0]!.mode).toBe("recommended");
   const next = selectOnboardingSources([
     { source: sources[0]!, mode: sources[0]!.mode },
   ]);
+
   expect(next.subscriptions).toStrictEqual(choices.previous.subscriptions);
   expect(next.individualAssetIds).toStrictEqual([]);
 });

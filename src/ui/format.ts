@@ -38,8 +38,14 @@ const STYLE_CODE = /(\u001b\[[\d;]*m)/;
 
 function truncate(text: string, width: number): string {
   const plain = stripVTControlCharacters(text);
-  if ([...plain].length <= width) return text;
-  if (width <= 1) return "…";
+  if ([...plain].length <= width) {
+    return text;
+  }
+
+  if (width <= 1) {
+    return "…";
+  }
+
   // Every style code is kept, so a cut cell looks like the uncut ones.
   let room = width - 1;
   let cut = false;
@@ -49,16 +55,22 @@ function truncate(text: string, width: number): string {
       output += part;
       continue;
     }
-    if (cut) continue;
+
+    if (cut) {
+      continue;
+    }
+
     const characters = [...part];
     if (characters.length <= room) {
       output += part;
       room -= characters.length;
       continue;
     }
+
     output += `${characters.slice(0, room).join("")}…`;
     cut = true;
   }
+
   return output;
 }
 
@@ -82,7 +94,9 @@ export function fields(
   const visible = rows.filter(
     (row): row is readonly [string, string] => !!row[1],
   );
+
   const width = Math.max(0, ...visible.map(([label]) => label.length));
+
   return visible.map(
     ([label, value]) =>
       `${" ".repeat(indent)}${dim(pad(label, width))}  ${value}`,
@@ -106,19 +120,27 @@ export function table(
   const all = options.header
     ? [options.header.map((cell) => dim(cell)), ...rows]
     : [...rows];
-  if (!all.length) return [];
+
+  if (!all.length) {
+    return [];
+  }
+
   const count = Math.max(...all.map((row) => row.length));
   const widths = Array.from({ length: count }, (_, column) =>
     Math.max(0, ...all.map((row) => visibleWidth(row[column] ?? ""))),
   );
+
   const flex = options.flex ?? count - 1;
   const available =
     (options.width ?? (process.stdout.columns || Infinity)) -
     indent.length -
     (count - 1) * 2;
+
   const total = widths.reduce((sum, width) => sum + width, 0);
-  if (total > available && widths[flex] !== undefined)
+  if (total > available && widths[flex] !== undefined) {
     widths[flex] = Math.max(8, widths[flex] - (total - available));
+  }
+
   return all.map((row) =>
     (
       indent +
@@ -127,6 +149,7 @@ export function table(
           const cell = row[column] ?? "";
           const fitted =
             visibleWidth(cell) > width ? truncate(cell, width) : cell;
+
           return column === count - 1 ? fitted : pad(fitted, width);
         })
         .join("  ")
@@ -172,6 +195,7 @@ export function plural(count: number, noun: string, many = `${noun}s`) {
 
 export function humanize(value: string): string {
   const text = value.replaceAll("_", " ");
+
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
@@ -196,29 +220,40 @@ const label = (key: string) =>
 
 /** Readable fallback for structured results: key/value blocks and tables. */
 export function renderValue(value: unknown, indent = 0): string[] {
-  if (isPlain(value)) return [`${" ".repeat(indent)}${show(value)}`];
+  if (isPlain(value)) {
+    return [`${" ".repeat(indent)}${show(value)}`];
+  }
+
   if (Array.isArray(value)) {
-    if (!value.length) return [`${" ".repeat(indent)}${dim("None.")}`];
+    if (!value.length) {
+      return [`${" ".repeat(indent)}${dim("None.")}`];
+    }
+
     const rows = value.filter(isRecord);
     const [first] = rows;
     if (first && rows.length === value.length) {
       const keys = Object.keys(first).filter((key) =>
         rows.every((row) => isPlain(row[key])),
       );
-      if (keys.length)
+
+      if (keys.length) {
         return table(
           rows.map((row) => keys.map((key) => show(row[key]))),
           { header: keys.map(label), indent: indent + 2 },
         );
+      }
     }
+
     return value.flatMap((row, index) => [
       ...(index ? [""] : []),
       ...renderValue(row, indent),
     ]);
   }
+
   const entries = Object.entries(isRecord(value) ? value : {});
   const simple = entries.filter(([, v]) => isPlain(v));
   const nested = entries.filter(([, v]) => !isPlain(v) && v !== undefined);
+
   return [
     ...fields(
       simple.map(([key, v]) => [label(key), show(v)] as const),

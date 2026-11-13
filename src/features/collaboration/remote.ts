@@ -29,38 +29,47 @@ export async function connection(home = homedir(), expected?: Connection) {
     settings &&
     !settings.connection &&
     (settings.gitWorkspace || settings.localWorkspace)
-  )
+  ) {
     throw new CliError(
       `This needs a BarnDog Cloud Workspace. This machine keeps its assets in ${settings.gitWorkspace ? "a Git repo" : "a local folder"}.`,
       settings.gitWorkspace
         ? "barndog migrate --to <server>"
         : "barndog init --server <url>",
     );
-  if (!settings || !settings.connection)
+  }
+
+  if (!settings || !settings.connection) {
     throw new CliError(
       "This machine isn't connected to a BarnDog workspace.",
       "barndog init",
     );
+  }
+
   const saved = settings.connection;
   if (
     expected &&
     (expected.server !== saved.server ||
       expected.organizationId !== saved.organizationId ||
       expected.developerId !== saved.developerId)
-  )
+  ) {
     throw new Error(
       "Working copy belongs to another server, organization, or developer",
     );
+  }
+
   const actor = contextSchema.parse(
     (await apiClient(saved.server, home).GET("/v1/context")).data,
   );
+
   if (
     actor.organization.id !== saved.organizationId ||
     actor.developer.id !== saved.developerId
-  )
+  ) {
     throw new Error(
       "Authenticated identity does not match the saved connection",
     );
+  }
+
   return saved;
 }
 
@@ -69,12 +78,20 @@ export function matchesOrigin(
   selector: string,
   conn: Pick<Connection, "organizationId"> & { developerId?: string },
 ) {
-  if (selector === "local") return origin.localOnly === true;
-  if (selector === "org")
+  if (selector === "local") {
+    return origin.localOnly === true;
+  }
+
+  if (selector === "org") {
     return origin.type === "org" && origin.id === conn.organizationId;
-  if (selector === "me")
+  }
+
+  if (selector === "me") {
     return origin.type === "dev" && origin.id === conn.developerId;
+  }
+
   const { type, value = "" } = splitOrigin(selector);
+
   return origin.type === type && [origin.id, origin.slug].includes(value);
 }
 
@@ -89,8 +106,12 @@ export async function selectSkill(
   const matches = values.filter(
     (s) => s.name === name && matchesOrigin(s.origin, selector, conn),
   );
+
   const match = only(matches);
-  if (!match) throw assetNotFound(kind, name, selector);
+  if (!match) {
+    throw assetNotFound(kind, name, selector);
+  }
+
   return match;
 }
 
@@ -102,6 +123,7 @@ export async function selectOrigin(
   const scopes = z
     .array(scopeSchema)
     .parse((await apiClient(conn.server, home).GET("/v1/scopes")).data);
+
   const matches = scopes.filter((s) => matchesOrigin(s, selector, conn));
   const personal = splitOrigin(selector);
   if (
@@ -112,6 +134,7 @@ export async function selectOrigin(
     const actor = contextSchema.parse(
       (await apiClient(conn.server, home).GET("/v1/context")).data,
     );
+
     if (actor.developer.role === "organization_admin") {
       const members = z
         .array(memberSchema)
@@ -119,6 +142,7 @@ export async function selectOrigin(
           (await apiClient(conn.server, home).GET("/v1/organization/members"))
             .data,
         );
+
       for (const member of members) {
         const origin = {
           type: "dev" as const,
@@ -127,16 +151,22 @@ export async function selectOrigin(
           name: member.name,
           canPublish: true,
         };
-        if (matchesOrigin(origin, selector, conn)) matches.push(origin);
+
+        if (matchesOrigin(origin, selector, conn)) {
+          matches.push(origin);
+        }
       }
     }
   }
+
   const match = only(matches);
-  if (!match)
+  if (!match) {
     throw new CliError(
       `No scope named ${selector} that you can use.`,
       "barndog sets list",
     );
+  }
+
   return match;
 }
 
@@ -151,18 +181,30 @@ export async function download(
     `${conn.server}${packagePath(path, kind)}`,
     { signal: AbortSignal.timeout(30000) },
   );
-  if (!response.ok)
+
+  if (!response.ok) {
     throw new Error(`Package download failed (${response.status})`);
-  if (commit && response.headers.get("etag") !== `"${commit}"`)
+  }
+
+  if (commit && response.headers.get("etag") !== `"${commit}"`) {
     throw new Error("Package revision does not match metadata");
-  if (!response.body) throw new Error("Missing package body");
+  }
+
+  if (!response.body) {
+    throw new Error("Missing package body");
+  }
+
   let size = 0;
   const chunks: Uint8Array[] = [];
   for await (const chunk of response.body) {
     size += chunk.length;
-    if (size > defaultLimits.compressed) throw new Error("PACKAGE_TOO_LARGE");
+    if (size > defaultLimits.compressed) {
+      throw new Error("PACKAGE_TOO_LARGE");
+    }
+
     chunks.push(chunk);
   }
+
   return parsePackage(
     Buffer.concat(chunks),
     defaultLimits,

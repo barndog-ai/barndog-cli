@@ -24,7 +24,10 @@ import { assetKinds } from "../features/asset-kinds/index.js";
 
 export function displayPath(path: string): string {
   const homeRelative = relative(homedir(), path);
-  if (!homeRelative) return "~";
+  if (!homeRelative) {
+    return "~";
+  }
+
   if (
     homeRelative !== ".." &&
     !homeRelative.startsWith(`..${sep}`) &&
@@ -32,6 +35,7 @@ export function displayPath(path: string): string {
   ) {
     return `~${sep}${homeRelative}`;
   }
+
   return path;
 }
 
@@ -75,14 +79,22 @@ function rows(events: SyncEvent[]): Row[] {
       harnesses: new Set<string>(),
       note,
     };
-    if (isHarness(harness)) row.harnesses.add(adapters[harness].name);
+
+    if (isHarness(harness)) {
+      row.harnesses.add(adapters[harness].name);
+    }
+
     byKey.set(key, row);
   };
+
   for (const event of events) {
-    if (event.type === "disabled" || event.type === "notice") continue;
-    if (event.type === "invalid")
+    if (event.type === "disabled" || event.type === "notice") {
+      continue;
+    }
+
+    if (event.type === "invalid") {
       add("skipped", event.kind, event.name, undefined, event.reason);
-    else if (event.type === "clash")
+    } else if (event.type === "clash") {
       add(
         "skipped",
         event.kind,
@@ -90,13 +102,15 @@ function rows(events: SyncEvent[]): Row[] {
         undefined,
         `${event.skipped.origin} · name taken by ${event.installed.origin}`,
       );
-    else if (event.type === "unsupported")
+    } else if (event.type === "unsupported") {
       add("unsupported", event.kind, event.name, event.harness, event.reason);
-    else if (event.type === "native")
+    } else if (event.type === "native") {
       add(event.action, event.kind, event.name, event.harness);
-    else
+    } else {
       add(event.type, "skill", basename(event.link.target), event.link.harness);
+    }
   }
+
   const order: Action[] = [
     "installed",
     "updated",
@@ -105,6 +119,7 @@ function rows(events: SyncEvent[]): Row[] {
     "unsupported",
     "unchanged",
   ];
+
   return [...byKey.values()].sort(
     (a, b) =>
       order.indexOf(a.action) - order.indexOf(b.action) ||
@@ -122,18 +137,23 @@ export function renderSyncOutput(
   const shown = options.verbose
     ? all
     : assets.filter((row) => row.action !== "unchanged");
+
   const count = (action: Action) =>
     assets.filter((row) => row.action === action).length;
+
   // Internal entries stay out of the counts, but a change to one still needs a restart.
   const changed = all.some((row) =>
     ["installed", "updated", "removed"].includes(row.action),
   );
+
   // Something was left out or read from an old copy, so "up to date" would be untrue.
   const incomplete =
     count("skipped") > 0 || events.some((event) => event.type === "notice");
+
   const quiet = incomplete
     ? dim("Nothing else changed.")
     : dim("Everything is up to date.");
+
   const summary = [
     ...(["installed", "updated", "removed", "unchanged"] as const).flatMap(
       (action) => (count(action) ? [`${count(action)} ${action}`] : []),
@@ -141,6 +161,7 @@ export function renderSyncOutput(
     ...(count("skipped") ? [`${count("skipped")} skipped`] : []),
     ...(count("unsupported") ? [`${count("unsupported")} unsupported`] : []),
   ].join(", ");
+
   const output = [`\n${heading(options.title ?? "sync")}\n`];
   if (shown.length) {
     output.push(
@@ -157,65 +178,85 @@ export function renderSyncOutput(
       "",
     );
   }
+
   output.push(
     `${incomplete ? warn("!") : ok("✔")} ${options.preview ? "Preview" : "Sync complete"}${summary ? ` · ${summary}` : ""}`,
   );
-  if (options.preview)
+
+  if (options.preview) {
     output.push(
       changed
         ? hint("barndog sync", "Next") + dim("  to apply these changes")
         : quiet,
     );
-  else
+  } else {
     output.push(
       changed
         ? dim("Restart your coding tools to pick up the changes.")
         : quiet,
     );
-  for (const event of events)
-    if (event.type === "notice")
+  }
+
+  for (const event of events) {
+    if (event.type === "notice") {
       output.push("", `${warn("!")} ${event.message}`);
-    else if (event.type === "clash")
+    } else if (event.type === "clash") {
       output.push(
         "",
         `${warn("!")} ${assetKinds[event.kind].one} ${bold(event.skipped.name)} from ${event.skipped.origin} was skipped: ${event.installed.origin} already installs one with that name.`,
         `  ${hint(`barndog ${assetKinds[event.kind].command} rename ${event.skipped.name} --origin ${event.skipped.origin} --as ${event.skipped.rename}`, "Fix")}`,
       );
+    }
+  }
+
   output.push("");
+
   return output;
 }
 
 function describeError(error: unknown): { message: string; fix?: string } {
-  if (error instanceof LoginRequiredError)
+  if (error instanceof LoginRequiredError) {
     return { message: "You're not signed in.", fix: "barndog login" };
-  if (error instanceof SetupRequiredError)
+  }
+
+  if (error instanceof SetupRequiredError) {
     return {
       message: "BarnDog isn't set up on this machine yet.",
       fix: "barndog init",
     };
-  if (error instanceof CliError)
+  }
+
+  if (error instanceof CliError) {
     return { message: error.message, fix: error.hint };
-  if (error instanceof ApiError && error.status === 500)
+  }
+
+  if (error instanceof ApiError && error.status === 500) {
     return {
       message: `The BarnDog server had a problem and couldn't finish this (${error.status}). If you run it yourself, check that it and its database are up.`,
     };
-  if (error instanceof TypeError && error.message === "fetch failed")
+  }
+
+  if (error instanceof TypeError && error.message === "fetch failed") {
     return {
       message:
         "Can't reach the BarnDog server. Check your connection and that the server is running.",
     };
+  }
+
   return { message: friendlyMessage(error), fix: friendlyHint(error) };
 }
 
 export function renderError(error: unknown): string {
   const stream = process.stderr;
   const { message, fix } = describeError(error);
+
   return `${danger("✖", stream)} ${message}${fix ? `\n  ${styleText("dim", "Fix:", { stream })} ${styleText("bold", fix, { stream })}` : ""}`;
 }
 
 /** The same failure for `--json` callers, who parse rather than read. */
 export function renderJsonError(error: unknown): string {
   const { message, fix } = describeError(error);
+
   return json({
     error: {
       message,

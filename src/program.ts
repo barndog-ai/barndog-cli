@@ -173,23 +173,34 @@ const assetGroups: [string, string[]][] = [
 /** The command's words without the program name, as availability rules name them. */
 function commandPath(command: Command) {
   const path: string[] = [];
-  for (let c: Command | null = command; c?.parent; c = c.parent)
+  for (let c: Command | null = command; c?.parent; c = c.parent) {
     path.unshift(c.name());
+  }
+
   return path.join(" ");
 }
 
 /** A group is unavailable only when nothing inside it can run. */
 function helpNeed(command: Command, mode: SetupMode): CommandNeed | undefined {
   const children = command.commands.filter((c) => c.name() !== "help");
-  if (!children.length) return commandNeeds(commandPath(command), mode);
+  if (!children.length) {
+    return commandNeeds(commandPath(command), mode);
+  }
+
   const needs = children.map((child) => helpNeed(child, mode));
-  if (!needs.every(Boolean)) return undefined;
+  if (!needs.every(Boolean)) {
+    return undefined;
+  }
+
   return needs.includes("shared") ? "shared" : "cloud";
 }
 
 function listsUnavailable(command: Command) {
   let root = command;
-  while (root.parent) root = root.parent;
+  while (root.parent) {
+    root = root.parent;
+  }
+
   return root.opts().listUnavailable === true;
 }
 
@@ -198,18 +209,24 @@ function limitedHelp(mode: SetupMode): Partial<Help> {
   const dimmed = new Set<string>();
   const note = (command: Command) => {
     const need = listsUnavailable(command) && helpNeed(command, mode);
+
     return need ? unavailableNote(need, mode) : undefined;
   };
+
   return {
     visibleCommands(this: Help, command: Command) {
       const commands = Help.prototype.visibleCommands.call(this, command);
+
       return listsUnavailable(command) || helpNeed(command, mode)
         ? commands
         : commands.filter((child) => !helpNeed(child, mode));
     },
     subcommandTerm(this: Help, command: Command) {
       const term = Help.prototype.subcommandTerm.call(this, command);
-      if (note(command)) dimmed.add(term);
+      if (note(command)) {
+        dimmed.add(term);
+      }
+
       return term;
     },
     subcommandDescription(this: Help, command: Command) {
@@ -217,7 +234,9 @@ function limitedHelp(mode: SetupMode): Partial<Help> {
         this,
         command,
       );
+
       const text = note(command);
+
       return text ? `${description} (${text})` : description;
     },
     styleSubcommandTerm(this: Help, term: string) {
@@ -231,13 +250,24 @@ function limitedHelp(mode: SetupMode): Partial<Help> {
 /** The closing lines of help: what was left out, why, and how to see it. */
 function unavailableHint(command: Command, mode: SetupMode) {
   const own = helpNeed(command, mode);
-  if (own) return `\n${styleText("dim", unavailableNote(own, mode))}`;
-  if (listsUnavailable(command)) return "";
+  if (own) {
+    return `\n${styleText("dim", unavailableNote(own, mode))}`;
+  }
+
+  if (listsUnavailable(command)) {
+    return "";
+  }
+
   const hidden = new Help().visibleCommands(command).flatMap((child) => {
     const need = helpNeed(child, mode);
+
     return need ? [{ name: child.name(), need }] : [];
   });
-  if (!hidden.length) return "";
+
+  if (!hidden.length) {
+    return "";
+  }
+
   const need = hidden.some((c) => c.need === "shared") ? "shared" : "cloud";
   const one = hidden.length === 1;
   const path = commandPath(command);
@@ -247,6 +277,7 @@ function unavailableHint(command: Command, mode: SetupMode) {
     `${one ? "One command is" : "Some commands are"} hidden in ${modeName(mode)} mode because ${one ? "it needs" : "they need"} ${needText(need)}: ${hidden.map((c) => c.name).join(", ")}.`,
     `Run barndog ${path ? `${path} ` : ""}--help --list-unavailable to see ${one ? "it" : "them"}.`,
   ];
+
   return `\n${styleText("dim", lines.map((line) => help.boxWrap(line, width)).join("\n"))}`;
 }
 
@@ -257,15 +288,29 @@ type Guard = NonNullable<ProgramOptions["guard"]>;
  * here before complaining about its flags. Help stays available either way.
  */
 function guardRequiredOptions(parent: Command, guard: Guard) {
-  for (const child of parent.commands) guardRequiredOptions(child, guard);
-  if (!parent.commands.length) return;
+  for (const child of parent.commands) {
+    guardRequiredOptions(child, guard);
+  }
+
+  if (!parent.commands.length) {
+    return;
+  }
+
   parent.hook("preSubcommand", async (_, command) => {
-    if (command.commands.length || !command.options.some((o) => o.mandatory))
+    if (command.commands.length || !command.options.some((o) => o.mandatory)) {
       return;
+    }
+
     let root: Command = parent;
-    while (root.parent) root = root.parent;
+    while (root.parent) {
+      root = root.parent;
+    }
+
     const { rawArgs = [] } = root as Command & { rawArgs?: string[] };
-    if (rawArgs.includes("--help") || rawArgs.includes("-h")) return;
+    if (rawArgs.includes("--help") || rawArgs.includes("-h")) {
+      return;
+    }
+
     await guard(commandPath(command).split(" "), {});
   });
 }
@@ -277,6 +322,7 @@ export function createProgram(options: ProgramOptions = {}): Command {
     json: false,
     interactive: options.interactive ?? interactiveTerminal(),
   };
+
   const context: CommandContext = {
     applySuggestion: options.applySuggestion ?? applySuggestion,
     changeDiff: options.changeDiff ?? changeDiff,
@@ -370,6 +416,7 @@ export function createProgram(options: ProgramOptions = {}): Command {
     write,
     mode,
   };
+
   const program = new Command()
     .name("barndog")
     .description(
@@ -411,29 +458,40 @@ export function createProgram(options: ProgramOptions = {}): Command {
       options.setupMode ? unavailableHint(command, options.setupMode) : "",
     )
     .action((_, command: Command) => {
-      if (command.args.length)
+      if (command.args.length) {
         program.error(`error: unknown command '${command.args[0]}'`);
+      }
+
       program.help();
     });
+
   program.hook("preAction", async (_, action) => {
     const flags = action.optsWithGlobals<{
       json?: boolean;
       interactive?: boolean;
     }>();
+
     mode.json = !!flags.json;
     mode.interactive =
       mode.interactive &&
       flags.interactive !== false &&
       !mode.json &&
       !process.env.CI;
-    if (!options.synchronize && mode.interactive)
+
+    if (!options.synchronize && mode.interactive) {
       clashPrompt.resolver = promptClash;
-    else if (!mode.interactive) clashPrompt.resolver = undefined;
+    } else if (!mode.interactive) {
+      clashPrompt.resolver = undefined;
+    }
+
     const path: string[] = [];
-    for (let c: Command | null = action; c?.parent; c = c.parent)
+    for (let c: Command | null = action; c?.parent; c = c.parent) {
       path.unshift(c.name());
+    }
+
     await options.guard?.(path, action.opts());
   });
+
   registerAuth(program, context);
   registerInit(program, context);
   registerSync(program, context);
@@ -445,24 +503,29 @@ export function createProgram(options: ProgramOptions = {}): Command {
   registerCollaboration(program, context, "hook");
   registerAdd(program, context);
   const order = groups.flatMap(([, names]) => names);
-  for (const [heading, names] of groups)
-    for (const name of names)
+  for (const [heading, names] of groups) {
+    for (const name of names) {
       program.commands.find((c) => c.name() === name)?.helpGroup(heading);
+    }
+  }
+
   // Commander lists groups in command order, so sort commands into section order.
   // Commander types `commands` as readonly but offers no other way to reorder them.
   // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
   (program.commands as Command[]).sort(
     (a, b) => order.indexOf(a.name()) - order.indexOf(b.name()),
   );
+
   program.commandsGroup("Get started:").helpCommand(true);
   for (const name of ["skills", "mcp", "hooks"]) {
     const group = defined(
       program.commands.find((c) => c.name() === name),
       `Command group ${name} isn't registered`,
     );
-    for (const [heading, names] of assetGroups)
-      for (const command of group.commands)
-        if (names.includes(command.name()))
+
+    for (const [heading, names] of assetGroups) {
+      for (const command of group.commands) {
+        if (names.includes(command.name())) {
           command.helpGroup(
             // MCP create/show/versions publish or inspect definitions directly.
             name === "mcp" &&
@@ -472,9 +535,17 @@ export function createProgram(options: ProgramOptions = {}): Command {
                 ? "On this machine:"
                 : heading,
           );
+        }
+      }
+    }
   }
-  if (options.guard) guardRequiredOptions(program, options.guard);
+
+  if (options.guard) {
+    guardRequiredOptions(program, options.guard);
+  }
+
   // Only the root accepts stray words, to report them as unknown commands.
   program.allowExcessArguments(true);
+
   return program;
 }

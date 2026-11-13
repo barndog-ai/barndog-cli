@@ -95,6 +95,7 @@ export type AddPrompts = {
 /** Reads pasted lines until they form complete JSON, so nobody has to press Ctrl+D. */
 function pasteJson(write: (line: string) => void) {
   write(dim("Paste the JSON. It's read as soon as it's complete."));
+
   return new Promise<string>((resolve) => {
     const lines: string[] = [];
     const reader = createInterface({ input: process.stdin });
@@ -107,6 +108,7 @@ function pasteJson(write: (line: string) => void) {
         // Not complete yet.
       }
     });
+
     reader.on("close", () => resolve(lines.join("\n")));
   });
 }
@@ -168,13 +170,20 @@ const updateChoices: {
 ];
 
 async function updateMode(options: AddOptions, context: AddContext) {
-  if (options.updates) return options.updates;
-  if (!context.interactive) return "manual";
+  if (options.updates) {
+    return options.updates;
+  }
+
+  if (!context.interactive) {
+    return "manual";
+  }
+
   const mode = await context.prompts.chooseOne(
     "How should it stay up to date?",
     updateChoices,
     "manual",
   );
+
   return (
     updateChoices.find((choice) => choice.value === mode)?.value ?? "manual"
   );
@@ -184,9 +193,12 @@ async function finish(context: AddContext) {
   const events = await synchronize(undefined, context.home, undefined, {
     prompt: false,
   });
-  for (const event of events)
-    if (event.type === "invalid")
+
+  for (const event of events) {
+    if (event.type === "invalid") {
       context.write(`${warn("!")} ${event.name}: ${event.reason}`);
+    }
+  }
 }
 
 const folderLabel = (root: string) => root || "repo root";
@@ -198,16 +210,21 @@ function notFound(remote: RemoteRepo, url: string, kind: "Skill" | "Hook") {
     kind === "Skill"
       ? "A Skill is a folder with a SKILL.md."
       : "A Hook is a folder with hook.yaml, hook settings, or scripts.";
-  if (!scopeExists(remote))
+
+  if (!scopeExists(remote)) {
     return new CliError(
       `Can't find ${remote.path} in ${remote.url}${remote.ref ? ` at ${remote.ref}` : ""}.`,
       `${command} ${remote.url}`,
     );
-  if (remote.path)
+  }
+
+  if (remote.path) {
     return new CliError(
       `No valid ${kind} found in ${remote.path} or the folders below it. ${expects} BarnDog only looks where the link points, not in the rest of the repo.`,
       `${command} ${remote.url}`,
     );
+  }
+
   return new CliError(`No valid ${kind} found in ${url}. ${expects}`);
 }
 
@@ -216,7 +233,11 @@ function assertDistinctNames(chosen: SkillCandidate[], url: string) {
   const clash = chosen.find(
     (skill, index) => chosen.findIndex((s) => s.name === skill.name) !== index,
   );
-  if (!clash) return;
+
+  if (!clash) {
+    return;
+  }
+
   const copies = chosen.filter((s) => s.name === clash.name);
   throw new CliError(
     `${clash.name} is in more than one folder: ${copies.map((s) => folderLabel(s.root)).join(", ")}. Choose one.`,
@@ -230,20 +251,26 @@ async function withSkillSource(
   folder: string | null,
   use: (remote: RemoteRepo) => Promise<void>,
 ) {
-  if (folder) return use(await readFolder(folder));
+  if (folder) {
+    return use(await readFolder(folder));
+  }
+
   return fetchRemote(parseLocation(source), { allowPrompt: true }, use);
 }
 
 function assertFolderOptions(options: AddOptions, folder: string | null) {
-  if (!folder && (options.copy || options.move))
+  if (!folder && (options.copy || options.move)) {
     throw new CliError(
       `--${options.copy ? "copy" : "move"} only applies when adding from a local folder.`,
     );
-  if (folder && options.updates && options.updates !== "fork")
+  }
+
+  if (folder && options.updates && options.updates !== "fork") {
     throw new CliError(
       "A plain folder has no history to update from, so --updates doesn't apply.",
       "barndog skills add <folder> --copy",
     );
+  }
 }
 
 async function folderTransfer(
@@ -251,8 +278,14 @@ async function folderTransfer(
   options: AddOptions,
   context: AddContext,
 ) {
-  if (options.move) return "move";
-  if (options.copy || !context.interactive) return "copy";
+  if (options.move) {
+    return "move";
+  }
+
+  if (options.copy || !context.interactive) {
+    return "copy";
+  }
+
   return context.prompts.chooseOne(
     `Copy or move ${count === 1 ? "it" : "them"} into your workspace?`,
     [
@@ -283,25 +316,34 @@ export async function addSkills(
   assertFolderOptions(options, folder);
   await withSkillSource(url, folder, async (remote) => {
     const { skills, skipped } = discoverSkills(remote);
-    for (const skip of skipped)
+    for (const skip of skipped) {
       context.write(`${warn("!")} ${skip.path}: ${skip.reason}`);
-    if (!skills.length) throw notFound(remote, url, "Skill");
+    }
+
+    if (!skills.length) {
+      throw notFound(remote, url, "Skill");
+    }
+
     const repeated = (name: string) =>
       skills.filter((s) => s.name === name).length > 1;
+
     const distinctName = (s: SkillCandidate) =>
       repeated(s.name) ? `${s.name} (${folderLabel(s.root)})` : s.name;
+
     let chosen = skills;
     const { only } = options;
-    if (only?.length)
+    if (only?.length) {
       chosen = skills.filter(
         (s) => only.includes(s.name) || only.includes(s.root),
       );
-    else if (skills.length > 1 && !options.all) {
-      if (!context.interactive)
+    } else if (skills.length > 1 && !options.all) {
+      if (!context.interactive) {
         throw new CliError(
           `${url} has ${skills.length} Skills: ${skills.map(distinctName).join(", ")}.`,
           "barndog skills add <url> --only <name or folder>",
         );
+      }
+
       const picked = await context.prompts.chooseMany(
         "Which Skills do you want?",
         skills.map((s) => ({
@@ -311,16 +353,23 @@ export async function addSkills(
           description: `Description: ${s.description}`,
         })),
       );
+
       chosen = skills.filter((s) => picked.includes(s.root));
     }
-    if (!chosen.length)
+
+    if (!chosen.length) {
       throw new CliError("No Skills were chosen, so nothing was added.");
+    }
+
     assertDistinctNames(chosen, url);
-    if (options.as && chosen.length !== 1)
+    if (options.as && chosen.length !== 1) {
       throw new CliError("--as renames one Skill, so choose exactly one.");
+    }
+
     const transfer = folder
       ? await folderTransfer(chosen.length, options, context)
       : null;
+
     const mode = folder ? "fork" : await updateMode(options, context);
     for (const skill of chosen) {
       const name = options.as ?? skill.name;
@@ -335,22 +384,27 @@ export async function addSkills(
         },
         context.home,
       );
+
       if (transfer !== "move") {
         context.write(`${ok("✔")} Added ${bold(name)}`);
         continue;
       }
+
       const original = join(
         defined(folder, "Only a local folder can be moved"),
         skill.root,
       );
+
       const gone = await removeImported(original, skill.entries);
       context.write(`${ok("✔")} Moved ${bold(name)} into your workspace`);
-      if (!gone)
+      if (!gone) {
         context.write(
           dim(`  ${original} has other files, so it was left in place.`),
         );
+      }
     }
   });
+
   await finish(context);
 }
 
@@ -369,6 +423,7 @@ export async function pickHookPlan(
       harnesses.map((h) => ({ name: adapters[h].name, value: h })),
     )
   ).filter(isHarness);
+
   const plan: Partial<Record<Harness, DraftEvent[]>> = {};
   for (const harness of chosen) {
     const known = adapters[harness].hooks.events;
@@ -380,6 +435,7 @@ export async function pickHookPlan(
         checked: carried.has(name.toLowerCase()),
       })),
     );
+
     const drafts: DraftEvent[] = [];
     for (const event of events) {
       const script =
@@ -389,22 +445,29 @@ export async function pickHookPlan(
           draft.scripts.map((s) => ({ name: s, value: s })),
           carried.get(event.toLowerCase())?.script,
         ));
+
       const hint = known.find((e) => e.name === event)?.matcher;
       const matcher = hint
         ? (await prompts.text(`${event} matcher (${hint})`, "")).trim() ||
           undefined
         : undefined;
+
       const picked = {
         event,
         matcher,
         script,
         command: plainCommand(script, executable(script)),
       };
+
       drafts.push(picked);
       carried.set(event.toLowerCase(), picked);
     }
-    if (drafts.length) plan[harness] = drafts;
+
+    if (drafts.length) {
+      plan[harness] = drafts;
+    }
   }
+
   return plan;
 }
 
@@ -415,20 +478,29 @@ async function reportCoverage(
   context: AddContext,
 ) {
   const divergence = await folderDivergence(folder);
-  if (divergence) context.write(`${warn("!")} ${divergence}`);
+  if (divergence) {
+    context.write(`${warn("!")} ${divergence}`);
+  }
+
   const { written, targets, prompt } = await adaptHook(
     name,
     LOCAL_ORIGIN,
     undefined,
     context.home,
   );
-  if (!prompt) return;
+
+  if (!prompt) {
+    return;
+  }
+
   context.write(
     `${warn("!")} ${bold(name)} was written for ${toolNames(written)}. It won't run in ${toolNames(targets, "or")}: BarnDog doesn't adapt Hooks between coding tools.`,
   );
+
   context.write(
     dim("  An AI agent can check whether it can be adapted. Give it this:"),
   );
+
   context.write("");
   context.write(prompt);
   context.write("");
@@ -445,30 +517,38 @@ export async function addHook(
   context: AddContext,
 ) {
   assertSourceExists(url);
-  if (await plainFolder(url))
+  if (await plainFolder(url)) {
     throw new CliError(
       `${url} isn't a Git repo, and Hooks can only be added from one for now.`,
       "git init, commit the Hook, then run barndog hooks add again",
     );
+  }
+
   const location = parseLocation(url);
   const fallback =
     slugify(basename(url.replace(/\/$/, "").replace(/\.git$/, ""))) || "hook";
+
   await fetchRemote(location, { allowPrompt: true }, async (remote) => {
     const { candidates, skipped } = discoverHooks(remote, fallback);
-    for (const skip of skipped)
+    for (const skip of skipped) {
       context.write(`${warn("!")} ${skip.path}: ${skip.reason}`);
+    }
+
     let [candidate] = candidates;
-    if (!candidate) throw notFound(remote, url, "Hook");
+    if (!candidate) {
+      throw notFound(remote, url, "Hook");
+    }
+
     const wanted = only(options.only ?? []);
     if (candidates.length > 1) {
-      if (wanted)
+      if (wanted) {
         candidate = candidates.find((c) => c.name === wanted) ?? candidate;
-      else if (!context.interactive)
+      } else if (!context.interactive) {
         throw new CliError(
           `${url} has several Hooks: ${candidates.map((c) => c.name).join(", ")}.`,
           "barndog hooks add <url> --only <name>",
         );
-      else {
+      } else {
         const picked = await context.prompts.chooseOne(
           "Which Hook do you want?",
           candidates.map((c, index) => ({
@@ -482,9 +562,11 @@ export async function addHook(
               : {}),
           })),
         );
+
         candidate = candidates[Number(picked)] ?? candidate;
       }
     }
+
     const mode = await updateMode(options, context);
     if (candidate.type === "package") {
       const name = options.as ?? candidate.name;
@@ -496,20 +578,25 @@ export async function addHook(
             }
           : entry,
       );
+
       const saved = await saveImported(
         { kind: "hook", name, entries, mode, remote, root: candidate.root },
         context.home,
       );
+
       context.write(`${ok("✔")} Added ${bold(name)}`);
       await reportCoverage(name, saved.path, context);
+
       return;
     }
+
     const modes = new Map(remote.snapshot.entries.map((e) => [e.path, e.mode]));
     const executable = (script: string) => modes.get(script) === "100755";
     // Settings the author shipped answer every question, and no other tool is offered.
     const written = harnesses.filter(
       (h) => candidate.implementations[h]?.length,
     );
+
     let plan: Partial<Record<Harness, DraftEvent[]>>;
     if (written.length) {
       const chosen =
@@ -526,23 +613,29 @@ export async function addHook(
               )
             ).filter(isHarness)
           : written;
+
       const { implementations } = candidate;
       plan = Object.fromEntries(
         chosen.map((h) => [h, implementations[h] ?? []]),
       );
-    } else if (context.interactive)
+    } else if (context.interactive) {
       plan = await pickHookPlan(candidate, executable, context);
-    else
+    } else {
       throw new CliError(
         "These scripts need events chosen for each coding tool. Run this in a terminal to choose them.",
       );
-    if (!Object.values(plan).some((events) => events?.length))
+    }
+
+    if (!Object.values(plan).some((events) => events?.length)) {
       throw new CliError("No events were chosen, so nothing was added.");
+    }
+
     const name =
       options.as ??
       (context.interactive
         ? (await context.prompts.text("Hook name", candidate.name)).trim()
         : candidate.name);
+
     const description =
       options.description ??
       (context.interactive
@@ -553,21 +646,28 @@ export async function addHook(
             )
           ).trim()
         : `Hook from ${remote.url}`);
+
     const built = buildHookPackage(remote, {
       name,
       description,
       implementations: plan,
     });
+
     context.write(dim("These commands will run on this machine:"));
-    for (const [harness, events] of Object.entries(plan))
-      for (const event of events ?? [])
+    for (const [harness, events] of Object.entries(plan)) {
+      for (const event of events ?? []) {
         context.write(
           dim(
             `  ${harness}  ${event.event}${event.matcher ? ` (${event.matcher})` : ""}  ${event.script}`,
           ),
         );
-    if (context.interactive && !(await context.prompts.yes("Add this Hook?")))
+      }
+    }
+
+    if (context.interactive && !(await context.prompts.yes("Add this Hook?"))) {
       throw new CliError("Nothing was added.");
+    }
+
     const saved = await saveImported(
       {
         kind: "hook",
@@ -580,14 +680,20 @@ export async function addHook(
       },
       context.home,
     );
+
     context.write(`${ok("✔")} Added ${bold(name)}`);
-    if (plan.codex?.length)
+    if (plan.codex?.length) {
       context.write(
         dim("Codex skips new Hooks until you trust them with /hooks."),
       );
+    }
+
     // Scripts placed by hand were given their tools on purpose.
-    if (written.length) await reportCoverage(name, saved.path, context);
+    if (written.length) {
+      await reportCoverage(name, saved.path, context);
+    }
   });
+
   await finish(context);
 }
 
@@ -596,26 +702,39 @@ async function serversToAdd(
   options: AddOptions,
   context: AddContext,
 ): Promise<ImportedServer[]> {
-  if (options.config) return parseMcpText(options.config, name);
-  if (options.file)
+  if (options.config) {
+    return parseMcpText(options.config, name);
+  }
+
+  if (options.file) {
     return parseMcpText(await readFile(options.file, "utf8"), name);
+  }
+
   const fromHarness = async () => {
     const all = (await harnessServers(context.home)).filter(
       (s) => !options.from || s.harness === options.from,
     );
+
     const matching = name ? all.filter((s) => s.name === name) : all;
-    if (!matching.length)
+    if (!matching.length) {
       throw new CliError(
         name
           ? `No MCP server named ${name} in your coding tools.`
           : "No MCP servers found in your coding tools that BarnDog doesn't already manage.",
       );
-    if (name && matching.length === 1) return matching;
-    if (!context.interactive)
+    }
+
+    if (name && matching.length === 1) {
+      return matching;
+    }
+
+    if (!context.interactive) {
       throw new CliError(
         `Several servers match: ${matching.map((s) => `${s.name} (${s.label})`).join(", ")}.`,
         "barndog mcp add <name> --from <harness>",
       );
+    }
+
     const picked = await context.prompts.chooseMany(
       "Which MCP servers do you want to add?",
       matching.map((s, i) => ({
@@ -623,23 +742,35 @@ async function serversToAdd(
         value: String(i),
       })),
     );
+
     return picked.flatMap((i) => matching[Number(i)] ?? []);
   };
-  if (options.from) return fromHarness();
+
+  if (options.from) {
+    return fromHarness();
+  }
+
   if (!context.interactive) {
-    if (process.stdin.isTTY)
+    if (process.stdin.isTTY) {
       throw new CliError(
         "Pass the configuration with --config, --file or --from, or pipe it in.",
         "barndog mcp add --file <path>",
       );
+    }
+
     let text = "";
-    for await (const chunk of process.stdin) text += chunk;
+    for await (const chunk of process.stdin) {
+      text += chunk;
+    }
+
     return parseMcpText(text, name);
   }
+
   const source = await context.prompts.chooseOne("Where's the configuration?", [
     { name: "Paste JSON", value: "paste" },
     { name: "One of my coding tools", value: "harness" },
   ]);
+
   return source === "paste"
     ? parseMcpText(await context.prompts.paste(), name)
     : fromHarness();
@@ -651,14 +782,16 @@ export async function addMcp(
   context: AddContext,
 ) {
   // `--json` is the global output flag, so this catches the old spelling.
-  if (name?.trimStart().startsWith("{"))
+  if (name?.trimStart().startsWith("{")) {
     throw new CliError(
       "That looks like the configuration, not a name.",
       "barndog mcp add <name> --config '<json>'",
     );
+  }
+
   const imported = await serversToAdd(name, options, context);
   const oauth = new Set<string>();
-  for (const { name: server, server: raw } of imported)
+  for (const { name: server, server: raw } of imported) {
     if (
       options.oauth ||
       (context.interactive &&
@@ -671,30 +804,51 @@ export async function addMcp(
           `Does ${server} sign in through a browser (OAuth)?`,
           false,
         )))
-    )
+    ) {
       oauth.add(server);
+    }
+  }
+
   const servers = imported.map((server) =>
     convertServer(server, options.description, oauth.has(server.name)),
   );
-  if (!servers.length)
+
+  if (!servers.length) {
     throw new CliError("No MCP servers were chosen, so nothing was added.");
+  }
+
   let replace = options.replace;
   const conflicts = (
     await Promise.all(
       servers.map((s) => conflictingEntries(s.name, context.home)),
     )
   ).flat();
+
   if (conflicts.length && !replace && context.interactive) {
     context.write(
       "These entries will be replaced by BarnDog-managed ones. A backup of each file is kept:",
     );
-    for (const conflict of conflicts) context.write(dim(`  ${conflict.file}`));
+
+    for (const conflict of conflicts) {
+      context.write(dim(`  ${conflict.file}`));
+    }
+
     replace = await context.prompts.yes("Replace them?");
-    if (!replace) throw new CliError("Nothing was added.");
+    if (!replace) {
+      throw new CliError("Nothing was added.");
+    }
   }
+
   const result = await addMcpServers(servers, { replace }, context.home);
-  for (const added of result.added)
+  for (const added of result.added) {
     context.write(`${ok("✔")} Added ${bold(added)}`);
-  for (const note of result.notes) context.write(`${warn("!")} ${note}`);
-  for (const backup of result.backups) context.write(dim(`Backup: ${backup}`));
+  }
+
+  for (const note of result.notes) {
+    context.write(`${warn("!")} ${note}`);
+  }
+
+  for (const backup of result.backups) {
+    context.write(dim(`Backup: ${backup}`));
+  }
 }

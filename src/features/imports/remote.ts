@@ -41,17 +41,21 @@ const WEB_TREE_URL =
 export function parseLocation(input: string): RemoteLocation {
   const value = input.trim();
   const short = GITHUB_SHORTHAND.exec(value);
-  if (short)
+  if (short) {
     return {
       url: `https://github.com/${short[1]}/${short[2]}.git`,
       rest: null,
     };
+  }
+
   const [, host, owner, repo, rest] = WEB_TREE_URL.exec(value) ?? [];
-  if (rest !== undefined)
+  if (rest !== undefined) {
     return {
       url: checkRepositoryUrl(`https://${host}/${owner}/${repo}.git`),
       rest: decodeURIComponent(rest),
     };
+  }
+
   return { url: checkRepositoryUrl(value.replace(/\/$/, "")), rest: null };
 }
 
@@ -71,19 +75,29 @@ async function resolveRest(
   rest: string | null,
   allowPrompt: boolean,
 ) {
-  if (!rest) return { ref: null, path: "" };
+  if (!rest) {
+    return { ref: null, path: "" };
+  }
+
   const [first = ""] = rest.split("/");
-  if (GIT_OBJECT_ID.test(first))
+  if (GIT_OBJECT_ID.test(first)) {
     return { ref: first, path: rest.slice(first.length + 1) };
+  }
+
   const listing = await gitText(["ls-remote", "--heads", "--tags", "--", url], {
     allowPrompt,
   });
+
   const refs = parseLsRemote(listing)
     .map(({ ref }) => ref.replace(/^refs\/(?:heads|tags)\//, ""))
     .filter(Boolean)
     .sort((a, b) => b.length - a.length);
+
   const ref = refs.find((name) => rest === name || rest.startsWith(`${name}/`));
-  if (!ref) throw new CliError(`Can't find that branch or tag in ${url}.`);
+  if (!ref) {
+    throw new CliError(`Can't find that branch or tag in ${url}.`);
+  }
+
   return { ref, path: rest.slice(ref.length + 1) };
 }
 
@@ -101,6 +115,7 @@ export async function fetchRemote<T>(
       location.ref !== undefined
         ? { ref: location.ref, path: location.path ?? "" }
         : await resolveRest(location.url, location.rest, options.allowPrompt);
+
     await git(
       [
         "fetch",
@@ -114,6 +129,7 @@ export async function fetchRemote<T>(
       ],
       { repo, allowPrompt: options.allowPrompt },
     );
+
     const commit = await gitText(["rev-parse", "FETCH_HEAD"], { repo });
     const snapshot = await gitSnapshot(repo, commit);
     const blobs = await snapshot.readBlobs(
@@ -121,6 +137,7 @@ export async function fetchRemote<T>(
         .filter((entry) => isBlob(entry.mode))
         .map((entry) => entry.hash),
     );
+
     return await use({
       url: location.url,
       ref: resolved.ref,
@@ -130,12 +147,14 @@ export async function fetchRemote<T>(
       blobs,
     });
   } catch (error) {
-    if (error instanceof GitError)
+    if (error instanceof GitError) {
       throw new CliError(
         `Can't read ${location.url}: ${gitReason(error.stderr)}. Make sure you can clone it on this machine.`,
         `git clone ${location.url}`,
         { cause: error },
       );
+    }
+
     throw error;
   } finally {
     await rm(repo, { recursive: true, force: true });

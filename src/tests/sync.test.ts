@@ -20,6 +20,7 @@ import { synchronize } from "../features/environment/sync.js";
 async function temporaryHome(t: TestContext) {
   const home = await mkdtemp(join(tmpdir(), "barndog-sync-"));
   t.onTestFinished(() => rm(home, { recursive: true, force: true }));
+
   return home;
 }
 
@@ -28,11 +29,13 @@ test("sync needs setup and refuses invalid settings before writing anything", as
   await expect(synchronize(undefined, home)).rejects.toBeInstanceOf(
     SetupRequiredError,
   );
+
   await mkdir(join(home, ".barndog"), { recursive: true });
   await writeFile(settingsPath(home), "harnesses: [typo]\n");
   await expect(synchronize(undefined, home)).rejects.toThrow(
     /Invalid user settings/,
   );
+
   await expect(lstat(join(home, ".barndog/state.json"))).rejects.toMatchObject({
     code: "ENOENT",
   });

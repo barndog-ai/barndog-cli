@@ -85,6 +85,7 @@ const knowledgeOf = (item: Candidate) =>
 async function repoDestination(value: string, home: string) {
   const url = checkRepositoryUrl(await cloneOrigin(value));
   const head = await inspectRepository(url);
+
   return head
     ? connectGitWorkspace(url, head.branch, home)
     : createGitWorkspace(
@@ -99,19 +100,27 @@ async function serverDestination(value: string, home: string) {
   try {
     return await connectionContext(server, home);
   } catch (error) {
-    if (error instanceof LoginRequiredError)
+    if (error instanceof LoginRequiredError) {
       throw new CliError(
         `Sign in to ${server} first. This machine stays local.`,
         `barndog login --server ${server}`,
         { cause: error },
       );
+    }
+
     throw error;
   }
 }
 
 function renamed(asset: RepoAsset, name: string): PackageEntry[] {
-  if (asset.name === name) return asset.entries;
-  if (asset.kind === "skill") return renameSkillEntries(asset.entries, name);
+  if (asset.name === name) {
+    return asset.entries;
+  }
+
+  if (asset.kind === "skill") {
+    return renameSkillEntries(asset.entries, name);
+  }
+
   return asset.entries.map((entry) =>
     entry.path === "hook.yaml"
       ? {
@@ -132,6 +141,7 @@ async function candidates(
   const moved = await readMoved(overlay.label);
   const pending = (path: string) =>
     names?.length ? true : !moved.some((entry) => entry.path === path);
+
   const items: Candidate[] = [];
   const invalid: MoveRow[] = [];
   for (const asset of model.assets) {
@@ -139,8 +149,10 @@ async function candidates(
       !pending(asset.path) ||
       (names?.length && !names.includes(asset.name)) ||
       (kind && asset.kind !== kind)
-    )
+    ) {
       continue;
+    }
+
     if (asset.invalid) {
       invalid.push({
         kind: asset.kind,
@@ -148,8 +160,10 @@ async function candidates(
         status: "skipped",
         detail: asset.invalid,
       });
+
       continue;
     }
+
     const name = as ?? asset.name;
     items.push({
       kind: asset.kind,
@@ -161,12 +175,15 @@ async function candidates(
       definition: asset.definition,
     });
   }
+
   for (const doc of model.knowledge) {
     if (
       !pending(doc.path) ||
       (names?.length && !names.includes(doc.content.name))
-    )
+    ) {
       continue;
+    }
+
     const name = as ?? doc.content.name;
     items.push({
       kind: "knowledge",
@@ -178,17 +195,22 @@ async function candidates(
       content: { ...doc.content, name },
     });
   }
-  for (const name of names ?? [])
+
+  for (const name of names ?? []) {
     if (
       !items.some((item) => item.path.includes(`/${name}`)) &&
       !invalid.some((row) => row.name === name)
-    )
+    ) {
       throw new CliError(`No local asset named ${name}.`, "barndog local list");
+    }
+  }
+
   return { items, invalid };
 }
 
 function knowledgeFile(content: KnowledgeContent) {
   const { description, tags, accessMode, markdown } = content;
+
   return `---\n${stringify({ description, tags, accessMode })}---\n${markdown}`;
 }
 
@@ -203,6 +225,7 @@ async function moveToGit(
     await acceptedCommit(workspace.workspaceId, home),
     "This Git workspace hasn't been fetched yet",
   );
+
   const scope = selectScope(shared, to ?? "org");
   const repo = gitDirectory(workspace.workspaceId, home);
   const rows: MoveRow[] = [];
@@ -210,11 +233,13 @@ async function moveToGit(
     item: Candidate;
     files: { path: string; data: Buffer; executable: boolean }[];
   }[] = [];
+
   for (const item of items) {
     const path =
       item.kind === "knowledge"
         ? `org/knowledge/${item.name}.md`
         : assetPath(scope.path, item.kind, item.name);
+
     if (
       shared.assets.some((asset) => asset.path === path) ||
       shared.knowledge.some((doc) => doc.path === path)
@@ -225,8 +250,10 @@ async function moveToGit(
         status: "clash",
         detail: `${path} already exists`,
       });
+
       continue;
     }
+
     moving.push({
       item,
       files:
@@ -252,6 +279,7 @@ async function moveToGit(
               })),
     });
   }
+
   const result: MoveResult = {
     target: workspace.url,
     rows,
@@ -262,7 +290,11 @@ async function moveToGit(
       ...(scope.type === "org" ? [] : [scope.slug]),
     ),
   };
-  if (!moving.length) return result;
+
+  if (!moving.length) {
+    return result;
+  }
+
   const title = `Move ${moving.length} local asset${moving.length === 1 ? "" : "s"} into the workspace`;
   const commit = await commitFiles(
     repo,
@@ -270,6 +302,7 @@ async function moveToGit(
     { files: moving.flatMap((entry) => entry.files) },
     title,
   );
+
   // A workspace with nothing in it has nothing to review against.
   if (!shared.assets.length && !shared.knowledge.length) {
     await pushCommit(repo, commit, workspace.branch);
@@ -286,9 +319,11 @@ async function moveToGit(
       branch,
       title,
     });
+
     result.branch = branch;
     result.url = opened.url ?? null;
   }
+
   rows.push(
     ...moving.map(({ item }) => ({
       kind: item.kind,
@@ -296,6 +331,7 @@ async function moveToGit(
       status: "moved" as const,
     })),
   );
+
   return result;
 }
 
@@ -306,15 +342,18 @@ async function moveToCloud(
   home: string,
 ): Promise<MoveResult> {
   const scope = await selectOrigin(to ?? "me", conn, home);
-  if (!scope.canPublish)
+  if (!scope.canPublish) {
     throw new CliError(
       `You can't publish to ${originLabel(scope)}.`,
       "barndog local move --to me",
     );
+  }
+
   const { catalog } = await environmentCatalog(home, conn);
   const docs = (
     await request(conn, "/v1/knowledge?limit=100", knowledgeIndexSchema, home)
   ).documents;
+
   const scopes = await request(conn, "/v1/scopes", z.array(scopeSchema), home);
   const org = scopes.find((s) => s.type === "org");
   const rows: MoveRow[] = [];
@@ -322,16 +361,16 @@ async function moveToCloud(
     const base = { kind: item.kind, name: item.name };
     try {
       if (item.kind === "knowledge") {
-        if (docs.some((doc) => doc.name === item.name))
+        if (docs.some((doc) => doc.name === item.name)) {
           rows.push({ ...base, status: "clash", detail: "Name already used" });
-        else if (!org?.canPublish)
+        } else if (!org?.canPublish) {
           rows.push({
             ...base,
             status: "skipped",
             detail:
               "Knowledge is organization-wide, and you can't publish there",
           });
-        else {
+        } else {
           await publishKnowledge(
             {
               id: item.id,
@@ -341,10 +380,13 @@ async function moveToCloud(
             conn,
             home,
           );
+
           rows.push({ ...base, status: "moved" });
         }
+
         continue;
       }
+
       if (
         catalog.assets.some(
           (asset) =>
@@ -358,8 +400,10 @@ async function moveToCloud(
           status: "clash",
           detail: `Already in ${originLabel(scope)}`,
         });
+
         continue;
       }
+
       const asset = {
         id: item.id,
         kind: item.kind,
@@ -368,9 +412,13 @@ async function moveToCloud(
         entries: item.entries,
         definition: item.definition,
       };
-      if (asset.kind === "mcp") await publishMcp(asset, scope, conn, home);
-      else
+
+      if (asset.kind === "mcp") {
+        await publishMcp(asset, scope, conn, home);
+      } else {
         await publishPackage({ ...asset, kind: asset.kind }, scope, conn, home);
+      }
+
       rows.push({ ...base, status: "moved" });
     } catch (error) {
       rows.push({
@@ -380,6 +428,7 @@ async function moveToCloud(
       });
     }
   }
+
   return { target: originLabel(scope), rows, originId: scope.id };
 }
 
@@ -397,30 +446,41 @@ export function moveLocalAssets(
 ): Promise<MoveResult> {
   return locked(home, async () => {
     const settings = await readSettings(home);
-    if (!settings) throw new SetupRequiredError();
-    if (!settings.localWorkspace)
+    if (!settings) {
+      throw new SetupRequiredError();
+    }
+
+    if (!settings.localWorkspace) {
       throw new CliError("This machine has no local assets to move.");
+    }
+
     const overlay = localRepoSource(settings.localWorkspace, home);
     const shared =
       options.repo || options.server
         ? null
         : (settings.gitWorkspace ?? settings.connection);
-    if (!options.repo && !options.server && !shared)
+
+    if (!options.repo && !options.server && !shared) {
       throw new CliError(
         "This machine only has its local folder, so there's nowhere to move assets yet. Name a Git repo or a Cloud Workspace as the destination; this machine stays local.",
         "barndog local move --repo <url> or barndog local move --server <url>",
       );
-    if (options.as && options.names?.length !== 1)
+    }
+
+    if (options.as && options.names?.length !== 1) {
       throw new CliError(
         "--as renames one asset, so name exactly one.",
         "barndog local move <name> --as <new-name>",
       );
+    }
+
     const { items, invalid } = await candidates(
       overlay,
       options.names,
       options.as,
       options.kind,
     );
+
     const result = options.repo
       ? await moveToGit(
           await repoDestination(options.repo, home),
@@ -438,6 +498,7 @@ export function moveLocalAssets(
         : settings.gitWorkspace
           ? await moveToGit(settings.gitWorkspace, items, options.to, home)
           : await moveToCloud(await connection(home), items, options.to, home);
+
     result.rows.unshift(...invalid);
     const moved = result.rows.filter((row) => row.status === "moved");
     await recordMoved(
@@ -452,19 +513,24 @@ export function moveLocalAssets(
         ).path,
       })),
     );
-    if (moved.length)
+
+    if (moved.length) {
       await synchronize(undefined, home, undefined, { prompt: false });
+    }
+
     return result;
   });
 }
 
 export async function listLocalAssets(home = homedir()) {
   const settings = await readSettings(home);
-  if (!settings || !settings.localWorkspace)
+  if (!settings || !settings.localWorkspace) {
     throw new CliError(
       "This machine has no local assets.",
       "barndog init --local",
     );
+  }
+
   const source = localRepoSource(settings.localWorkspace, home);
   const model = await source.model();
   const moved = await readMoved(source.label);
@@ -474,6 +540,7 @@ export async function listLocalAssets(home = homedir()) {
       : moved.some((m) => m.path === path)
         ? "moved"
         : "active";
+
   return {
     folder: settings.localWorkspace.path,
     assets: [
@@ -497,6 +564,7 @@ export async function listLocalAssets(home = homedir()) {
 export async function cloudMoveTargets(home: string) {
   const conn = await connection(home);
   const scopes = await request(conn, "/v1/scopes", z.array(scopeSchema), home);
+
   return scopes
     .filter(
       (s) => s.canPublish && (s.type !== "dev" || matchesOrigin(s, "me", conn)),

@@ -39,7 +39,10 @@ export async function readMoved(folder: string): Promise<MovedAsset[]> {
       JSON.parse(await readFile(join(folder, MOVED_FILE), "utf8")),
     );
   } catch (error) {
-    if (errorCode(error) === "ENOENT") return [];
+    if (errorCode(error) === "ENOENT") {
+      return [];
+    }
+
     throw error;
   }
 }
@@ -48,6 +51,7 @@ export async function recordMoved(folder: string, added: MovedAsset[]) {
   const kept = (await readMoved(folder)).filter(
     (entry) => !added.some((asset) => asset.path === entry.path),
   );
+
   await writeFile(
     join(folder, MOVED_FILE),
     JSON.stringify([...kept, ...added], null, 2) + "\n",
@@ -62,8 +66,10 @@ export function localOverlay(
   if (
     !settings.localWorkspace ||
     (!settings.connection && !settings.gitWorkspace)
-  )
+  ) {
     return undefined;
+  }
+
   return localRepoSource(settings.localWorkspace, home);
 }
 
@@ -86,6 +92,7 @@ export async function activeLocal(
             (!entry.originId || s.origin?.id === entry.originId),
         ),
     );
+
   return {
     model,
     assets: model.assets.filter((asset) => !retired(asset.kind, asset.path)),
@@ -110,6 +117,7 @@ export async function mergeLocalCatalog(
     } as const,
     publishedVersion: asset.publishedVersion,
   }));
+
   return {
     assets: [...catalog.assets, ...local],
     distributions: [
@@ -136,21 +144,36 @@ export async function adoptMoved(
   const selected = new Set(
     resolveAssets(catalog, state).assets.map((entry) => entry.asset.id),
   );
+
   const ids = [...state.individualAssetIds];
   const adopted: MovedAsset[] = [];
   for (const entry of moved) {
-    if (entry.adopted || !entry.originId) continue;
+    if (entry.adopted || !entry.originId) {
+      continue;
+    }
+
     const asset = catalog.assets.find(
       (a) =>
         a.kind === entry.kind &&
         a.name === entry.name &&
         a.origin.id === entry.originId,
     );
-    if (!asset) continue;
-    if (!selected.has(asset.id)) ids.push(asset.id);
+
+    if (!asset) {
+      continue;
+    }
+
+    if (!selected.has(asset.id)) {
+      ids.push(asset.id);
+    }
+
     adopted.push({ ...entry, adopted: true });
   }
-  if (persist && adopted.length) await recordMoved(overlay.label, adopted);
+
+  if (persist && adopted.length) {
+    await recordMoved(overlay.label, adopted);
+  }
+
   return ids.length === state.individualAssetIds.length
     ? state
     : { ...state, individualAssetIds: ids };
@@ -185,6 +208,7 @@ export function withOverlay(
     (await overlay.model()).assets.some((asset) => asset.id === reference.id)
       ? overlay
       : primary;
+
   return {
     cacheKey: primary.cacheKey,
     extraCacheKeys: [overlay.cacheKey],

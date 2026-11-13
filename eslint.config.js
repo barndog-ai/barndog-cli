@@ -19,6 +19,9 @@ export default defineConfig([
     languageOptions: { globals: globals.node },
     plugins: { "@stylistic": stylistic },
     rules: {
+      // After `prettier`, which turns `curly` off; "all" is the option that doesn't
+      // conflict with Prettier.
+      curly: ["error", "all"],
       "@stylistic/padding-line-between-statements": [
         "error",
         { blankLine: "always", prev: "import", next: "*" },
@@ -31,6 +34,17 @@ export default defineConfig([
           blankLine: "always",
           prev: "*",
           next: ["function", "class", "type", "interface", "export"],
+        },
+        { blankLine: "always", prev: "*", next: "return" },
+        {
+          blankLine: "always",
+          prev: [
+            "block-like",
+            "multiline-expression",
+            "multiline-const",
+            "multiline-let",
+          ],
+          next: "*",
         },
         { blankLine: "any", prev: "import", next: "import" },
       ],

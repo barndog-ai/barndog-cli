@@ -131,49 +131,90 @@ const serverProblems: Record<string, { message: string; fix?: string }> = {
 
 /** The next command for a server refusal or a CliError, when one is known. */
 export function friendlyHint(error: unknown): string | undefined {
-  if (error instanceof CliError) return error.hint;
-  if (error instanceof ApiError) return serverProblems[error.message]?.fix;
+  if (error instanceof CliError) {
+    return error.hint;
+  }
+
+  if (error instanceof ApiError) {
+    return serverProblems[error.message]?.fix;
+  }
+
   return undefined;
 }
 
 /** Turns internal codes and validation errors into something a person can act on. */
 export function friendlyMessage(error: unknown): string {
-  if (!(error instanceof Error)) return String(error);
-  if (error instanceof z.ZodError)
+  if (!(error instanceof Error)) {
+    return String(error);
+  }
+
+  if (error instanceof z.ZodError) {
     return error.issues
       .map((issue) => {
         const text =
           issue.code === "invalid_format" && issue.format === "uuid"
             ? "That isn't a valid ID. IDs look like 123e4567-e89b-42d3-a456-426614174000."
             : issue.message;
+
         return issue.path.length ? `${issue.path.join(".")}: ${text}` : text;
       })
       .join("; ");
+  }
+
   const problem =
     error instanceof ApiError ? serverProblems[error.message] : undefined;
-  if (problem) return `${problem.message}.`;
+
+  if (problem) {
+    return `${problem.message}.`;
+  }
+
   const code = errorCode(error);
   const path =
     "path" in error && typeof error.path === "string" ? error.path : undefined;
-  if (code === "ENOENT" && path) return `Can't find ${path}.`;
-  if (code === "EACCES" && path) return `No permission to read ${path}.`;
-  if (code === "EISDIR" && path) return `${path} is a folder, not a file.`;
-  if (code === "EEXIST" && path)
+
+  if (code === "ENOENT" && path) {
+    return `Can't find ${path}.`;
+  }
+
+  if (code === "EACCES" && path) {
+    return `No permission to read ${path}.`;
+  }
+
+  if (code === "EISDIR" && path) {
+    return `${path} is a folder, not a file.`;
+  }
+
+  if (code === "EEXIST" && path) {
     return `${path} already exists. Choose another folder or remove it first.`;
+  }
+
   const separator = error.message.indexOf(": ");
   const [prefix, detail] =
     separator < 0
       ? [error.message, undefined]
       : [error.message.slice(0, separator), error.message.slice(separator + 2)];
-  if (prefix === "MISSING_HOOK_SCRIPT")
+
+  if (prefix === "MISSING_HOOK_SCRIPT") {
     return `hook.yaml declares a script that isn't in the folder: ${detail}`;
-  if (prefix === "MISSING_PACKAGE_MANIFEST")
+  }
+
+  if (prefix === "MISSING_PACKAGE_MANIFEST") {
     return `This folder has no ${detail}`;
-  if (prefix === "UNSAFE_PACKAGE_ENTRY" && detail) return detail;
+  }
+
+  if (prefix === "UNSAFE_PACKAGE_ENTRY" && detail) {
+    return detail;
+  }
+
   const packaged = packageMessages[prefix];
-  if (packaged) return packaged;
+  if (packaged) {
+    return packaged;
+  }
+
   // Server codes such as KNOWLEDGE_NOT_FOUND still read as a sentence.
-  if (CONSTANT_CASE.test(error.message))
+  if (CONSTANT_CASE.test(error.message)) {
     return `${error.message[0]}${error.message.slice(1).toLowerCase().replaceAll("_", " ")}.`;
+  }
+
   return error.message;
 }

@@ -17,20 +17,27 @@ export function primary(
   stream: NodeJS.WriteStream = process.stdout,
 ): string {
   // Let Node handle NO_COLOR, NODE_DISABLE_COLORS, FORCE_COLOR, and terminal detection.
-  if (styleText("bold", "x", { stream }) === "x") return text;
+  if (styleText("bold", "x", { stream }) === "x") {
+    return text;
+  }
+
   const forcedDepth =
     process.env.FORCE_COLOR === "3"
       ? 24
       : process.env.FORCE_COLOR === "2"
         ? 8
         : 4;
+
   const depth = stream.getColorDepth?.() ?? forcedDepth;
   const rgb = [1, 3, 5].map((start) =>
     parseInt(PRIMARY_COLOR.slice(start, start + 2), 16),
   );
+
   const color =
     depth >= 24 ? `38;2;${rgb.join(";")}` : depth >= 8 ? "38;5;131" : "31";
+
   const start = `\u001b[${color}m`;
+
   return `${start}${text.replaceAll("\u001b[39m", start)}\u001b[39m`;
 }
 

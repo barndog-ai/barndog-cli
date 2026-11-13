@@ -33,6 +33,7 @@ for (const state of ["missing", "expired", "valid", "revoked"] as const) {
         role: "developer",
       },
     };
+
     const mcpId = randomUUID();
     const versionId = randomUUID();
     const originScope = {
@@ -40,6 +41,7 @@ for (const state of ["missing", "expired", "valid", "revoked"] as const) {
       id: context.organization.id,
       slug: "acme",
     };
+
     const mcp = {
       id: mcpId,
       organizationId: context.organization.id,
@@ -63,6 +65,7 @@ for (const state of ["missing", "expired", "valid", "revoked"] as const) {
         },
       },
     };
+
     let signedIn = state === "valid";
     let logins = 0;
     let failCatalog = false;
@@ -81,8 +84,10 @@ for (const state of ["missing", "expired", "valid", "revoked"] as const) {
           expiresAt: new Date(Date.now() + 60000).toISOString(),
           interval: 0.001,
         });
+
         return;
       }
+
       if (req.url === "/v1/auth/cli/poll") {
         signedIn = true;
         send({
@@ -91,14 +96,18 @@ for (const state of ["missing", "expired", "valid", "revoked"] as const) {
           expiresAt: new Date(Date.now() + 60000).toISOString(),
           context,
         });
+
         return;
       }
+
       expect(req.headers.authorization).toBe(`Bearer ${token}`);
       if (!signedIn) {
         res.statusCode = 401;
         send({ message: "LOGIN_REQUIRED" });
+
         return;
       }
+
       const data: Record<string, unknown> = {
         "/v1/context": context,
         "/v1/scopes": [
@@ -125,22 +134,28 @@ for (const state of ["missing", "expired", "valid", "revoked"] as const) {
         "/v1/repositories": [],
         "/v1/teams": [],
       };
+
       if (failCatalog && req.url === "/v1/environment/catalog") {
         res.statusCode = 503;
         send({ message: "Unavailable" });
+
         return;
       }
+
       expect(req.url! in data, req.url).toBeTruthy();
       send(data[req.url!]);
     });
+
     await new Promise<void>((resolve) =>
       server.listen(0, "127.0.0.1", resolve),
     );
+
     t.onTestFinished(
       () => new Promise<void>((resolve) => server.close(() => resolve())),
     );
+
     const origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
-    if (state !== "missing")
+    if (state !== "missing") {
       await updateCredentials(home, (credentials) => {
         credentials.selectedServer = origin;
         credentials.servers[origin] = {
@@ -154,6 +169,8 @@ for (const state of ["missing", "expired", "valid", "revoked"] as const) {
           ).toISOString(),
         };
       });
+    }
+
     const output: string[] = [];
     let connections = 0;
     const options = {
@@ -165,6 +182,7 @@ for (const state of ["missing", "expired", "valid", "revoked"] as const) {
       write: (line: string) => output.push(line),
       chooseConnection: async () => {
         connections++;
+
         return { kind: "cloud" as const, server: origin };
       },
       choose: async () => ["codex" as const],
@@ -172,10 +190,12 @@ for (const state of ["missing", "expired", "valid", "revoked"] as const) {
         choices: import("../features/onboarding/environment.js").EnvironmentChoices,
       ) => {
         expect(choices.previous.subscriptions).toStrictEqual([]);
+
         return { ...choices.previous, individualAssetIds: [mcpId] };
       },
       confirmApply: async () => false,
     };
+
     await runSetup(options);
     expect(await readSettings(home)).toBe(null);
     expect(logins).toBe(state === "valid" ? 0 : 1);
@@ -187,7 +207,10 @@ for (const state of ["missing", "expired", "valid", "revoked"] as const) {
 
     await runSetup({ ...options, confirmApply: async () => true });
     const saved = await readSettings(home);
-    if (!saved) throw new Error("Expected connected settings");
+    if (!saved) {
+      throw new Error("Expected connected settings");
+    }
+
     expect(saved.connection?.server).toBe(origin);
     expect(saved.knowledge).toBe(true);
     expect(saved.harnesses).toStrictEqual(["codex"]);
@@ -195,6 +218,7 @@ for (const state of ["missing", "expired", "valid", "revoked"] as const) {
     expect(await readFile(join(home, ".codex/config.toml"), "utf8")).toMatch(
       /https:\/\/example.com\/mcp/,
     );
+
     expect(logins).toBe(state === "valid" ? 0 : 1);
     if (state === "valid") {
       await installSet({ origin: "org", mode: "all" }, home);
@@ -204,6 +228,7 @@ for (const state of ["missing", "expired", "valid", "revoked"] as const) {
       await expect(
         installSetAssets({ origin: "org", assetIds: [randomUUID()] }, home),
       ).rejects.toThrow(/unavailable assets/);
+
       expect(await readFile(settingsPath(home), "utf8")).toBe(original);
       await installSetAssets({ origin: "org", assetIds: [] }, home);
       expect(await readFile(settingsPath(home), "utf8")).toBe(original);
@@ -213,11 +238,13 @@ for (const state of ["missing", "expired", "valid", "revoked"] as const) {
       expect(custom.environment?.subscriptions).toStrictEqual([]);
       expect(custom.environment?.individualAssetIds).toStrictEqual([mcpId]);
     }
+
     const before = await readFile(settingsPath(home), "utf8");
     failCatalog = true;
     await expect(
       runSetup({ ...options, restart: true, confirmRestart: async () => true }),
     ).rejects.toThrow();
+
     expect(await readFile(settingsPath(home), "utf8")).toBe(before);
   });
 }
@@ -240,5 +267,6 @@ test("local setup is explicit and final cancellation preserves saved settings", 
     choose: async () => ["codex"],
     confirmApply: async () => false,
   });
+
   expect((await readSettings(home))?.harnesses).toStrictEqual(["claude"]);
 });

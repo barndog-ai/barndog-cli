@@ -18,10 +18,14 @@ export function divergenceWarning(
   implementations: Parameters<typeof divergentHookTools>[0],
 ) {
   const divergent = divergentHookTools(implementations);
-  if (!divergent.length) return null;
+  if (!divergent.length) {
+    return null;
+  }
+
   const names = harnesses
     .filter((harness) => divergent.includes(harness))
     .map((harness) => adapters[harness].name);
+
   return `${names.slice(0, -1).join(", ")} and ${names.at(-1)} run different scripts in this Hook. When you change it for one, check whether the others need the same change.`;
 }
 
@@ -31,6 +35,7 @@ export async function folderDivergence(folder: string) {
     const manifest = hookManifestSchema.parse(
       parse(await readFile(join(folder, "hook.yaml"), "utf8")),
     );
+
     return divergenceWarning(manifest.implementations);
   } catch {
     return null;
@@ -40,7 +45,12 @@ export async function folderDivergence(folder: string) {
 /** The Hook working copy a folder sits in, however deep; null outside one. */
 export function nearestHookFolder(from: string) {
   for (let folder = from; ; folder = dirname(folder)) {
-    if (existsSync(join(folder, "hook.yaml"))) return folder;
-    if (folder === dirname(folder)) return null;
+    if (existsSync(join(folder, "hook.yaml"))) {
+      return folder;
+    }
+
+    if (folder === dirname(folder)) {
+      return null;
+    }
   }
 }

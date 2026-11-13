@@ -128,7 +128,9 @@ describe("shared identifier patterns", () => {
     ["", ""],
   ])("slugify %j → %j", (value, expected) => {
     expect(slugify(value)).toBe(expected);
-    if (expected) expect(NAME.test(expected)).toBe(true);
+    if (expected) {
+      expect(NAME.test(expected)).toBe(true);
+    }
   });
 
   test.each([
@@ -322,8 +324,10 @@ describe("repository URLs", () => {
   ])("parseLocation %j", (input, url, rest) => {
     if (rest === "throws") {
       expect(() => parseLocation(input)).toThrow();
+
       return;
     }
+
     expect(parseLocation(input)).toEqual({ url, rest });
   });
 
@@ -515,6 +519,7 @@ describe("command routing", () => {
       .filter((child) => child.name() !== "help")
       .flatMap((child) => {
         const path = [...prefix, child.name()];
+
         return [path.join(" "), ...paths(child, path)];
       });
 

@@ -39,8 +39,14 @@ export async function currentSetupMode(
   home = homedir(),
 ): Promise<SetupMode | undefined> {
   const settings = await readSettings(home).catch(() => null);
-  if (!settings || settings.connection) return undefined;
-  if (settings.gitWorkspace) return "git";
+  if (!settings || settings.connection) {
+    return undefined;
+  }
+
+  if (settings.gitWorkspace) {
+    return "git";
+  }
+
   return settings.localWorkspace ? "local" : undefined;
 }
 
@@ -52,13 +58,17 @@ export function commandNeeds(
   command: string,
   mode: SetupMode,
 ): CommandNeed | undefined {
-  if (cloudOnlyCommands.some((pattern) => pattern.test(command)))
+  if (cloudOnlyCommands.some((pattern) => pattern.test(command))) {
     return "cloud";
+  }
+
   if (
     mode === "local" &&
     reviewCommands.some((pattern) => pattern.test(command))
-  )
+  ) {
     return "shared";
+  }
+
   return undefined;
 }
 
@@ -87,34 +97,55 @@ export async function assertCommandAvailable(
 ): Promise<void> {
   const settings = await readSettings(home).catch(() => null);
   if (path.join(" ") === "logout" && !settings) {
-    if (!(await readCredentials(home)).selectedServer)
+    if (!(await readCredentials(home)).selectedServer) {
       throw new CliError("You aren't signed in.");
+    }
+
     return;
   }
-  if (!settings || settings.connection) return;
+
+  if (!settings || settings.connection) {
+    return;
+  }
+
   const git = settings.gitWorkspace;
   const folder = settings.localWorkspace?.path;
-  if (!git && !folder) return;
+  if (!git && !folder) {
+    return;
+  }
+
   const command = path.join(" ");
   const where = git
     ? `a Git repo (${git.url})`
     : `a folder on this machine (${folder})`;
+
   if (command === "logout") {
     const { selectedServer } = await readCredentials(home);
-    if (!selectedServer)
+    if (!selectedServer) {
       throw new CliError(
         `You aren't signed in. This machine keeps its assets in ${where}, so it doesn't need a sign-in.`,
       );
+    }
+
     return;
   }
-  if (git && CHANGES_COMMANDS.test(command))
+
+  if (git && CHANGES_COMMANDS.test(command)) {
     throw new CliError(
       `Reviews happen as pull requests on your Git host, because this machine keeps its assets in ${where}.`,
       "barndog status",
     );
+  }
+
   // An explicit server is how local assets get promoted without switching.
-  if (command === "login" && options.server) return;
-  if (command.endsWith(" promote") && options.origin === LOCAL_ORIGIN) return;
+  if (command === "login" && options.server) {
+    return;
+  }
+
+  if (command.endsWith(" promote") && options.origin === LOCAL_ORIGIN) {
+    return;
+  }
+
   const needs = commandNeeds(command, git ? "git" : "local");
   if (needs === "cloud") {
     const action = why[command] ?? "needs a BarnDog Cloud Workspace";
@@ -123,9 +154,11 @@ export async function assertCommandAvailable(
       "barndog init --server <url>",
     );
   }
-  if (needs === "shared")
+
+  if (needs === "shared") {
     throw new CliError(
       `\`barndog ${command}\` works with shared versions and reviews, which assets in a local folder don't have. Edit them directly in ${folder}, then sync.`,
       "barndog sync",
     );
+  }
 }

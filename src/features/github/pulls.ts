@@ -77,6 +77,7 @@ const pullNumber = (number: number) =>
 /** Every file of the package, as the server's proposal routes take them. */
 async function packageFiles(directory: string | undefined) {
   const entries = await readDirectory(resolve(directory ?? process.cwd()));
+
   return entries.map((entry) => ({
     path: entry.path,
     content: entry.data.toString("base64"),
@@ -86,6 +87,7 @@ async function packageFiles(directory: string | undefined) {
 
 export async function githubPullsList(connectionId: string, home = homedir()) {
   const conn = await connection(home);
+
   return request(
     conn,
     `${connectionPath(connectionId)}/pulls`,
@@ -101,6 +103,7 @@ export async function githubPullsShow(
   home = homedir(),
 ) {
   const conn = await connection(home);
+
   return request(
     conn,
     `${connectionPath(connectionId)}/pulls/${pullNumber(number)}`,
@@ -124,6 +127,7 @@ export async function githubPullsCreate(
     body,
     idempotencyKey: options.key ?? randomUUID(),
   });
+
   return request(conn, `${path}/pulls`, gitPullSchema, home, "POST", proposal);
 }
 
@@ -142,6 +146,7 @@ export async function githubPullsRevise(
     body,
     idempotencyKey: options.key ?? randomUUID(),
   });
+
   return request(
     conn,
     `${path}/pulls/${pullNumber(options.number)}/revisions`,
@@ -159,6 +164,7 @@ export async function githubPullsReview(
   const conn = await connection(home);
   const path = connectionPath(options.connectionId);
   const body = await bodyText(options);
+
   return request(
     conn,
     `${path}/pulls/${pullNumber(options.number)}/reviews`,
@@ -181,6 +187,7 @@ export async function githubPullsComment(
   const conn = await connection(home);
   const path = connectionPath(options.connectionId);
   const body = await bodyText(options);
+
   return request(
     conn,
     `${path}/pulls/${pullNumber(options.number)}/comments`,
@@ -204,6 +211,7 @@ export async function githubPullsMerge(
 ) {
   const conn = await connection(home);
   const path = connectionPath(options.connectionId);
+
   return request(
     conn,
     `${path}/pulls/${pullNumber(options.number)}/merge`,

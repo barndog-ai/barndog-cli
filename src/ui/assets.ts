@@ -62,8 +62,10 @@ export function assetListing(
       paths: [],
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
+
   const order = ["installed", "disabled", "available"] as const;
   const wanted = order.filter((group) => filter[group]);
+
   return order
     .filter((group) => !wanted.length || wanted.includes(group))
     .flatMap((group) =>
@@ -90,8 +92,10 @@ export function renderInventory(
   options: { paths?: boolean; heading?: string } = {},
 ): string[] {
   const output: string[] = [];
-  if (options.heading)
+  if (options.heading) {
     output.push(`${section(options.heading)} ${dim(`(${items.length})`)}`);
+  }
+
   output.push(
     ...table(
       items.map((item) => [
@@ -116,16 +120,24 @@ export function renderInventory(
       { header: ["Name", "Origin", "Via", "Installed in", "State"], flex: 2 },
     ),
   );
-  if (options.paths)
+
+  if (options.paths) {
     for (const item of items) {
-      if (!item.paths.length) continue;
+      if (!item.paths.length) {
+        continue;
+      }
+
       output.push(
         "",
         `  ${bold(item.installedName)}${item.installedName !== item.name ? dim(` · published as ${item.name}`) : ""}`,
       );
-      for (const path of item.paths)
+
+      for (const path of item.paths) {
         output.push(dim(`    ${displayPath(path)}`));
+      }
     }
+  }
+
   return output;
 }
 
@@ -134,23 +146,30 @@ export function inventoryHints(items: readonly InventoryItem[]): string[] {
   const output: string[] = [];
   const count = (state: InventoryState) =>
     items.filter((item) => item.state === state).length;
-  if (count("pending") || count("outdated") || count("removing"))
+
+  if (count("pending") || count("outdated") || count("removing")) {
     output.push(
       hint("barndog sync", "Next") +
         dim(
           `  to apply ${plural(count("pending") + count("outdated") + count("removing"), "pending change")}`,
         ),
     );
-  if (count("modified"))
+  }
+
+  if (count("modified")) {
     output.push(
       hint("barndog doctor", "Fix") +
         dim(`  to restore ${plural(count("modified"), "hand-edited asset")}`),
     );
-  if (count("clash"))
+  }
+
+  if (count("clash")) {
     output.push(
       hint("barndog sync", "Fix") +
         dim("  in a terminal to choose how to resolve name clashes"),
     );
+  }
+
   return output;
 }
 
@@ -161,11 +180,16 @@ export function renderCatalog(
   installedIds: ReadonlySet<string>,
 ): string[] {
   const page = assetPage(rows, options);
-  if (!page.total) return [dim("No matching assets.")];
-  if (!page.rows.length)
+  if (!page.total) {
+    return [dim("No matching assets.")];
+  }
+
+  if (!page.rows.length) {
     return [
       `Page ${options.page} is empty. Choose a page from 1 to ${page.pages}.`,
     ];
+  }
+
   // Only Cloud has version numbers; local and Git assets are identified by a hash.
   const versioned = page.rows.some((row) => row.version.label === undefined);
   const output = table(
@@ -186,17 +210,20 @@ export function renderCatalog(
       ],
     },
   );
+
   output.push(
     "",
     dim(
       `Showing ${page.start + 1}–${page.start + page.rows.length} of ${page.total}${page.pages > 1 ? ` · page ${options.page}/${page.pages}` : ""}${installedIds.size ? " · ✔ selected on this machine" : ""}`,
     ),
   );
+
   if (options.page < page.pages) {
     const filters = `${options.search ? ` ${JSON.stringify(options.search)}` : ""}${options.origin ? ` --origin ${options.origin}` : ""}`;
     output.push(
       hint(`${command}${filters} --page ${options.page + 1}`, "Next"),
     );
   }
+
   return output;
 }

@@ -46,25 +46,30 @@ function withoutSource(settings: Settings): Settings {
   void connection;
   void gitWorkspace;
   void localWorkspace;
+
   return rest;
 }
 
 function applyWorkspace(settings: Settings, chosen: ChosenWorkspace) {
   const previousId = (settings.gitWorkspace ?? settings.localWorkspace)
     ?.workspaceId;
+
   const next: Settings = {
     ...withoutSource(settings),
     ...(chosen.kind === "git"
       ? { gitWorkspace: chosen.git }
       : { localWorkspace: chosen.local }),
   };
+
   const id =
     chosen.kind === "git" ? chosen.git.workspaceId : chosen.local.workspaceId;
+
   // Asset IDs are derived from the workspace, so choices can't carry across.
   if (previousId !== id) {
     delete next.environment;
     delete next.localNames;
   }
+
   return next;
 }
 
@@ -85,6 +90,7 @@ export async function initialize(options: {
   detected?: DetectedHarness[];
 }): Promise<{ configPath: string; harnesses: Harness[]; cancelled?: boolean }> {
   const home = options.home ?? homedir();
+
   return locked(home, async () => {
     const previous = await readSettings(home);
     const detected = options.detected ?? (await detectHarnesses({ home }));
@@ -94,10 +100,12 @@ export async function initialize(options: {
       evidence: harness.evidence,
       checked: previous?.harnesses.includes(harness.id) ?? false,
     }));
+
     const selected = await options.choose(choices);
     let next: Settings = previous
       ? { ...previous, harnesses: selected }
       : { harnesses: selected };
+
     if (options.workspace) {
       next = applyWorkspace(next, options.workspace);
       const model =
@@ -107,8 +115,9 @@ export async function initialize(options: {
               "A local workspace always has a source",
             ).model()
           : undefined;
+
       // One developer's folder has nothing to choose between: everything installs.
-      if (model)
+      if (model) {
         next = withSelection(next, {
           subscriptions: [
             {
@@ -121,7 +130,9 @@ export async function initialize(options: {
           excludedAssetIds: [],
           disabledAssetIds: [],
         });
+      }
     }
+
     if (options.server) {
       const connection = await connectionContext(options.server, home);
       if (
@@ -130,18 +141,23 @@ export async function initialize(options: {
         (next.connection.server !== connection.server ||
           next.connection.organizationId !== connection.organizationId ||
           next.connection.developerId !== connection.developerId)
-      )
+      ) {
         throw new Error(
           "Remove API selections before switching server, organization, or developer",
         );
+      }
+
       if (next.gitWorkspace || next.localWorkspace) {
         // Repo asset IDs mean nothing to a server, so those choices can't carry over.
         const { environment, localNames, ...cleared } = withoutSource(next);
         void environment;
         void localNames;
         next = { ...cleared, connection };
-      } else next = { ...next, connection };
+      } else {
+        next = { ...next, connection };
+      }
     }
+
     if (options.chooseEnvironment && (next.connection || next.gitWorkspace)) {
       const choices = await onboardingEnvironment(next, home);
       next = selectedEnvironment(
@@ -150,20 +166,24 @@ export async function initialize(options: {
         await options.chooseEnvironment(choices),
       );
     }
+
     if (options.keepLocal) {
       const kept = await localRepoSource(options.keepLocal, home).model();
       const settings = {
         ...next,
         localWorkspace: options.keepLocal,
       };
+
       next = withSelection(
         settings,
         withLocalSubscription(selectionState(settings), kept),
       );
     }
+
     if (next.connection || next.gitWorkspace || next.localWorkspace) {
       next = { ...next, knowledge: next.knowledge ?? true };
     }
+
     if (options.confirm && !(await options.confirm(next))) {
       return {
         configPath: settingsPath(home),
@@ -171,8 +191,13 @@ export async function initialize(options: {
         cancelled: true,
       };
     }
-    if (options.apply) await options.apply(next);
-    else await saveSettings(next, home);
+
+    if (options.apply) {
+      await options.apply(next);
+    } else {
+      await saveSettings(next, home);
+    }
+
     return { configPath: settingsPath(home), harnesses: selected };
   });
 }

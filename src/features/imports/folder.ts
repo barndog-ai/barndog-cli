@@ -30,33 +30,45 @@ export async function plainFolder(source: string): Promise<string | null> {
     (info) => info.isDirectory(),
     () => false,
   );
-  if (!directory) return null;
+
+  if (!directory) {
+    return null;
+  }
+
   const isRepo =
     existsSync(join(path, ".git")) ||
     (existsSync(join(path, "HEAD")) && existsSync(join(path, "objects")));
+
   return isRepo ? null : path;
 }
 
 /** Git can't help with a path that isn't there, so say so instead of suggesting a clone. */
 export function assertSourceExists(source: string) {
   const value = source.trim();
-  if (!looksLocal(value)) return;
-  if (!existsSync(resolve(expandHome(value))))
+  if (!looksLocal(value)) {
+    return;
+  }
+
+  if (!existsSync(resolve(expandHome(value)))) {
     throw new CliError(`Can't find ${value}.`);
+  }
 }
 
 /** Presents a folder the way a fetched repo looks, so discovery treats both alike. */
 export async function readFolder(path: string): Promise<RemoteRepo> {
-  if (path === homedir() || path === parse(path).root)
+  if (path === homedir() || path === parse(path).root) {
     throw new CliError(
       `${path} is too broad to search. Point at the folder holding the Skill.`,
     );
+  }
+
   const snapshot = await folderSnapshot(path);
   const blobs = await snapshot.readBlobs(
     snapshot.entries
       .filter((entry) => isBlob(entry.mode))
       .map((entry) => entry.hash),
   );
+
   return { url: path, ref: null, commit: "", path: "", snapshot, blobs };
 }
 
@@ -72,10 +84,15 @@ export async function removeImported(
   for (const entry of entries) {
     const file = join(root, entry.path);
     await rm(file, { force: true });
-    for (let dir = dirname(file); dir !== root; dir = dirname(dir))
+    for (let dir = dirname(file); dir !== root; dir = dirname(dir)) {
       folders.add(dir);
+    }
   }
+
   const deepestFirst = [...folders].sort((a, b) => b.length - a.length);
-  for (const folder of deepestFirst) await rmdir(folder).catch(() => {});
+  for (const folder of deepestFirst) {
+    await rmdir(folder).catch(() => {});
+  }
+
   return !existsSync(root);
 }

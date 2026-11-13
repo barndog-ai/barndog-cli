@@ -38,23 +38,30 @@ export function parseMcpText(text: string, name?: string): ImportedServer[] {
   } catch (error) {
     throw new CliError("That isn't valid JSON.", undefined, { cause: error });
   }
+
   if (isServer(value)) {
-    if (!name)
+    if (!name) {
       throw new CliError(
         "This JSON is one server without a name.",
         "barndog mcp add <name> --file <path>",
       );
+    }
+
     return [{ name, server: value }];
   }
+
   const object = asRecord(value);
   const map = asRecord(object.mcpServers ?? object.servers ?? object);
   const servers = Object.entries(map).flatMap(([key, server]) =>
     isServer(server) ? [{ key, server }] : [],
   );
-  if (!servers.length)
+
+  if (!servers.length) {
     throw new CliError(
       "No MCP servers found in that JSON. Each one needs a command or url.",
     );
+  }
+
   return servers
     .filter(({ key }) => !name || servers.length === 1 || key === name)
     .map(({ key, server }) => ({
@@ -74,6 +81,7 @@ const WHOLE_VARIABLE = new RegExp(
 /** The variable a whole value refers to: `${env:TOKEN}` or `$TOKEN` → `TOKEN`. */
 export const variableName = (value: string) => {
   const [, braced, bare] = WHOLE_VARIABLE.exec(value) ?? [];
+
   return braced ?? bare;
 };
 
@@ -108,17 +116,23 @@ function reference(
 ) {
   const text = String(value);
   const whole = variableName(text);
-  if (whole) return { secretRef: whole };
+  if (whole) {
+    return { secretRef: whole };
+  }
+
   const inside = embeddedVariable(text);
   if (inside) {
     notes.push(
       `${key} mixes text with ${inside}. Set ${inside} to the complete value of ${key}, including that text.`,
     );
+
     return { secretRef: inside };
   }
+
   notes.push(
     `${key} held a literal value, which BarnDog doesn't store. Set ${fallback} in your environment.`,
   );
+
   return { secretRef: fallback };
 }
 
@@ -129,10 +143,12 @@ export function convertServer(
 ): ConvertedServer {
   const notes: string[] = [];
   const type = typeof server.type === "string" ? server.type : undefined;
-  if (type === "sse" || type === "ws")
+  if (type === "sse" || type === "ws") {
     throw new CliError(
       `${name} uses ${type} transport. BarnDog supports stdio and HTTP servers.`,
     );
+  }
+
   const address = server.url ?? server.httpUrl;
   const url = typeof address === "string" ? address : undefined;
   const common = {
@@ -142,29 +158,39 @@ export function convertServer(
         ? server.description
         : `${name} MCP server`),
   };
+
   let candidate: unknown;
   if (url) {
     const headers: Record<string, { secretRef: string }> = {};
     for (const [key, value] of Object.entries(
       asRecord(server.headers ?? server.http_headers),
-    ))
+    )) {
       headers[key] = reference(key, value, envName(`${name}_${key}`), notes);
+    }
+
     for (const [key, value] of Object.entries(
       asRecord(server.env_http_headers),
-    ))
-      if (typeof value === "string") headers[key] = { secretRef: value };
+    )) {
+      if (typeof value === "string") {
+        headers[key] = { secretRef: value };
+      }
+    }
+
     if (typeof server.bearer_token_env_var === "string") {
       headers.Authorization = { secretRef: server.bearer_token_env_var };
       notes.push(
         `Set ${server.bearer_token_env_var} to the whole Authorization value, including "Bearer ".`,
       );
     }
+
     // Claude Code writes `oauth` and Cursor writes `auth` for servers that sign in natively.
     const signsIn = oauth || !!server.oauth || !!server.auth;
-    if (signsIn)
+    if (signsIn) {
       notes.push(
         `Sign in once it's added: barndog mcp auth ${name} --origin ${LOCAL_ORIGIN} --harness <tool>`,
       );
+    }
+
     candidate = {
       ...common,
       transport: "http",
@@ -177,21 +203,29 @@ export function convertServer(
           : "none",
     };
   } else {
-    if (oauth)
+    if (oauth) {
       throw new CliError(
         `${name} runs as a local command, and only HTTP servers sign in with OAuth.`,
       );
+    }
+
     const environment: Record<string, { secretRef: string }> = {};
-    for (const [key, value] of Object.entries(asRecord(server.env)))
+    for (const [key, value] of Object.entries(asRecord(server.env))) {
       environment[key] = reference(key, value, key, notes);
-    for (const key of asStrings(server.env_vars))
+    }
+
+    for (const key of asStrings(server.env_vars)) {
       environment[key] = { secretRef: key };
+    }
+
     const listed: unknown[] = Array.isArray(server.args) ? server.args : [];
     const args = listed.map(String);
-    if (args.some(looksSecret))
+    if (args.some(looksSecret)) {
       notes.push(
         "An argument looks like it may hold a secret. Arguments are stored as written, so check them before sharing this.",
       );
+    }
+
     candidate = {
       ...common,
       transport: "stdio",
@@ -201,11 +235,14 @@ export function convertServer(
       authentication: Object.keys(environment).length ? "environment" : "none",
     };
   }
+
   const parsed = mcpDefinitionSchema.safeParse(candidate);
-  if (!parsed.success)
+  if (!parsed.success) {
     throw new CliError(
       `${name} can't be added: ${parsed.error.issues.map((issue) => `${issue.path.join(".") || "server"}: ${issue.message}`).join("; ")}`,
     );
+  }
+
   return { name, definition: parsed.data, notes };
 }
 
@@ -216,6 +253,7 @@ export type HarnessServer = ImportedServer & {
 
 async function jsonFile(path: string) {
   const text = await fileText(path).catch(() => null);
+
   return text ? asRecord(parseJsonc(text)) : {};
 }
 
@@ -237,38 +275,53 @@ export async function harnessServers(
       .filter((entry) => entry.kind === "mcp")
       .map((entry) => `${entry.harness}:${entry.key}`),
   );
+
   const found: HarnessServer[] = [];
   const add = (harness: Harness, label: string, servers: unknown) => {
-    for (const [name, server] of Object.entries(asRecord(servers)))
-      if (isServer(server) && !owned.has(`${harness}:${name}`))
+    for (const [name, server] of Object.entries(asRecord(servers))) {
+      if (isServer(server) && !owned.has(`${harness}:${name}`)) {
         found.push({ harness, label, name, server });
+      }
+    }
   };
+
   const claude = await jsonFile(nativeFile("claude", "mcp", home));
   add("claude", "Claude Code", claude.mcpServers);
-  for (const [project, value] of Object.entries(asRecord(claude.projects)))
+  for (const [project, value] of Object.entries(asRecord(claude.projects))) {
     add(
       "claude",
       `Claude Code, ${basename(project)} project`,
       asRecord(value).mcpServers,
     );
+  }
+
   add(
     "cursor",
     "Cursor",
     (await jsonFile(nativeFile("cursor", "mcp", home))).mcpServers,
   );
+
   const codex = await fileText(nativeFile("codex", "mcp", home)).catch(
     () => null,
   );
-  if (codex) add("codex", "Codex", parseToml(codex).mcp_servers);
+
+  if (codex) {
+    add("codex", "Codex", parseToml(codex).mcp_servers);
+  }
+
   return found;
 }
 
 /** Native entries BarnDog doesn't own that would block installing this name. */
 export async function conflictingEntries(name: string, home = homedir()) {
   const settings = await readSettings(home);
-  if (!settings) throw new SetupRequiredError();
+  if (!settings) {
+    throw new SetupRequiredError();
+  }
+
   const servers = await harnessServers(home);
   const selected = harnesses.filter((h) => settings.harnesses.includes(h));
+
   return servers
     .filter(
       (entry) =>
@@ -289,27 +342,33 @@ export async function addMcpServers(
   home = homedir(),
 ) {
   const invalid = servers.filter(({ name }) => !validAssetName(name));
-  if (invalid.length)
+  if (invalid.length) {
     throw new CliError(
       `${invalid.map(({ name }) => name).join(", ")} can't be used as ${invalid.length === 1 ? "an MCP name" : "MCP names"}. ${NAME_RULE}. To add one, save only that server to a JSON file under a new name.`,
       "barndog mcp add <new-name> --file <path>",
     );
+  }
+
   return locked(home, async () => {
     const workspace = await ensureLocalWorkspace(home);
     for (const { name } of servers) {
       const target = join(workspace.path, "org/mcp", `${name}.yaml`);
-      if (await fileText(target).catch(() => null))
+      if (await fileText(target).catch(() => null)) {
         throw new CliError(
           `A local MCP server named ${name} already exists.`,
           `barndog mcp add ${name}-2 --file <path>`,
         );
+      }
+
       const conflicts = await conflictingEntries(name, home);
-      if (conflicts.length && !options.replace)
+      if (conflicts.length && !options.replace) {
         throw new CliError(
           `${name} is already configured in ${conflicts.map((c) => c.file).join(" and ")}. Replacing it is required for BarnDog to manage it.`,
           `barndog mcp add ${name} --replace`,
         );
+      }
     }
+
     const backups: string[] = [];
     for (const { name, definition } of servers) {
       for (const conflict of await conflictingEntries(name, home)) {
@@ -319,10 +378,12 @@ export async function addMcpServers(
           ".barndog/migrations",
           `${basename(conflict.file)}-${Date.now()}.bak`,
         );
+
         await mkdir(join(home, ".barndog/migrations"), {
           recursive: true,
           mode: 0o700,
         });
+
         await copyFile(conflict.file, backup);
         backups.push(backup);
         await atomicFile(
@@ -343,15 +404,18 @@ export async function addMcpServers(
           ),
         );
       }
+
       await mkdir(join(workspace.path, "org/mcp"), { recursive: true });
       await writeFile(
         join(workspace.path, "org/mcp", `${name}.yaml`),
         stringify(definition),
       );
     }
+
     const events = await synchronize(undefined, home, undefined, {
       prompt: false,
     });
+
     return {
       added: servers.map((s) => s.name),
       notes: servers.flatMap((s) => s.notes),

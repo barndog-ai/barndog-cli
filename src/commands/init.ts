@@ -18,10 +18,14 @@ export function registerInit(program: Command, context: CommandContext): void {
         repo?: string;
         browser: boolean;
       }) => {
-        if (options.local && options.server)
+        if (options.local && options.server) {
           program.error("--local cannot be combined with --server");
-        if (options.repo && (options.local || options.server))
+        }
+
+        if (options.repo && (options.local || options.server)) {
           program.error("--repo cannot be combined with --local or --server");
+        }
+
         await context.setup(true, options.server, {
           local: options.local,
           browser: options.browser,

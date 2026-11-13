@@ -13,6 +13,7 @@ export async function promptServer(current?: string): Promise<string> {
       validate: (value) => {
         try {
           normalizeServer(value.trim());
+
           return true;
         } catch {
           return "Enter an HTTPS server origin, such as https://barndog.example.com (HTTP is allowed for localhost).";
@@ -58,14 +59,20 @@ export async function chooseConnection(
     ],
     theme: promptTheme,
   });
-  if (kind === "local") return { kind };
-  if (kind === "cloud")
+
+  if (kind === "local") {
+    return { kind };
+  }
+
+  if (kind === "cloud") {
     return {
       kind,
       server: await promptServer(
         current?.kind === "cloud" ? current.server : undefined,
       ),
     };
+  }
+
   return {
     kind,
     url: (
@@ -75,6 +82,7 @@ export async function chooseConnection(
         validate: (value) => {
           try {
             checkRepositoryUrl(value);
+
             return true;
           } catch (error) {
             return error instanceof Error ? error.message : String(error);

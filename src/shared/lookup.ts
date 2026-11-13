@@ -1,6 +1,9 @@
 /** `value`, or an Error saying `message` when a lookup the code relies on comes back empty. */
 export function defined<T>(value: T | null | undefined, message: string): T {
-  if (value === undefined || value === null) throw new Error(message);
+  if (value === undefined || value === null) {
+    throw new Error(message);
+  }
+
   return value;
 }
 

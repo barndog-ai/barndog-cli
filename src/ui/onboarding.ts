@@ -61,6 +61,7 @@ import { bold, dim, fields, heading, originLabel, table } from "./format.js";
 
 const chooseHarnesses = (choices: HarnessChoice[]): Promise<Harness[]> => {
   const width = Math.max(...choices.map((choice) => choice.name.length));
+
   return checkbox<Harness>({
     loop: false,
     message: "Which coding tools should BarnDog manage?",
@@ -84,7 +85,10 @@ async function chooseSource(
   choose: (current?: SetupChoice) => Promise<SetupChoice> = chooseConnection,
 ): Promise<SetupChoice> {
   const server = await configuredServer(home);
-  if (!previous) return server ? { kind: "cloud", server } : choose();
+  if (!previous) {
+    return server ? { kind: "cloud", server } : choose();
+  }
+
   return choose(
     previous.gitWorkspace
       ? { kind: "git", url: previous.gitWorkspace.url }
@@ -129,16 +133,20 @@ export async function runSetup(
     write("");
     if (!options.restart) {
       write(`To start setup again, run ${styleText("bold", "barndog init")}.`);
+
       return;
     }
   }
+
   const interactive =
     options.interactive ?? Boolean(process.stdin.isTTY && process.stdout.isTTY);
+
   if (!interactive) {
     throw new Error(
       `Onboarding requires an interactive terminal. Run ${styleText("bold", "barndog init", { stream: process.stderr })} in your terminal.`,
     );
   }
+
   if (previous) {
     const confirmed = await (
       options.confirmRestart ??
@@ -150,14 +158,21 @@ export async function runSetup(
           theme: promptTheme,
         }))
     )();
+
     if (!confirmed) {
       write("Setup cancelled. Configuration was not changed.");
+
       return;
     }
   }
+
   write(`\n${heading("setup")}\n`);
-  if ([options.local, options.server, options.repo].filter(Boolean).length > 1)
+  if (
+    [options.local, options.server, options.repo].filter(Boolean).length > 1
+  ) {
     throw new Error("--local, --repo and --server cannot be combined");
+  }
+
   const choice: SetupChoice = options.local
     ? { kind: "local" }
     : options.repo
@@ -165,10 +180,12 @@ export async function runSetup(
       : options.server
         ? { kind: "cloud", server: options.server }
         : await chooseSource(previous, home, options.chooseConnection);
+
   const server = choice.kind === "cloud" ? choice.server : undefined;
   let workspace: ChosenWorkspace | undefined;
   let discardWorkspace: (() => void) | undefined;
   let keepWorkspace = () => {};
+
   if (choice.kind === "local") {
     const fresh = !existsSync(defaultLocalPath(home));
     const local = await localWorkspace(home);
@@ -177,9 +194,11 @@ export async function runSetup(
     if (fresh) {
       discardWorkspace = () =>
         rmSync(local.path, { recursive: true, force: true });
+
       keepWorkspace = cleanUpIfInterrupted(discardWorkspace);
     }
   }
+
   if (choice.kind === "git") {
     const url = checkRepositoryUrl(await cloneOrigin(choice.url));
     let head: RemoteHead = null;
@@ -187,13 +206,17 @@ export async function runSetup(
     try {
       head = await inspectRepository(url);
     } catch (error) {
-      if (!(error instanceof RepositoryAccessError)) throw error;
+      if (!(error instanceof RepositoryAccessError)) {
+        throw error;
+      }
+
       write(`${error.message}`);
       write(
         dim(
           "Git has to be able to clone this repo on this machine. Once it can, BarnDog manages it for you.",
         ),
       );
+
       const clone = await (
         options.confirmClone ??
         (() =>
@@ -203,9 +226,14 @@ export async function runSetup(
             theme: promptTheme,
           }))
       )(url);
-      if (!clone) throw error;
+
+      if (!clone) {
+        throw error;
+      }
+
       cloned = await cloneGitWorkspace(url, home);
     }
+
     if (!head && !cloned) {
       const create = await (
         options.confirmCreateRepo ??
@@ -216,9 +244,12 @@ export async function runSetup(
             theme: promptTheme,
           }))
       )(url);
-      if (!create)
+
+      if (!create) {
         throw new CliError("Setup stopped. The repository was not changed.");
+      }
     }
+
     workspace = {
       kind: "git",
       git:
@@ -231,47 +262,60 @@ export async function runSetup(
               home,
             )),
     };
+
     write(`${dim("Git repo")}  ${url}`);
     write(
       dim(
         "Anything merged to its default branch installs on every machine that selected it, including code that runs. Keeping the repo safe is the job of its maintainers and members, so protect the default branch.",
       ),
     );
-    if (!head && !cloned)
+
+    if (!head && !cloned) {
       write(
         dim(
           "Next, protect the default branch on your Git host and let members push other branches.",
         ),
       );
+    }
   }
+
   if (server) {
     write(`${dim("Workspace")}  ${server}`);
     let session;
     try {
       session = await authStatus(home, server);
     } catch (error) {
-      if (!(error instanceof LoginRequiredError)) throw error;
+      if (!(error instanceof LoginRequiredError)) {
+        throw error;
+      }
+
       await runLogin(
         { server, browser: options.browser !== false, home, force: true },
         write,
       );
+
       session = await authStatus(home, server);
     }
+
     write(
       `${dim("Signed in")}  ${session.context.developer.name} · ${session.context.organization.name}`,
     );
   }
+
   const keptFolder =
     previous && choice.kind !== "local" ? previous.localWorkspace : undefined;
+
   const localCount = keptFolder
     ? await localRepoSource(keptFolder, home)
         .model()
         .then((model) => model.assets.length + model.knowledge.length)
         .catch(() => 0)
     : 0;
+
   const localChoice: LocalAssetChoice = localCount
     ? await (options.chooseLocalAssets ?? chooseLocalAssets)(localCount)
     : "keep";
+
   const connected = Boolean(server || workspace);
   write("");
   let environmentChoices: EnvironmentChoices | undefined;
@@ -283,6 +327,7 @@ export async function runSetup(
     cwd: options.cwd,
     chooseEnvironment: async (choices) => {
       environmentChoices = choices;
+
       return (options.chooseEnvironment ?? environmentChooser(write))(choices);
     },
     choose: options.choose ?? chooseHarnesses,
@@ -299,14 +344,17 @@ export async function runSetup(
             settings.gitWorkspace?.url ??
             settings.localWorkspace?.path,
         ],
-      ]))
+      ])) {
         write(line);
+      }
+
       if (settings.connection || settings.gitWorkspace) {
         const selection = selectionState(settings);
         write("");
         write(
           `${bold("Scope sets")} ${dim(`(${selection.subscriptions.length})`)}`,
         );
+
         write(
           selection.subscriptions.length
             ? table(
@@ -316,8 +364,11 @@ export async function runSetup(
                       scope.id === subscription.scope.id &&
                       scope.type === subscription.scope.type,
                   );
-                  if (!scope && settings.localWorkspace)
+
+                  if (!scope && settings.localWorkspace) {
                     return ["local", "Your local assets", subscription.mode];
+                  }
+
                   return [
                     scope
                       ? originLabel(scope)
@@ -330,12 +381,14 @@ export async function runSetup(
               ).join("\n")
             : dim("  None."),
         );
+
         // Git setups rarely pick single assets, so only show a section with something in it.
         if (!settings.gitWorkspace || selection.individualAssetIds.length) {
           write("");
           write(
             `${bold("Individual assets")} ${dim(`(${selection.individualAssetIds.length})`)}`,
           );
+
           write(
             selection.individualAssetIds.length
               ? table(
@@ -343,6 +396,7 @@ export async function runSetup(
                     const asset = environmentChoices?.catalog.assets.find(
                       (asset) => asset.id === id,
                     );
+
                     return asset
                       ? [asset.name, asset.kind, originLabel(asset.origin)]
                       : [id, "", ""];
@@ -353,7 +407,9 @@ export async function runSetup(
           );
         }
       }
+
       write("");
+
       return options.confirmApply
         ? options.confirmApply(settings)
         : confirm({
@@ -368,24 +424,29 @@ export async function runSetup(
       ? async (settings) => {
           for (const line of renderSyncOutput(
             await synchronize(undefined, home, settings),
-          ))
+          )) {
             write(line);
+          }
         }
       : undefined,
   });
+
   const result = await initialized
     .catch((error: unknown) => {
       discardWorkspace?.();
       throw error;
     })
     .finally(keepWorkspace);
+
   if (result.cancelled) {
     discardWorkspace?.();
     write(
       "Setup cancelled. Configuration and installed assets were not changed. Your sign-in is retained.",
     );
+
     return;
   }
+
   if (localChoice === "move" && localCount) {
     const to =
       choice.kind === "cloud"
@@ -393,10 +454,13 @@ export async function runSetup(
             await cloudMoveTargets(home),
           )
         : undefined;
+
     write("");
-    for (const line of renderMove(await moveLocalAssets({ to }, home)))
+    for (const line of renderMove(await moveLocalAssets({ to }, home))) {
       write(line);
+    }
   }
+
   write("");
   write(`${selected("✔")} Saved to ${result.configPath}`);
   write("");
@@ -404,18 +468,22 @@ export async function runSetup(
     write(
       `${dim("Next:")} ${bold("barndog status")}  ${dim("see what's installed and where")}`,
     );
+
     write(
       choice.kind === "cloud"
         ? `      ${bold("barndog skills install")}  ${dim("add more (also mcp, hooks, sets)")}`
         : `      ${bold("barndog skills add <url>")}  ${dim("add from a repo (also hooks add, mcp add)")}`,
     );
+
     write(`      ${bold("barndog sync")}  ${dim("pick up published updates")}`);
-    if (choice.kind === "local")
+    if (choice.kind === "local") {
       write(
         `      ${dim(`add assets under ${workspace?.kind === "local" ? workspace.local.path : ""}`)}`,
       );
-  } else
+    }
+  } else {
     write(
       `${dim("Next:")} ${bold("barndog sync")}  ${dim("then connect a Git repo or Cloud Workspace later with barndog init")}`,
     );
+  }
 }

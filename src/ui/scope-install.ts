@@ -28,14 +28,20 @@ export async function runSetInstall(
     runSelection(context, (resolution) =>
       context.installSet({ ...options, mode, resolution }),
     );
-  if (options.mode) return install(options.mode);
+
+  if (options.mode) {
+    return install(options.mode);
+  }
+
   if (!(
     prompts.interactive ?? Boolean(process.stdin.isTTY && process.stdout.isTTY)
-  ))
+  )) {
     throw new CliError(
       "Choose which assets to include with --mode, or run this in a terminal to pick.",
       `barndog sets install ${options.origin} --mode recommended`,
     );
+  }
+
   const mode = await (
     prompts.mode ??
     (() =>
@@ -51,12 +57,18 @@ export async function runSetInstall(
         theme: promptTheme,
       }))
   )();
-  if (mode !== "custom") return install(mode);
+
+  if (mode !== "custom") {
+    return install(mode);
+  }
+
   const preview = await context.previewSet(options.origin);
   if (!preview.assets.length) {
     context.write("No published assets in this source yet.");
+
     return;
   }
+
   const assetIds = await (
     prompts.assets ??
     ((assets, selectedIds) =>
@@ -72,10 +84,13 @@ export async function runSetInstall(
         theme: checkboxTheme,
       }))
   )(preview.assets, preview.selectedAssetIds);
+
   if (!assetIds.length) {
     context.write("No assets selected. Nothing changed.");
+
     return;
   }
+
   await runSelection(context, () =>
     context.installSetAssets({ origin: options.origin, assetIds }),
   );

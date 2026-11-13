@@ -85,6 +85,7 @@ export async function pullSkill(
   return locked(home, async () => {
     const conn = await connection(home),
       skill = await selectSkill(name, origin, conn, home, kind);
+
     const path = resolve(cwd, target ?? name);
     await mkdir(dirname(path), { recursive: true });
     // Never overwrite an existing directory, even if it appears empty.
@@ -98,6 +99,7 @@ export async function pullSkill(
         skill.version.commit,
         kind,
       );
+
       await writePackage(root, files);
       await save(
         {
@@ -114,6 +116,7 @@ export async function pullSkill(
         },
         home,
       );
+
       return { root, version: skill.version.number };
     } catch (error) {
       await rm(root, { recursive: true, force: true });
@@ -126,6 +129,7 @@ export async function workspaceStatus(cwd = process.cwd(), home = homedir()) {
   return locked(home, async () => {
     const work = await find(cwd, home),
       local = await readDirectory(work.root);
+
     return {
       root: work.root,
       name: work.name,
@@ -156,16 +160,22 @@ export async function updateWorkspace(cwd = process.cwd(), home = homedir()) {
     const work = await find(cwd, home);
     const previous = structuredClone(work);
     await connection(home, work.connection);
-    if (work.pending || work.external?.pending)
+    if (work.pending || work.external?.pending) {
       throw new Error(
         "Retry barndog push before pulling; a submission is awaiting confirmation",
       );
-    if (work.conflicts.length)
+    }
+
+    if (work.conflicts.length) {
       throw new Error("Resolve existing conflicts before pulling again");
+    }
+
     let entries = await readDirectory(work.root);
     const conflicts = new Set<string>();
     const source = await externalSource(work, home);
-    if (source) return pullExternal(work, source, entries, previous, home);
+    if (source) {
+      return pullExternal(work, source, entries, previous, home);
+    }
 
     if (work.proposal) {
       const proposal = await getChange(
@@ -174,6 +184,7 @@ export async function updateWorkspace(cwd = process.cwd(), home = homedir()) {
         home,
         work.kind,
       );
+
       if (proposal.revision !== work.proposal.revision) {
         const remote = await download(
           `/v1/skill-changes/${proposal.id}/package?revision=${proposal.revision}`,
@@ -182,11 +193,13 @@ export async function updateWorkspace(cwd = process.cwd(), home = homedir()) {
           proposal.commit,
           work.kind,
         );
+
         const merged = await mergeEntries(
           decodeFiles(work.proposal.files),
           entries,
           remote,
         );
+
         entries = merged.entries;
         merged.conflicts.forEach((p) => conflicts.add(p));
         // The author's remote proposal may already have been rebased by another client.
@@ -201,11 +214,15 @@ export async function updateWorkspace(cwd = process.cwd(), home = homedir()) {
                 params: { path: { id: publishedId(work) } },
               }),
             );
+
             const version = versions.find(
               (v) => v.id === proposal.baseVersionId,
             );
-            if (!version)
+
+            if (!version) {
               throw new Error("Proposal base version is unavailable");
+            }
+
             work.base = encodeFiles(
               await download(
                 `/v1/skills/${work.skillId}/versions/${version.number}/package`,
@@ -215,13 +232,16 @@ export async function updateWorkspace(cwd = process.cwd(), home = homedir()) {
                 work.kind,
               ),
             );
+
             work.baseNumber = version.number;
           } else {
             work.base = [];
             work.baseNumber = null;
           }
+
           work.baseVersionId = proposal.baseVersionId;
         }
+
         work.proposal = {
           id: proposal.id,
           revision: proposal.revision,
@@ -229,6 +249,7 @@ export async function updateWorkspace(cwd = process.cwd(), home = homedir()) {
         };
       }
     }
+
     if (work.baseVersionId) {
       const skill = skillSchema.parse(
         (
@@ -241,6 +262,7 @@ export async function updateWorkspace(cwd = process.cwd(), home = homedir()) {
           })
         ).data,
       );
+
       if (skill.version.id !== work.baseVersionId) {
         const latest = await download(
           `/v1/skills/${skill.id}/versions/${skill.version.number}/package`,
@@ -249,11 +271,13 @@ export async function updateWorkspace(cwd = process.cwd(), home = homedir()) {
           skill.version.commit,
           work.kind,
         );
+
         const merged = await mergeEntries(
           decodeFiles(work.base),
           entries,
           latest,
         );
+
         entries = merged.entries;
         merged.conflicts.forEach((p) => conflicts.add(p));
         work.base = encodeFiles(latest);
@@ -267,14 +291,17 @@ export async function updateWorkspace(cwd = process.cwd(), home = homedir()) {
         home,
         work.kind,
       );
+
       if (proposal.publishedVersion) {
         work.baseVersionId = proposal.publishedVersion.id;
         work.baseNumber = proposal.publishedVersion.number;
         work.base = work.proposal.files;
       }
     }
+
     work.conflicts = [...conflicts];
     await applyFiles(work, entries, home, previous);
+
     return {
       root: work.root,
       conflicts: work.conflicts,
@@ -290,6 +317,7 @@ export async function resolveConflict(
 ) {
   return locked(home, async () => {
     const work = await find(cwd, home);
+
     return markResolved(work, path, cwd, home);
   });
 }
@@ -315,32 +343,46 @@ export async function markResolved(
 ) {
   const absolute = resolve(await realpath(cwd), path);
   const conflict = work.conflicts.find((p) => join(work.root, p) === absolute);
-  if (!conflict) throw new Error("Path is not an unresolved conflict");
+  if (!conflict) {
+    throw new Error("Path is not an unresolved conflict");
+  }
+
   const files = await readDirectory(work.root),
     file = files.find((e) => e.path === conflict);
-  if (file && hasConflictMarkers(textContent(file.data) ?? ""))
+
+  if (file && hasConflictMarkers(textContent(file.data) ?? "")) {
     throw new Error("Remove conflict markers before resolving this file");
+  }
+
   const paths = new Set(files.map((e) => e.path));
-  for (const p of paths)
-    if ([...paths].some((other) => p.startsWith(other + "/")))
+  for (const p of paths) {
+    if ([...paths].some((other) => p.startsWith(other + "/"))) {
       throw new Error("File/directory collision remains");
+    }
+  }
+
   work.conflicts = work.conflicts.filter((p) => p !== conflict);
   await save(work, home);
+
   return { resolved: conflict, remaining: work.conflicts };
 }
 
 export async function archive(files: Files, home: string) {
   const temp = join(directory(home), `upload-${randomUUID()}`),
     tar = temp + ".tar.gz";
+
   try {
     await writePackage(temp, decodeFiles(files));
     await c(
       { cwd: temp, file: tar, gzip: true, portable: true, noMtime: true },
       files.map((e) => e.path),
     );
+
     const bytes = await readFile(tar);
-    if (bytes.length > defaultLimits.compressed)
+    if (bytes.length > defaultLimits.compressed) {
       throw new Error("PACKAGE_TOO_LARGE");
+    }
+
     return new Blob([bytes]);
   } finally {
     await rm(temp, { recursive: true, force: true });
@@ -365,14 +407,17 @@ export async function pushWorkspace(
     try {
       work = await find(cwd, home);
     } catch (error) {
-      if (!options.origin || !(error instanceof NoWorkingCopyError))
+      if (!options.origin || !(error instanceof NoWorkingCopyError)) {
         throw error;
+      }
+
       const conn = await connection(home),
         root = await realpath(cwd),
         description = packageMetadataFor(
           await readDirectory(root),
           options.kind ?? "skill",
         );
+
       const origin = await selectOrigin(options.origin, conn, home);
       work = {
         root,
@@ -385,12 +430,18 @@ export async function pushWorkspace(
         base: [],
         conflicts: [],
       };
+
       await save(work, home);
     }
-    if (options.kind && work.kind !== options.kind)
+
+    if (options.kind && work.kind !== options.kind) {
       throw new Error("Working copy belongs to a different asset kind");
-    if (options.name && work.name !== options.name)
+    }
+
+    if (options.name && work.name !== options.name) {
       throw new Error("Working-copy name does not match the requested asset");
+    }
+
     await connection(home, work.connection);
     if (options.origin) {
       const selected = await selectOrigin(
@@ -398,22 +449,31 @@ export async function pushWorkspace(
         work.connection,
         home,
       );
+
       if (
         selected.type !== work.origin.type ||
         selected.id !== work.origin.id
       ) {
-        if (work.skillId || work.proposal || work.pending)
+        if (work.skillId || work.proposal || work.pending) {
           throw new Error("A submitted working copy cannot change its origin");
+        }
+
         work.origin = { type: selected.type, id: selected.id };
         await save(work, home);
       }
     }
-    if (work.conflicts.length)
+
+    if (work.conflicts.length) {
       throw new Error(
         "Resolve conflicts with barndog resolve <path> before pushing",
       );
+    }
+
     const source = await externalSource(work, home);
-    if (source) return pushExternal(work, source, options, home);
+    if (source) {
+      return pushExternal(work, source, options, home);
+    }
+
     const client = collaborationClient(work.connection.server, home, work.kind);
     if (options.publish) {
       const scope = await selectOrigin(
@@ -421,14 +481,18 @@ export async function pushWorkspace(
         work.connection,
         home,
       );
-      if (!scope.canPublish)
+
+      if (!scope.canPublish) {
         throw new Error(
           "Direct publication requires a scope admin, organization admin, or personal owner; use barndog changes merge after review",
         );
+      }
     }
+
     let proposal = work.proposal
       ? await getChange(work.proposal.id, work.connection, home, work.kind)
       : undefined;
+
     if (
       !work.pending &&
       options.publish &&
@@ -441,34 +505,45 @@ export async function pushWorkspace(
       work.baseNumber = proposal.publishedVersion.number;
       work.base = linkedProposal(work).files;
       await save(work, home);
+
       return proposal;
     }
+
     if (!work.pending) {
-      if (proposal?.status === "rejected" && !options.new)
+      if (proposal?.status === "rejected" && !options.new) {
         throw new Error(
           "Suggested Change was rejected; use barndog push --new for a new proposal",
         );
+      }
+
       if (
         proposal?.status === "merged" &&
         proposal.publishedVersion?.id !== work.baseVersionId
-      )
+      ) {
         throw new Error(
           "Run barndog pull before starting another Suggested Change",
         );
+      }
+
       if (
         proposal?.status === "open" &&
         proposal.revision !== linkedProposal(work).revision
-      )
+      ) {
         throw new Error(
           "Suggested Change changed remotely; run barndog pull before pushing",
         );
+      }
+
       const files = await readDirectory(work.root);
-      if (packageMetadataFor(files, work.kind).name !== work.name)
+      if (packageMetadataFor(files, work.kind).name !== work.name) {
         throw new Error("Package name cannot change in this working copy");
+      }
+
       const previous =
         proposal?.status === "open" && !options.new
           ? linkedProposal(work).files
           : work.base;
+
       if (
         packageFingerprint(files) ===
           packageFingerprint(decodeFiles(previous)) &&
@@ -484,16 +559,21 @@ export async function pushWorkspace(
               })
             ).data,
           );
+
           work.baseVersionId = publishedVersion(merged).id;
           work.baseNumber = publishedVersion(merged).number;
           work.base = linkedProposal(work).files;
           await save(work, home);
+
           return merged;
         }
+
         return { unchanged: true, proposalId: proposal?.id };
       }
+
       const changeId =
         proposal?.status === "open" && !options.new ? proposal.id : undefined;
+
       const metadata: ChangeUpload = {
         skillId: work.skillId,
         name: work.name,
@@ -503,9 +583,11 @@ export async function pushWorkspace(
         title: options.title ?? proposal?.title ?? `Update ${work.name}`,
         idempotencyKey: randomUUID(),
       };
+
       work.pending = { metadata, files: encodeFiles(files), changeId };
       await save(work, home);
     }
+
     const pending = work.pending;
     const form = new FormData();
     form.set("metadata", JSON.stringify(pending.metadata));
@@ -531,14 +613,17 @@ export async function pushWorkspace(
         delete work.pending;
         await save(work, home);
       }
+
       throw error;
     }
+
     work.skillId = proposal.skillId;
     work.proposal = {
       id: proposal.id,
       revision: proposal.submittedRevision,
       files: pending.files,
     };
+
     delete work.pending;
     await save(work, home);
     if (options.publish) {
@@ -550,11 +635,13 @@ export async function pushWorkspace(
           })
         ).data,
       );
+
       work.baseVersionId = publishedVersion(proposal).id;
       work.baseNumber = publishedVersion(proposal).number;
       work.base = work.proposal.files;
       await save(work, home);
     }
+
     return proposal;
   });
 }
@@ -568,10 +655,13 @@ export async function createWorkspace(
   kind: PackageKind = "skill",
 ) {
   return locked(home, async () => {
-    if (!NAME.test(name))
+    if (!NAME.test(name)) {
       throw new Error("Use a lowercase hyphenated package name");
+    }
+
     const conn = await connection(home),
       scope = await selectOrigin(origin, conn, home);
+
     const path = resolve(cwd, target ?? name);
     await mkdir(dirname(path), { recursive: true });
     await mkdir(path);
@@ -593,6 +683,7 @@ export async function createWorkspace(
         },
         home,
       );
+
       return { root, kind, name };
     } catch (error) {
       await rm(root, { recursive: true, force: true });
