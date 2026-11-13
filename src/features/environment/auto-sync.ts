@@ -67,7 +67,7 @@ async function currentRevision(conn: Connection, home: string) {
       conn,
       "/v1/environment/catalog/revision",
       environmentCatalogRevisionSchema,
-      home,
+      { home },
     );
 
     return revision;

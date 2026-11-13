@@ -5,6 +5,10 @@ import { renderCollaboration } from "../ui/collaboration.js";
 import { dim, fields, heading, hint, json, ok, plural } from "../ui/format.js";
 import { assetKindList, assetKinds } from "../features/asset-kinds/index.js";
 
+function knowledgeState(enabled: boolean) {
+  return enabled ? ok("listed at session start") : dim("off");
+}
+
 export function registerStatus(program: Command, context: CommandContext) {
   program
     .command("status")
@@ -42,11 +46,7 @@ export function registerStatus(program: Command, context: CommandContext) {
         ],
         [
           "Knowledge",
-          inventory.server
-            ? inventory.knowledge
-              ? ok("listed at session start")
-              : dim("off")
-            : undefined,
+          inventory.server ? knowledgeState(inventory.knowledge) : undefined,
         ],
       ])) {
         context.write(line);

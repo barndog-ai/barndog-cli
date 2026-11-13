@@ -75,6 +75,11 @@ export default defineConfig([
       "@typescript-eslint/no-unsafe-type-assertion": "error",
       "@typescript-eslint/no-non-null-assertion": "error",
       "@typescript-eslint/switch-exhaustiveness-check": "error",
+      "no-nested-ternary": "error",
+      "max-params": ["error", 4],
+      "one-var": ["error", "never"],
+      // Advisory on purpose: it points at functions worth splitting.
+      complexity: ["warn", 15],
     },
   },
   {

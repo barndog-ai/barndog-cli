@@ -1,3 +1,4 @@
+import { browserCommand } from "../shared/browser.js";
 import { spawn } from "node:child_process";
 import { homedir } from "node:os";
 import { login, logout, authStatus } from "../features/auth/session.js";
@@ -20,15 +21,7 @@ import {
 } from "./format.js";
 
 export async function openBrowser(url: string) {
-  const command =
-    process.platform === "darwin"
-      ? "open"
-      : process.platform === "win32"
-        ? "rundll32"
-        : "xdg-open";
-
-  const args =
-    process.platform === "win32" ? ["url.dll,FileProtocolHandler", url] : [url];
+  const { command, args } = browserCommand(url);
 
   await new Promise<void>((resolve, reject) => {
     const child = spawn(command, args, { stdio: "ignore" });

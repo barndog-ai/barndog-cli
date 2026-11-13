@@ -246,12 +246,12 @@ export async function resolveClashes(
     }
 
     let choice = resolver ? await resolver(clash) : "skip-incoming";
-    const rename =
-      choice === "rename-incoming"
-        ? clash.incoming
-        : choice === "rename-installed"
-          ? clash.installed
-          : undefined;
+    const renames: Partial<Record<ClashChoice, NamedAsset>> = {
+      "rename-incoming": clash.incoming,
+      "rename-installed": clash.installed,
+    };
+
+    const rename = renames[choice];
 
     if (rename) {
       const name = prefixedName(rename);

@@ -74,17 +74,29 @@ export {
   decodeFiles,
 } from "./workspace-store.js";
 
+/** Where a new working folder goes. */
+export type WorkingFolderOptions = {
+  /** The new folder; defaults to `./<name>`. */
+  target?: string;
+  cwd?: string;
+  home?: string;
+};
+
 export async function pullSkill(
-  name: string,
-  origin: string,
-  target?: string,
-  cwd = process.cwd(),
-  home = homedir(),
-  kind: PackageKind = "skill",
+  {
+    name,
+    origin,
+    kind = "skill",
+  }: { name: string; origin: string; kind?: PackageKind },
+  { target, cwd = process.cwd(), home = homedir() }: WorkingFolderOptions = {},
 ) {
   return locked(home, async () => {
-    const conn = await connection(home),
-      skill = await selectSkill(name, origin, conn, home, kind);
+    const conn = await connection(home);
+    const skill = await selectSkill(
+      { name, selector: origin, kind },
+      conn,
+      home,
+    );
 
     const path = resolve(cwd, target ?? name);
     await mkdir(dirname(path), { recursive: true });
@@ -95,9 +107,7 @@ export async function pullSkill(
       const files = await download(
         `/v1/skills/${skill.id}/versions/${skill.version.number}/package`,
         conn,
-        home,
-        skill.version.commit,
-        kind,
+        { home, commit: skill.version.commit, kind },
       );
 
       await writePackage(root, files);
@@ -127,8 +137,8 @@ export async function pullSkill(
 
 export async function workspaceStatus(cwd = process.cwd(), home = homedir()) {
   return locked(home, async () => {
-    const work = await find(cwd, home),
-      local = await readDirectory(work.root);
+    const work = await find(cwd, home);
+    const local = await readDirectory(work.root);
 
     return {
       root: work.root,
@@ -174,7 +184,7 @@ export async function updateWorkspace(cwd = process.cwd(), home = homedir()) {
     const conflicts = new Set<string>();
     const source = await externalSource(work, home);
     if (source) {
-      return pullExternal(work, source, entries, previous, home);
+      return pullExternal(work, { source, entries, previous }, home);
     }
 
     if (work.proposal) {
@@ -189,9 +199,7 @@ export async function updateWorkspace(cwd = process.cwd(), home = homedir()) {
         const remote = await download(
           `/v1/skill-changes/${proposal.id}/package?revision=${proposal.revision}`,
           work.connection,
-          home,
-          proposal.commit,
-          work.kind,
+          { home, commit: proposal.commit, kind: work.kind },
         );
 
         const merged = await mergeEntries(
@@ -227,9 +235,7 @@ export async function updateWorkspace(cwd = process.cwd(), home = homedir()) {
               await download(
                 `/v1/skills/${work.skillId}/versions/${version.number}/package`,
                 work.connection,
-                home,
-                version.commit,
-                work.kind,
+                { home, commit: version.commit, kind: work.kind },
               ),
             );
 
@@ -267,9 +273,7 @@ export async function updateWorkspace(cwd = process.cwd(), home = homedir()) {
         const latest = await download(
           `/v1/skills/${skill.id}/versions/${skill.version.number}/package`,
           work.connection,
-          home,
-          skill.version.commit,
-          work.kind,
+          { home, commit: skill.version.commit, kind: work.kind },
         );
 
         const merged = await mergeEntries(
@@ -347,8 +351,8 @@ export async function markResolved(
     throw new Error("Path is not an unresolved conflict");
   }
 
-  const files = await readDirectory(work.root),
-    file = files.find((e) => e.path === conflict);
+  const files = await readDirectory(work.root);
+  const file = files.find((e) => e.path === conflict);
 
   if (file && hasConflictMarkers(textContent(file.data) ?? "")) {
     throw new Error("Remove conflict markers before resolving this file");
@@ -368,8 +372,8 @@ export async function markResolved(
 }
 
 export async function archive(files: Files, home: string) {
-  const temp = join(directory(home), `upload-${randomUUID()}`),
-    tar = temp + ".tar.gz";
+  const temp = join(directory(home), `upload-${randomUUID()}`);
+  const tar = temp + ".tar.gz";
 
   try {
     await writePackage(temp, decodeFiles(files));
@@ -411,12 +415,12 @@ export async function pushWorkspace(
         throw error;
       }
 
-      const conn = await connection(home),
-        root = await realpath(cwd),
-        description = packageMetadataFor(
-          await readDirectory(root),
-          options.kind ?? "skill",
-        );
+      const conn = await connection(home);
+      const root = await realpath(cwd);
+      const description = packageMetadataFor(
+        await readDirectory(root),
+        options.kind ?? "skill",
+      );
 
       const origin = await selectOrigin(options.origin, conn, home);
       work = {
@@ -647,20 +651,20 @@ export async function pushWorkspace(
 }
 
 export async function createWorkspace(
-  name: string,
-  origin: string,
-  target?: string,
-  cwd = process.cwd(),
-  home = homedir(),
-  kind: PackageKind = "skill",
+  {
+    name,
+    origin,
+    kind = "skill",
+  }: { name: string; origin: string; kind?: PackageKind },
+  { target, cwd = process.cwd(), home = homedir() }: WorkingFolderOptions = {},
 ) {
   return locked(home, async () => {
     if (!NAME.test(name)) {
       throw new Error("Use a lowercase hyphenated package name");
     }
 
-    const conn = await connection(home),
-      scope = await selectOrigin(origin, conn, home);
+    const conn = await connection(home);
+    const scope = await selectOrigin(origin, conn, home);
 
     const path = resolve(cwd, target ?? name);
     await mkdir(dirname(path), { recursive: true });

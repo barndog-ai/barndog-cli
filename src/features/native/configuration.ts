@@ -24,28 +24,25 @@ export type NativeEntry = {
   value: Record<string, unknown>;
 };
 
+/** Each harness's MCP configuration file, relative to the home directory. */
+const mcpFiles: Record<Harness, string> = {
+  claude: ".claude.json",
+  codex: ".codex/config.toml",
+  cursor: ".cursor/mcp.json",
+};
+
+/** Each harness's Hook settings file, relative to the home directory. */
+const hookFiles: Record<Harness, string> = {
+  claude: ".claude/settings.json",
+  codex: ".codex/hooks.json",
+  cursor: ".cursor/hooks.json",
+};
+
 export const nativeFile = (
   harness: Harness,
   kind: NativeEntry["kind"],
   home: string,
-) =>
-  kind === "mcp"
-    ? join(
-        home,
-        harness === "claude"
-          ? ".claude.json"
-          : harness === "codex"
-            ? ".codex/config.toml"
-            : ".cursor/mcp.json",
-      )
-    : join(
-        home,
-        harness === "claude"
-          ? ".claude/settings.json"
-          : harness === "codex"
-            ? ".codex/hooks.json"
-            : ".cursor/hooks.json",
-      );
+) => join(home, (kind === "mcp" ? mcpFiles : hookFiles)[harness]);
 
 export function object(value: unknown): Record<string, unknown> {
   if (!isRecord(value)) {
@@ -172,8 +169,8 @@ export function patchNative(
         throw new Error("Native configuration changed while editing it");
       }
 
-      const previous = nodes[index - 1],
-        next = nodes[index + 1];
+      const previous = nodes[index - 1];
+      const next = nodes[index + 1];
 
       const start = previous
         ? previous.offset + previous.length

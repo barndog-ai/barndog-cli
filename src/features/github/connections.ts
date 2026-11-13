@@ -80,12 +80,9 @@ function repositoryTarget(options: GithubRepositoryOptions) {
 export async function githubList(home = homedir()) {
   const conn = await connection(home);
 
-  return request(
-    conn,
-    "/v1/git-connections",
-    z.array(gitConnectionSchema),
+  return request(conn, "/v1/git-connections", z.array(gitConnectionSchema), {
     home,
-  );
+  });
 }
 
 /** Connects a published Skill or Hook to an existing GitHub repository. */
@@ -109,14 +106,11 @@ export async function githubConnect(
     mode: options.mode ?? "connect",
   });
 
-  return request(
-    conn,
-    "/v1/git-connections",
-    gitConnectionSchema,
+  return request(conn, "/v1/git-connections", gitConnectionSchema, {
     home,
-    "POST",
+    method: "POST",
     body,
-  );
+  });
 }
 
 /** Creates a Skill or Hook from a GitHub repository, which stays authoritative. */
@@ -133,14 +127,11 @@ export async function githubImport(
     origin: { type: scope.type, id: scope.id },
   });
 
-  return request(
-    conn,
-    "/v1/git-connections/import",
-    gitConnectionSchema,
+  return request(conn, "/v1/git-connections/import", gitConnectionSchema, {
     home,
-    "POST",
+    method: "POST",
     body,
-  );
+  });
 }
 
 /** Copies a GitHub repository into a BarnDog-owned asset with no connection left behind. */
@@ -162,9 +153,7 @@ export async function githubImportCopy(
     conn,
     "/v1/git-connections/import-copy",
     gitCopyImportResultSchema,
-    home,
-    "POST",
-    body,
+    { home, method: "POST", body },
   );
 }
 
@@ -195,16 +184,16 @@ export async function githubCreateRepository(
     conn,
     "/v1/git-connections/create-repository",
     gitConnectionSchema,
-    home,
-    "POST",
-    body,
+    { home, method: "POST", body },
   );
 }
 
 export async function githubShow(connectionId: string, home = homedir()) {
   const conn = await connection(home);
 
-  return request(conn, connectionPath(connectionId), gitConnectionSchema, home);
+  return request(conn, connectionPath(connectionId), gitConnectionSchema, {
+    home,
+  });
 }
 
 /** Syncs now instead of waiting for the server's next scheduled sync. */
@@ -215,8 +204,7 @@ export async function githubSync(connectionId: string, home = homedir()) {
     conn,
     `${connectionPath(connectionId)}/sync`,
     gitConnectionSchema,
-    home,
-    "POST",
+    { home, method: "POST" },
   );
 }
 
@@ -228,7 +216,7 @@ export async function githubRemoteHead(connectionId: string, home = homedir()) {
     conn,
     `${connectionPath(connectionId)}/remote-head`,
     gitRemoteHeadSchema,
-    home,
+    { home },
   );
 }
 
@@ -246,12 +234,9 @@ export async function githubResolveMirror(
     idempotencyKey: options.key ?? randomUUID(),
   });
 
-  return request(
-    conn,
-    `${path}/mirror-resolution`,
-    okSchema,
+  return request(conn, `${path}/mirror-resolution`, okSchema, {
     home,
-    "POST",
+    method: "POST",
     body,
-  );
+  });
 }

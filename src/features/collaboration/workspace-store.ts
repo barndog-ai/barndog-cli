@@ -155,8 +155,8 @@ function recordPath(root: string, home: string) {
 
 export async function save<T extends StoredRecord>(work: T, home: string) {
   await mkdir(directory(home), { recursive: true, mode: 0o700 });
-  const file = recordPath(work.root, home),
-    temp = `${file}.${randomUUID()}.tmp`;
+  const file = recordPath(work.root, home);
+  const temp = `${file}.${randomUUID()}.tmp`;
 
   await writeFile(temp, JSON.stringify(work), { mode: 0o600 });
   await rename(temp, file);
@@ -164,8 +164,8 @@ export async function save<T extends StoredRecord>(work: T, home: string) {
 
 // Serialize local mutations across processes. A dead process's lock is reclaimable.
 export async function locked<T>(home: string, run: () => Promise<T>) {
-  const root = directory(home),
-    lock = join(root, "lock");
+  const root = directory(home);
+  const lock = join(root, "lock");
 
   await mkdir(root, { recursive: true, mode: 0o700 });
   try {

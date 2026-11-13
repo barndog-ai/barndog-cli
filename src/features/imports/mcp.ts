@@ -196,11 +196,7 @@ export function convertServer(
       transport: "http",
       url,
       headers,
-      authentication: signsIn
-        ? "native-oauth"
-        : Object.keys(headers).length
-          ? "environment"
-          : "none",
+      authentication: httpAuthentication(signsIn, headers),
     };
   } else {
     if (oauth) {
@@ -250,6 +246,18 @@ export type HarnessServer = ImportedServer & {
   harness: Harness;
   label: string;
 };
+
+/** How an imported HTTP server authenticates. */
+function httpAuthentication(
+  signsIn: boolean,
+  headers: Record<string, unknown>,
+) {
+  if (signsIn) {
+    return "native-oauth";
+  }
+
+  return Object.keys(headers).length ? "environment" : "none";
+}
 
 async function jsonFile(path: string) {
   const text = await fileText(path).catch(() => null);

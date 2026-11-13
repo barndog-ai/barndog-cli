@@ -178,11 +178,15 @@ function validateWrites(writes: Write[], home: string) {
 }
 
 async function current(write: Write) {
-  return write.kind === "file"
-    ? fileText(write.path)
-    : write.kind === "link"
-      ? linkTarget(write.path)
-      : treeFingerprint(write.path);
+  if (write.kind === "file") {
+    return fileText(write.path);
+  }
+
+  if (write.kind === "link") {
+    return linkTarget(write.path);
+  }
+
+  return treeFingerprint(write.path);
 }
 
 async function applyTree(write: Extract<Write, { kind: "tree" }>) {
@@ -288,8 +292,8 @@ async function apply(
 }
 
 export async function recover(home: string) {
-  const path = join(home, ".barndog/pending-sync.json"),
-    text = await fileText(path);
+  const path = join(home, ".barndog/pending-sync.json");
+  const text = await fileText(path);
 
   if (text === null) {
     return false;

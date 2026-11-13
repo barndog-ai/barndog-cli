@@ -40,7 +40,7 @@ export async function externalSource(work: Workspace, home: string) {
     work.connection,
     "/v1/git-connections",
     z.array(gitConnectionSchema),
-    home,
+    { home },
   );
 
   const source = connections.find(
@@ -75,30 +75,30 @@ type ExternalSource = z.infer<typeof gitConnectionSchema>;
 
 export async function pullExternal(
   work: Workspace,
-  source: ExternalSource,
-  entries: PackageEntry[],
-  previous: Workspace,
+  {
+    source,
+    entries,
+    previous,
+  }: { source: ExternalSource; entries: PackageEntry[]; previous: Workspace },
   home: string,
 ) {
   work.external ??= { id: source.id };
-  const conflicts = new Set<string>(),
-    external = work.external;
+  const conflicts = new Set<string>();
+  const external = work.external;
 
   if (external.pull) {
     const { pull } = await request(
       work.connection,
       `/v1/git-connections/${source.id}/pulls/${external.pull.number}`,
       gitPullDetailsSchema,
-      home,
+      { home },
     );
 
     if (pull.head !== external.pull.head) {
       const remote = await download(
         `/v1/git-connections/${source.id}/pulls/${pull.number}/package`,
         work.connection,
-        home,
-        pull.head,
-        work.kind,
+        { home, commit: pull.head, kind: work.kind },
       );
 
       const merged = await mergeEntries(
@@ -136,9 +136,7 @@ export async function pullExternal(
     const latest = await download(
       `/v1/skills/${work.skillId}/versions/${asset.version.number}/package`,
       work.connection,
-      home,
-      asset.version.commit,
-      work.kind,
+      { home, commit: asset.version.commit, kind: work.kind },
     );
 
     const merged = await mergeEntries(decodeFiles(work.base), entries, latest);
@@ -167,8 +165,8 @@ export async function pushExternal(
   home: string,
 ) {
   work.external ??= { id: source.id };
-  const external = work.external,
-    path = `/v1/git-connections/${source.id}`;
+  const external = work.external;
+  const path = `/v1/git-connections/${source.id}`;
 
   if (!external.pending) {
     const asset = await getAsset(
@@ -190,7 +188,7 @@ export async function pushExternal(
             work.connection,
             `${path}/pulls/${external.pull.number}`,
             gitPullDetailsSchema,
-            home,
+            { home },
           )
         ).pull
       : undefined;
@@ -226,9 +224,7 @@ export async function pushExternal(
           work.connection,
           `${path}/pulls/${pull.number}/merge`,
           gitConnectionSchema,
-          home,
-          "PUT",
-          { expectedCommit: pull.head },
+          { home, method: "PUT", body: { expectedCommit: pull.head } },
         );
       }
 
@@ -257,13 +253,15 @@ export async function pushExternal(
         ? `${path}/pulls/${pending.number}/revisions`
         : `${path}/pulls`,
       gitPullSchema,
-      home,
-      pending.number ? "PUT" : "POST",
       {
-        expectedCommit: pending.expectedCommit,
-        files: pending.files,
-        title: pending.title,
-        idempotencyKey: pending.idempotencyKey,
+        home,
+        method: pending.number ? "PUT" : "POST",
+        body: {
+          expectedCommit: pending.expectedCommit,
+          files: pending.files,
+          title: pending.title,
+          idempotencyKey: pending.idempotencyKey,
+        },
       },
     );
   } catch (error) {
@@ -291,9 +289,7 @@ export async function pushExternal(
       work.connection,
       `${path}/pulls/${pull.number}/merge`,
       gitConnectionSchema,
-      home,
-      "PUT",
-      { expectedCommit: external.pull.head },
+      { home, method: "PUT", body: { expectedCommit: external.pull.head } },
     );
   }
 

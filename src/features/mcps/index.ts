@@ -41,16 +41,20 @@ async function readDefinition(file: string) {
 
 /** Publishes a new MCP configuration in a scope. */
 export async function createMcp(input: McpWriteInput, home = homedir()) {
-  const conn = await connection(home),
-    scope = await selectOrigin(input.origin, conn, home);
+  const conn = await connection(home);
+  const scope = await selectOrigin(input.origin, conn, home);
 
   const definition = await readDefinition(input.file);
 
-  return request(conn, "/v1/mcps", mcpSchema, home, "POST", {
-    name: input.name,
-    origin: { type: scope.type, id: scope.id },
-    definition,
-    idempotencyKey: input.key ?? randomUUID(),
+  return request(conn, "/v1/mcps", mcpSchema, {
+    home,
+    method: "POST",
+    body: {
+      name: input.name,
+      origin: { type: scope.type, id: scope.id },
+      definition,
+      idempotencyKey: input.key ?? randomUUID(),
+    },
   });
 }
 
@@ -68,12 +72,14 @@ export async function updateMcp(
     conn,
     `/v1/mcps/${selected.reference.id}/versions`,
     mcpSchema,
-    home,
-    "POST",
     {
-      definition,
-      expectedVersionId: z.uuidv4().parse(input.expectedVersion),
-      idempotencyKey: input.key ?? randomUUID(),
+      home,
+      method: "POST",
+      body: {
+        definition,
+        expectedVersionId: z.uuidv4().parse(input.expectedVersion),
+        idempotencyKey: input.key ?? randomUUID(),
+      },
     },
   );
 }
@@ -111,7 +117,7 @@ export async function mcpVersions(
     selected.connection,
     `/v1/mcps/${selected.reference.id}/versions`,
     z.array(mcpVersionSchema),
-    home,
+    { home },
   );
 }
 
@@ -153,8 +159,8 @@ export async function authenticateMcp(
         };
       })()
     : await (async () => {
-        const selected = await selectAsset("mcp", name, origin, home),
-          parsed = mcpSchema.parse(selected.asset);
+        const selected = await selectAsset("mcp", name, origin, home);
+        const parsed = mcpSchema.parse(selected.asset);
 
         return {
           id: parsed.id,

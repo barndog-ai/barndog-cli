@@ -53,8 +53,8 @@ export async function createGitWorkspace(
           ...file,
           executable: false,
         })),
+        message: "Set up BarnDog workspace",
       },
-      "Set up BarnDog workspace",
       { allowPrompt: true },
     );
 

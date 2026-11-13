@@ -166,9 +166,11 @@ export function mcpEntry(
 
 export function hookEntries(
   harness: Harness,
-  id: string,
-  root: string,
-  manifest: z.infer<typeof hookManifestSchema>,
+  {
+    id,
+    root,
+    manifest,
+  }: { id: string; root: string; manifest: z.infer<typeof hookManifestSchema> },
   home: string,
 ): NativeEntry[] {
   const implementation = manifest.implementations[harness];

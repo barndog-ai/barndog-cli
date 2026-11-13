@@ -108,6 +108,28 @@ export async function installedNames(home: string) {
   return (id: string) => heldName(id, links, native);
 }
 
+/** What a sync did to one installed link or native entry. */
+type ChangeType = "installed" | "updated" | "unchanged";
+
+function changeType(change: {
+  /** The destination held this asset before. */
+  sameAsset: boolean;
+  /** The destination already matches what sync would write. */
+  current: boolean;
+  /** The asset's content changed in this sync. */
+  contentChanged: boolean;
+}): ChangeType {
+  if (!change.sameAsset) {
+    return "installed";
+  }
+
+  if (change.current && !change.contentChanged) {
+    return "unchanged";
+  }
+
+  return "updated";
+}
+
 function inside(parent: string, child: string) {
   const path = relative(parent, child);
 
@@ -199,8 +221,8 @@ export async function synchronize(
       }
     }
 
-    const stateFile = join(home, ".barndog/state.json"),
-      rawState = await fileText(stateFile);
+    const stateFile = join(home, ".barndog/state.json");
+    const rawState = await fileText(stateFile);
 
     const before = await readState(stateFile, home);
     const { native: oldNative, installed: installedState } =
@@ -266,22 +288,23 @@ export async function synchronize(
       );
     }
 
-    const desired: Link[] = [],
-      native: NativeEntry[] = [],
-      trees: InstalledTree[] = [],
-      events: SyncEvent[] = [
-        ...new Set([
-          ...followNotices,
-          ...(source?.notices() ?? []),
-          ...((await source?.warnings?.()) ?? []),
-          ...((await overlay?.warnings?.()) ?? []),
-        ]),
-      ].map((message) => ({
-        type: "notice",
-        message,
-      })),
-      names = new Set<string>(),
-      ids = new Set<string>();
+    const desired: Link[] = [];
+    const native: NativeEntry[] = [];
+    const trees: InstalledTree[] = [];
+    const events: SyncEvent[] = [
+      ...new Set([
+        ...followNotices,
+        ...(source?.notices() ?? []),
+        ...((await source?.warnings?.()) ?? []),
+        ...((await overlay?.warnings?.()) ?? []),
+      ]),
+    ].map((message) => ({
+      type: "notice",
+      message,
+    }));
+
+    const names = new Set<string>();
+    const ids = new Set<string>();
 
     // Installed names share one namespace per kind; resolve clashes before staging.
     const owned = (id: string) =>
@@ -407,14 +430,21 @@ export async function synchronize(
       }
     };
 
-    const stage = async (
-      id: string,
-      kind: PackageKind,
-      name: string,
-      source: string,
-      rename: string | null,
-      versionId: string,
-    ) => {
+    const stage = async ({
+      id,
+      kind,
+      name,
+      source,
+      rename,
+      versionId,
+    }: {
+      id: string;
+      kind: PackageKind;
+      name: string;
+      source: string;
+      rename: string | null;
+      versionId: string;
+    }) => {
       const path = installedPath(home, kind, name);
       trees.push({
         id,
@@ -443,14 +473,13 @@ export async function synchronize(
           const tree = installedState.find((entry) => entry.id === asset.id);
           const folder = tree && basename(tree.path);
 
-          return {
-            ...asset,
-            ...(folder
-              ? invalid.has(asset.id)
-                ? { kept: folder }
-                : { current: folder }
-              : {}),
-          };
+          if (!folder) {
+            return asset;
+          }
+
+          return invalid.has(asset.id)
+            ? { ...asset, kept: folder }
+            : { ...asset, current: folder };
         }),
       localNames,
     );
@@ -517,14 +546,14 @@ export async function synchronize(
         const cache = await source.skillOrHookPackage("skill", ref);
         addSkill(
           ref.id,
-          await stage(
-            ref.id,
-            "skill",
+          await stage({
+            id: ref.id,
+            kind: "skill",
             name,
-            cache,
-            name === ref.name ? null : name,
-            ref.publishedVersion,
-          ),
+            source: cache,
+            rename: name === ref.name ? null : name,
+            versionId: ref.publishedVersion,
+          }),
           name,
         );
       } else if (ref.kind === "mcp") {
@@ -541,14 +570,17 @@ export async function synchronize(
         );
 
         // Hook folders are internal, so collisions are settled without prompting.
-        const root = await stage(
-          ref.id,
-          "hook",
-          defined(folders.get(ref.id), `No Hook folder chosen for ${ref.id}`),
-          cache,
-          null,
-          ref.publishedVersion,
-        );
+        const root = await stage({
+          id: ref.id,
+          kind: "hook",
+          name: defined(
+            folders.get(ref.id),
+            `No Hook folder chosen for ${ref.id}`,
+          ),
+          source: cache,
+          rename: null,
+          versionId: ref.publishedVersion,
+        });
 
         for (const harness of settings.harnesses) {
           const implementation = manifest.implementations[harness];
@@ -568,7 +600,9 @@ export async function synchronize(
             continue;
           }
 
-          native.push(...hookEntries(harness, ref.id, root, manifest, home));
+          native.push(
+            ...hookEntries(harness, { id: ref.id, root, manifest }, home),
+          );
         }
       }
     }
@@ -627,14 +661,21 @@ export async function synchronize(
       ...effective.assets.map((e) => [e.asset.id, e.asset.name] as const),
     ]);
 
-    const nativeName = (entry: { kind: string; key: string; id: string }) =>
-      entry.kind === "mcp"
-        ? entry.key
-        : entry.kind === "knowledge"
-          ? "knowledge index"
-          : entry.kind === "sync"
-            ? "workspace sync"
-            : (hookNames.get(entry.id) ?? entry.id);
+    const nativeName = (entry: { kind: string; key: string; id: string }) => {
+      if (entry.kind === "mcp") {
+        return entry.key;
+      }
+
+      if (entry.kind === "knowledge") {
+        return "knowledge index";
+      }
+
+      if (entry.kind === "sync") {
+        return "workspace sync";
+      }
+
+      return hookNames.get(entry.id) ?? entry.id;
+    };
 
     const writes: Write[] = [];
     for (const entry of installedState) {
@@ -694,8 +735,8 @@ export async function synchronize(
     }
 
     for (const link of desired) {
-      const actual = await linkTarget(link.target),
-        old = before.links.find((l) => l.target === link.target);
+      const actual = await linkTarget(link.target);
+      const old = before.links.find((l) => l.target === link.target);
 
       if (actual !== null && !old) {
         throw new Error(`Existing unmanaged Skill: ${link.target}`);
@@ -706,9 +747,9 @@ export async function synchronize(
       ...before.links.map((l) => l.target),
       ...desired.map((l) => l.target),
     ])) {
-      const old = before.links.find((l) => l.target === target),
-        next = desired.find((l) => l.target === target),
-        actual = await linkTarget(target);
+      const old = before.links.find((l) => l.target === target);
+      const next = desired.find((l) => l.target === target);
+      const actual = await linkTarget(target);
 
       if (old && (!next || next.id !== old.id)) {
         events.push({ type: "removed", link: old });
@@ -716,14 +757,11 @@ export async function synchronize(
 
       if (next) {
         events.push({
-          type:
-            actual === next.source && old?.id === next.id
-              ? updated.has(next.source)
-                ? "updated"
-                : "unchanged"
-              : old?.id === next.id
-                ? "updated"
-                : "installed",
+          type: changeType({
+            sameAsset: old?.id === next.id,
+            current: actual === next.source,
+            contentChanged: updated.has(next.source),
+          }),
           link: next,
         });
       }
@@ -740,9 +778,9 @@ export async function synchronize(
       ...oldNative.map((e) => e.file),
       ...native.map((e) => e.file),
     ])) {
-      const old = oldNative.filter((e) => e.file === file),
-        next = native.filter((e) => e.file === file),
-        text = await fileText(file);
+      const old = oldNative.filter((e) => e.file === file);
+      const next = native.filter((e) => e.file === file);
+      const text = await fileText(file);
 
       writes.push({
         kind: "file",
@@ -754,14 +792,17 @@ export async function synchronize(
       for (const entry of next) {
         events.push({
           type: "native",
-          action: old.some((e) => JSON.stringify(e) === JSON.stringify(entry))
-            ? entry.kind === "hook" &&
-              trees.some((t) => t.id === entry.id && updated.has(t.path))
-              ? "updated"
-              : "unchanged"
-            : old.some((e) => e.id === entry.id && e.harness === entry.harness)
-              ? "updated"
-              : "installed",
+          action: changeType({
+            sameAsset: old.some(
+              (e) => e.id === entry.id && e.harness === entry.harness,
+            ),
+            current: old.some(
+              (e) => JSON.stringify(e) === JSON.stringify(entry),
+            ),
+            contentChanged:
+              entry.kind === "hook" &&
+              trees.some((t) => t.id === entry.id && updated.has(t.path)),
+          }),
           kind: entry.kind,
           harness: entry.harness,
           name: nativeName(entry),

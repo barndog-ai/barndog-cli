@@ -143,13 +143,12 @@ export function registerCollaboration(
     if (name) {
       return {
         name,
-        origin: await resolveOrigin(
-          context,
+        origin: await resolveOrigin(context, {
           kind,
           name,
           origin,
-          usage.replace("<name>", name),
-        ),
+          usage: usage.replace("<name>", name),
+        }),
       };
     }
 
@@ -278,13 +277,13 @@ export function registerCollaboration(
           )),
         });
 
-        await run(
-          name === "versions"
-            ? context.packageVersions(target)
-            : name === "show"
-              ? context.versionFiles(target)
-              : context.diffVersions(target),
-        );
+        if (name === "versions") {
+          await run(context.packageVersions(target));
+        } else if (name === "show") {
+          await run(context.versionFiles(target));
+        } else {
+          await run(context.diffVersions(target));
+        }
       },
     );
   }
@@ -375,14 +374,17 @@ function registerChanges(
       .action((id: string, options: { revision: number }) => {
         const target = withKind({ ...options, id });
 
-        return run(
-          name === "reject"
-            ? context.rejectChange(target)
-            : name === "merge"
-              ? context.mergeChange(target)
-              : context.reviewChange(name, target),
-          { changeId: id },
-        );
+        const labels = { changeId: id };
+
+        if (name === "reject") {
+          return run(context.rejectChange(target), labels);
+        }
+
+        if (name === "merge") {
+          return run(context.mergeChange(target), labels);
+        }
+
+        return run(context.reviewChange(name, target), labels);
       });
   }
 

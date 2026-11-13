@@ -15,7 +15,7 @@ export async function mcpCatalog(
       conn,
       `/v1/mcps?limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
       mcpListSchema,
-      home,
+      { home },
     );
 
     for (const mcp of page.mcps) {

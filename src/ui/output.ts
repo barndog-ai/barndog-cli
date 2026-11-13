@@ -64,13 +64,19 @@ const internalKinds = new Set(["knowledge", "sync"]);
 
 function rows(events: SyncEvent[]): Row[] {
   const byKey = new Map<string, Row>();
-  const add = (
-    action: Action,
-    kind: string,
-    name: string,
-    harness?: string,
-    note?: string,
-  ) => {
+  const add = ({
+    action,
+    kind,
+    name,
+    harness,
+    note,
+  }: {
+    action: Action;
+    kind: string;
+    name: string;
+    harness?: string;
+    note?: string;
+  }) => {
     const key = `${action}\0${kind}\0${name}\0${note ?? ""}`;
     const row = byKey.get(key) ?? {
       action,
@@ -93,21 +99,41 @@ function rows(events: SyncEvent[]): Row[] {
     }
 
     if (event.type === "invalid") {
-      add("skipped", event.kind, event.name, undefined, event.reason);
+      add({
+        action: "skipped",
+        kind: event.kind,
+        name: event.name,
+        note: event.reason,
+      });
     } else if (event.type === "clash") {
-      add(
-        "skipped",
-        event.kind,
-        event.skipped.name,
-        undefined,
-        `${event.skipped.origin} · name taken by ${event.installed.origin}`,
-      );
+      add({
+        action: "skipped",
+        kind: event.kind,
+        name: event.skipped.name,
+        note: `${event.skipped.origin} · name taken by ${event.installed.origin}`,
+      });
     } else if (event.type === "unsupported") {
-      add("unsupported", event.kind, event.name, event.harness, event.reason);
+      add({
+        action: "unsupported",
+        kind: event.kind,
+        name: event.name,
+        harness: event.harness,
+        note: event.reason,
+      });
     } else if (event.type === "native") {
-      add(event.action, event.kind, event.name, event.harness);
+      add({
+        action: event.action,
+        kind: event.kind,
+        name: event.name,
+        harness: event.harness,
+      });
     } else {
-      add(event.type, "skill", basename(event.link.target), event.link.harness);
+      add({
+        action: event.type,
+        kind: "skill",
+        name: basename(event.link.target),
+        harness: event.link.harness,
+      });
     }
   }
 

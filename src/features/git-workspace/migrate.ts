@@ -96,11 +96,15 @@ export const publishMcp = (
   conn: Connection,
   home: string,
 ) =>
-  request(conn, "/v1/mcps", mcpSchema, home, "POST", {
-    name: asset.name,
-    origin: { type: scope.type, id: scope.id },
-    definition: asset.definition,
-    idempotencyKey: `migrate-${asset.id}-${asset.publishedVersion}-${scope.id}-${asset.name}`,
+  request(conn, "/v1/mcps", mcpSchema, {
+    home,
+    method: "POST",
+    body: {
+      name: asset.name,
+      origin: { type: scope.type, id: scope.id },
+      definition: asset.definition,
+      idempotencyKey: `migrate-${asset.id}-${asset.publishedVersion}-${scope.id}-${asset.name}`,
+    },
   });
 
 export const publishKnowledge = (
@@ -108,18 +112,15 @@ export const publishKnowledge = (
   conn: Connection,
   home: string,
 ) =>
-  request(
-    conn,
-    "/v1/knowledge/publish",
-    knowledgeDocumentSchema,
+  request(conn, "/v1/knowledge/publish", knowledgeDocumentSchema, {
     home,
-    "POST",
-    {
+    method: "POST",
+    body: {
       baseVersionId: null,
       content: doc.content,
       idempotencyKey: `migrate-${doc.id}-${doc.version}-${doc.content.name}`,
     },
-  );
+  });
 
 /** Carries each choice over by scope and name, because cloud assigns new IDs. */
 function translateSelection(
@@ -239,12 +240,14 @@ export async function migrate(
       conn,
       "/v1/scopes",
       z.array(scopeSchema),
-      home,
+      { home },
     );
 
     const { catalog: existing } = await environmentCatalog(home, conn);
     const existingDocs = (
-      await request(conn, "/v1/knowledge?limit=100", knowledgeIndexSchema, home)
+      await request(conn, "/v1/knowledge?limit=100", knowledgeIndexSchema, {
+        home,
+      })
     ).documents;
 
     const pairs = model.scopes.flatMap((local) => {

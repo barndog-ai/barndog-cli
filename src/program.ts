@@ -171,6 +171,20 @@ const assetGroups: [string, string[]][] = [
 ];
 
 /** The command's words without the program name, as availability rules name them. */
+/** The help section of a command in an asset group. */
+function helpGroup(group: string, command: string, heading: string) {
+  // MCP create/show/versions publish or inspect definitions directly.
+  if (group === "mcp" && ["create", "show", "versions"].includes(command)) {
+    return "Publish directly:";
+  }
+
+  if (group !== "mcp" && command === "update") {
+    return "On this machine:";
+  }
+
+  return heading;
+}
+
 function commandPath(command: Command) {
   const path: string[] = [];
   for (let c: Command | null = command; c?.parent; c = c.parent) {
@@ -526,15 +540,7 @@ export function createProgram(options: ProgramOptions = {}): Command {
     for (const [heading, names] of assetGroups) {
       for (const command of group.commands) {
         if (names.includes(command.name())) {
-          command.helpGroup(
-            // MCP create/show/versions publish or inspect definitions directly.
-            name === "mcp" &&
-              ["create", "show", "versions"].includes(command.name())
-              ? "Publish directly:"
-              : name !== "mcp" && command.name() === "update"
-                ? "On this machine:"
-                : heading,
-          );
+          command.helpGroup(helpGroup(name, command.name(), heading));
         }
       }
     }

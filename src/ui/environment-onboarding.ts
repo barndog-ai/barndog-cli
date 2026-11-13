@@ -71,8 +71,13 @@ export function environmentChooser(
 
     // A Git repo with only shared assets has nothing to choose between.
     const single = git && sources.length === 1;
-    const titled = (source: SetupSource) =>
-      !git ? source.label : single ? repoName : folder(source);
+    const titled = (source: SetupSource) => {
+      if (!git) {
+        return source.label;
+      }
+
+      return single ? repoName : folder(source);
+    };
 
     if (!git && !choices.catalog.assets.length) {
       write(

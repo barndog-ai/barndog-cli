@@ -12,6 +12,17 @@ import {
 } from "../ui/format.js";
 import { renderMove } from "../ui/move.js";
 import type { CommandContext } from "./context.js";
+import type { MigrationRow } from "../features/git-workspace/migrate.js";
+
+const migrationActionStyles: Record<
+  MigrationRow["action"],
+  (text: string) => string
+> = {
+  publish: ok,
+  exists: dim,
+  invalid: warn,
+  "missing-scope": warn,
+};
 
 export function registerWorkspace(program: Command, context: CommandContext) {
   program
@@ -121,11 +132,7 @@ export function registerWorkspace(program: Command, context: CommandContext) {
 
       for (const line of table(
         result.rows.map((row) => [
-          row.action === "publish"
-            ? ok(row.action)
-            : row.action === "exists"
-              ? dim(row.action)
-              : warn(row.action),
+          migrationActionStyles[row.action](row.action),
           dim(row.kind),
           bold(row.name),
           row.origin,

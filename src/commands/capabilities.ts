@@ -49,6 +49,64 @@ function positive(value: string) {
   return result;
 }
 
+const checkMarks: Record<"ok" | "warn" | "fail", string> = {
+  ok: ok("✔"),
+  warn: warn("!"),
+  fail: bad("✖"),
+};
+
+function repositoryLabel(
+  repository: { name: string; slug: string } | null | undefined,
+  ambiguous: boolean | undefined,
+) {
+  if (repository) {
+    return `${bold(repository.name)} ${dim(`repo/${repository.slug}`)}`;
+  }
+
+  if (ambiguous) {
+    return warn("matches several BarnDog repositories");
+  }
+
+  return dim("not registered in BarnDog");
+}
+
+function yesNo(value: boolean) {
+  return value ? ok("yes") : "no";
+}
+
+function doctorSummary(failed: number, warned: number) {
+  if (failed) {
+    return `${bad("✖")} ${failed} ${failed === 1 ? "problem" : "problems"} found.`;
+  }
+
+  if (warned) {
+    return `${warn("!")} ${warned} ${warned === 1 ? "warning" : "warnings"}.`;
+  }
+
+  return `${ok("✔")} Everything looks good.`;
+}
+
+function hookTestSummary(timedOut: boolean, exitCode: number) {
+  if (timedOut) {
+    return `${bad("✖")} Hook test timed out.`;
+  }
+
+  if (exitCode) {
+    return `${bad("✖")} Hook test exited ${exitCode}.`;
+  }
+
+  return `${ok("✔")} Hook test exited 0.`;
+}
+
+/** When coding tools see a knowledge document. */
+function knowledgeListing(listedAtStart: boolean, accessMode: string) {
+  if (listedAtStart) {
+    return ok("every session");
+  }
+
+  return accessMode === "always" ? dim("off") : dim("on demand");
+}
+
 export function registerCapabilities(
   program: Command,
   context: CommandContext,
@@ -83,13 +141,12 @@ export function registerCapabilities(
       ? {
           ...options,
           name,
-          origin: await resolveOrigin(
-            context,
+          origin: await resolveOrigin(context, {
             kind,
             name,
-            options.origin,
-            usage.replace("<name>", name),
-          ),
+            origin: options.origin,
+            usage: usage.replace("<name>", name),
+          }),
         }
       : { ...options, ...(await pickInstalled(context, kind, usage)) };
 
@@ -156,14 +213,7 @@ export function registerCapabilities(
       for (const line of fields([
         ["Folder", result.root],
         ["Remotes", result.remotes.join(", ") || dim("none")],
-        [
-          "Repository",
-          result.repository
-            ? `${bold(result.repository.name)} ${dim(`repo/${result.repository.slug}`)}`
-            : result.ambiguous
-              ? warn("matches several BarnDog repositories")
-              : dim("not registered in BarnDog"),
-        ],
+        ["Repository", repositoryLabel(result.repository, result.ambiguous)],
         [
           "Owning team",
           result.team
@@ -172,7 +222,7 @@ export function registerCapabilities(
         ],
         [
           "Subscribed",
-          result.repository ? (subscribed ? ok("yes") : "no") : undefined,
+          result.repository ? yesNo(Boolean(subscribed)) : undefined,
         ],
       ])) {
         context.write(line);
@@ -210,12 +260,7 @@ export function registerCapabilities(
       context.write(`\n${heading("doctor")}\n`);
       const width = Math.max(...checks.map((c) => c.name.length));
       for (const check of checks) {
-        const mark =
-          check.status === "ok"
-            ? ok("✔")
-            : check.status === "warn"
-              ? warn("!")
-              : bad("✖");
+        const mark = checkMarks[check.status];
 
         context.write(
           `${mark} ${check.name.padEnd(width)}  ${check.status === "ok" ? dim(check.detail) : check.detail}`,
@@ -229,13 +274,7 @@ export function registerCapabilities(
       const failed = checks.filter((c) => c.status === "fail").length;
       const warned = checks.filter((c) => c.status === "warn").length;
       context.write("");
-      context.write(
-        failed
-          ? `${bad("✖")} ${failed} ${failed === 1 ? "problem" : "problems"} found.`
-          : warned
-            ? `${warn("!")} ${warned} ${warned === 1 ? "warning" : "warnings"}.`
-            : `${ok("✔")} Everything looks good.`,
-      );
+      context.write(doctorSummary(failed, warned));
 
       if (failed) {
         process.exitCode = 1;
@@ -417,13 +456,7 @@ export function registerCapabilities(
           write(test.stderr.trimEnd());
         }
 
-        write(
-          test.timedOut
-            ? `${bad("✖")} Hook test timed out.`
-            : test.exitCode
-              ? `${bad("✖")} Hook test exited ${test.exitCode}.`
-              : `${ok("✔")} Hook test exited 0.`,
-        );
+        write(hookTestSummary(test.timedOut, test.exitCode));
       },
     );
 
@@ -525,11 +558,7 @@ export function registerCapabilities(
       for (const line of table(
         docs.map((doc) => [
           bold(clean(doc.name)),
-          doc.listedAtStart
-            ? ok("every session")
-            : doc.accessMode === "always"
-              ? dim("off")
-              : dim("on demand"),
+          knowledgeListing(doc.listedAtStart, doc.accessMode),
           dim(clean(doc.description)),
         ]),
         { header: ["Name", "Listed", "Description"] },

@@ -11,6 +11,24 @@ export function selected(
   return styleText(SELECTION_COLOR, text, { stream });
 }
 
+/** The color depth `FORCE_COLOR` asks for, in bits. */
+function forcedColorDepth() {
+  if (process.env.FORCE_COLOR === "3") {
+    return 24;
+  }
+
+  return process.env.FORCE_COLOR === "2" ? 8 : 4;
+}
+
+/** The SGR foreground code for the brand color at a color depth: exact, nearest of 256, or red. */
+function primaryColorCode(depth: number, rgb: number[]) {
+  if (depth >= 24) {
+    return `38;2;${rgb.join(";")}`;
+  }
+
+  return depth >= 8 ? "38;5;131" : "31";
+}
+
 /** Exact brand color on true-color terminals, with palette and plain-text fallbacks. */
 export function primary(
   text: string,
@@ -21,20 +39,12 @@ export function primary(
     return text;
   }
 
-  const forcedDepth =
-    process.env.FORCE_COLOR === "3"
-      ? 24
-      : process.env.FORCE_COLOR === "2"
-        ? 8
-        : 4;
-
-  const depth = stream.getColorDepth?.() ?? forcedDepth;
+  const depth = stream.getColorDepth?.() ?? forcedColorDepth();
   const rgb = [1, 3, 5].map((start) =>
     parseInt(PRIMARY_COLOR.slice(start, start + 2), 16),
   );
 
-  const color =
-    depth >= 24 ? `38;2;${rgb.join(";")}` : depth >= 8 ? "38;5;131" : "31";
+  const color = primaryColorCode(depth, rgb);
 
   const start = `\u001b[${color}m`;
 

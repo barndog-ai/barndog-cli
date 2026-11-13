@@ -12,7 +12,11 @@ import {
   selectionStateSchema,
 } from "../../config/environment.js";
 import type { Settings } from "../../config/settings.js";
-import type { SelectionState, Subscription } from "../asset-selection/types.js";
+import type {
+  SelectionMode,
+  SelectionState,
+  Subscription,
+} from "../asset-selection/types.js";
 
 export type OnboardingChoices = {
   catalog: z.infer<typeof environmentCatalogSchema>;
@@ -54,12 +58,9 @@ export async function onboardingEnvironment(
     settings.connection,
   );
 
-  const scopes = await request(
-    connection,
-    "/v1/scopes",
-    z.array(scopeSchema),
+  const scopes = await request(connection, "/v1/scopes", z.array(scopeSchema), {
     home,
-  );
+  });
 
   const teams = scopes.filter((scope) => scope.type === "team");
   const memberTeamIds: string[] = [];
@@ -71,7 +72,7 @@ export async function onboardingEnvironment(
           connection,
           `/v1/teams/${team.id}/members`,
           z.array(teamMemberSchema),
-          home,
+          { home },
         );
 
         return members.some((member) => member.id === connection.developerId)
@@ -117,6 +118,27 @@ export type SetupSource = {
  * Setup offers the organization, membership teams, scopes already subscribed to,
  * and the developer's own assets. Whatever is left unchecked is removed.
  */
+/**
+ * The mode setup offers first for a source: a saved subscription's mode, then
+ * custom when individual picks or an optional subscription exist, then all of
+ * your own assets or the recommended ones of a shared scope.
+ */
+function initialMode(
+  savedMode: SelectionMode | undefined,
+  pickedIndividually: boolean,
+  scopeType: string,
+): SetupMode {
+  if (savedMode === "all" || savedMode === "recommended") {
+    return savedMode;
+  }
+
+  if (pickedIndividually || savedMode === "optional") {
+    return "custom";
+  }
+
+  return scopeType === "dev" ? "all" : "recommended";
+}
+
 export function onboardingSources(choices: EnvironmentChoices): SetupSource[] {
   const { catalog, previous, developerId, memberTeamIds, firstSetup } = choices;
   const subscribed = (scope: { type: string; id: string }) =>
@@ -208,14 +230,7 @@ export function onboardingSources(choices: EnvironmentChoices): SetupSource[] {
           (scope.type === "org" ||
             (scope.type === "team" && memberTeamIds.length === 1))),
       ),
-      mode:
-        saved?.mode === "all" || saved?.mode === "recommended"
-          ? saved.mode
-          : independent.length || saved?.mode === "optional"
-            ? "custom"
-            : scope.type === "dev"
-              ? "all"
-              : "recommended",
+      mode: initialMode(saved?.mode, independent.length > 0, scope.type),
     };
   });
 }
@@ -240,12 +255,11 @@ export function selectOnboardingSources(
         enabled: true,
       });
     } else {
-      const ids =
-        mode === "custom"
-          ? (assetIds ?? [])
-          : mode === "recommended"
-            ? source.recommendedIds
-            : source.assets.map((a) => a.id);
+      const ids = {
+        custom: assetIds ?? [],
+        recommended: source.recommendedIds,
+        all: source.assets.map((a) => a.id),
+      }[mode];
 
       if (ids.some((id) => !source.assets.some((a) => a.id === id))) {
         throw new Error("Selection contains an asset outside this source");

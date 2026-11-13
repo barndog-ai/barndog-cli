@@ -92,7 +92,7 @@ export async function githubPullsList(connectionId: string, home = homedir()) {
     conn,
     `${connectionPath(connectionId)}/pulls`,
     z.array(gitPullSchema),
-    home,
+    { home },
   );
 }
 
@@ -108,7 +108,7 @@ export async function githubPullsShow(
     conn,
     `${connectionPath(connectionId)}/pulls/${pullNumber(number)}`,
     gitPullDetailsSchema,
-    home,
+    { home },
   );
 }
 
@@ -128,7 +128,11 @@ export async function githubPullsCreate(
     idempotencyKey: options.key ?? randomUUID(),
   });
 
-  return request(conn, `${path}/pulls`, gitPullSchema, home, "POST", proposal);
+  return request(conn, `${path}/pulls`, gitPullSchema, {
+    home,
+    method: "POST",
+    body: proposal,
+  });
 }
 
 /** Replaces an open pull request's content with the complete package. */
@@ -151,9 +155,7 @@ export async function githubPullsRevise(
     conn,
     `${path}/pulls/${pullNumber(options.number)}/revisions`,
     gitPullSchema,
-    home,
-    "PUT",
-    revision,
+    { home, method: "PUT", body: revision },
   );
 }
 
@@ -169,13 +171,15 @@ export async function githubPullsReview(
     conn,
     `${path}/pulls/${pullNumber(options.number)}/reviews`,
     gitPullDetailsSchema,
-    home,
-    "POST",
-    gitReviewSchema.parse({
-      expectedCommit: options.expectedCommit,
-      event: options.event,
-      body,
-    }),
+    {
+      home,
+      method: "POST",
+      body: gitReviewSchema.parse({
+        expectedCommit: options.expectedCommit,
+        event: options.event,
+        body,
+      }),
+    },
   );
 }
 
@@ -192,15 +196,17 @@ export async function githubPullsComment(
     conn,
     `${path}/pulls/${pullNumber(options.number)}/comments`,
     gitPullDetailsSchema,
-    home,
-    "POST",
-    gitCommentSchema.parse({
-      expectedCommit: options.expectedCommit,
-      body,
-      path: options.path,
-      line: options.line,
-      side: options.side,
-    }),
+    {
+      home,
+      method: "POST",
+      body: gitCommentSchema.parse({
+        expectedCommit: options.expectedCommit,
+        body,
+        path: options.path,
+        line: options.line,
+        side: options.side,
+      }),
+    },
   );
 }
 
@@ -216,8 +222,10 @@ export async function githubPullsMerge(
     conn,
     `${path}/pulls/${pullNumber(options.number)}/merge`,
     gitConnectionSchema,
-    home,
-    "PUT",
-    gitMergeSchema.parse({ expectedCommit: options.expectedCommit }),
+    {
+      home,
+      method: "PUT",
+      body: gitMergeSchema.parse({ expectedCommit: options.expectedCommit }),
+    },
   );
 }

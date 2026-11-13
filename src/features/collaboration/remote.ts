@@ -96,11 +96,13 @@ export function matchesOrigin(
 }
 
 export async function selectSkill(
-  name: string,
-  selector: string,
+  {
+    name,
+    selector,
+    kind = "skill",
+  }: { name: string; selector: string; kind?: PackageKind },
   conn: Connection,
   home = homedir(),
-  kind: PackageKind = "skill",
 ) {
   const values = await packageCatalogs[kind](conn, home);
   const matches = values.filter(
@@ -173,9 +175,11 @@ export async function selectOrigin(
 export async function download(
   path: string,
   conn: Connection,
-  home = homedir(),
-  commit?: string,
-  kind: PackageKind = "skill",
+  {
+    home = homedir(),
+    commit,
+    kind = "skill",
+  }: { home?: string; commit?: string; kind?: PackageKind } = {},
 ) {
   const response = await serverFetch(conn.server, home)(
     `${conn.server}${packagePath(path, kind)}`,

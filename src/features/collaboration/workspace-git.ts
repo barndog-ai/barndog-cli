@@ -151,8 +151,7 @@ async function newFolder(cwd: string, target: string) {
 async function startWorkingCopy(
   root: string,
   record: Omit<GitWorkingCopy, "root" | "base" | "conflicts">,
-  entries: PackageEntry[],
-  base: PackageEntry[],
+  { entries, base }: { entries: PackageEntry[]; base: PackageEntry[] },
   home: string,
 ) {
   try {
@@ -196,8 +195,7 @@ export function pullGitAsset(
         scope: pickScope(asset.origin),
         baseCommit: commit,
       },
-      asset.entries,
-      asset.entries,
+      { entries: asset.entries, base: asset.entries },
       home,
     );
 
@@ -229,8 +227,7 @@ export function createGitAsset(
     await startWorkingCopy(
       root,
       { kind, git: workspace, name: options.name, scope, baseCommit: commit },
-      assetKinds[kind].scaffold(options.name),
-      [],
+      { entries: assetKinds[kind].scaffold(options.name), base: [] },
       home,
     );
 
@@ -460,7 +457,11 @@ export function pushGitWorkingCopy(
         return { unchanged: true };
       }
 
-      const commit = await commitFiles(repo, tip, change, title);
+      const commit = await commitFiles(repo, tip, {
+        ...change,
+        message: title,
+      });
+
       await pushCommit(repo, commit, workspace.branch);
       await git(["update-ref", trackingRef(workspace.branch), commit], {
         repo,
@@ -500,12 +501,10 @@ export function pushGitWorkingCopy(
       review?.branch ??
       `barndog/${work.scope.type === "org" ? "org" : `${work.scope.type}-${work.scope.slug}`}-${work.name}-${randomBytes(3).toString("hex")}`;
 
-    const commit = await commitFiles(
-      repo,
-      review?.head ?? work.baseCommit,
-      change,
-      title,
-    );
+    const commit = await commitFiles(repo, review?.head ?? work.baseCommit, {
+      ...change,
+      message: title,
+    });
 
     await pushCommit(repo, commit, branch);
     const opened = review?.url

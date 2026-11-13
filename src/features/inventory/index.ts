@@ -73,6 +73,44 @@ const installedSchema = z.array(
 );
 
 /** What is selected and what is actually installed on this machine. */
+/** The state of a selected asset; the first that applies wins. */
+function inventoryState(asset: {
+  enabled: boolean;
+  clashed: boolean;
+  modified: boolean;
+  /** Linked or registered in at least one harness. */
+  present: boolean;
+  /** The installed version is older than the published one. */
+  outdated: boolean;
+}): InventoryState {
+  if (!asset.enabled) {
+    return "disabled";
+  }
+
+  if (asset.clashed) {
+    return "clash";
+  }
+
+  if (asset.modified) {
+    return "modified";
+  }
+
+  if (!asset.present) {
+    return "pending";
+  }
+
+  return asset.outdated ? "outdated" : "installed";
+}
+
+/** The state of an installed asset no longer selected. */
+function leftoverState(modified: boolean, offline: boolean): InventoryState {
+  if (modified) {
+    return "modified";
+  }
+
+  return offline ? "installed" : "removing";
+}
+
 export async function inventory(home = homedir()): Promise<Inventory> {
   const settings = await readSettings(home);
   if (!settings) {
@@ -128,12 +166,9 @@ export async function inventory(home = homedir()): Promise<Inventory> {
           return {
             catalog: remote.catalog,
             scopes: () =>
-              request(
-                remote.connection,
-                "/v1/scopes",
-                z.array(scopeSchema),
+              request(remote.connection, "/v1/scopes", z.array(scopeSchema), {
                 home,
-              ),
+              }),
           };
         })();
 
@@ -191,17 +226,15 @@ export async function inventory(home = homedir()): Promise<Inventory> {
               ? "individual"
               : originLabel(asset.origin.localOnly ? asset.origin : c.scope),
           ),
-          state: !entry.enabled
-            ? "disabled"
-            : clashed.has(asset.id)
-              ? "clash"
-              : modified.has(asset.id)
-                ? "modified"
-                : !present
-                  ? "pending"
-                  : tree?.versionId && tree.versionId !== asset.publishedVersion
-                    ? "outdated"
-                    : "installed",
+          state: inventoryState({
+            enabled: entry.enabled,
+            clashed: clashed.has(asset.id),
+            modified: modified.has(asset.id),
+            present,
+            outdated: Boolean(
+              tree?.versionId && tree.versionId !== asset.publishedVersion,
+            ),
+          }),
           harnesses,
           paths: [
             ...(tree ? [tree.path] : []),
@@ -247,14 +280,13 @@ export async function inventory(home = homedir()): Promise<Inventory> {
       continue;
     }
 
-    const name = link
-      ? basename(link.target)
-      : kind === "mcp"
-        ? (entry?.key ?? id)
-        : (installed
-            .find((t) => t.id === id)
-            ?.path.split("/")
-            .pop() ?? id);
+    const installedFolder = installed
+      .find((t) => t.id === id)
+      ?.path.split("/")
+      .pop();
+
+    const unlinkedName = kind === "mcp" ? entry?.key : installedFolder;
+    const name = link ? basename(link.target) : (unlinkedName ?? id);
 
     items.push({
       id,
@@ -263,7 +295,7 @@ export async function inventory(home = homedir()): Promise<Inventory> {
       installedName: name,
       origin: "—",
       via: [],
-      state: modified.has(id) ? "modified" : offline ? "installed" : "removing",
+      state: leftoverState(modified.has(id), Boolean(offline)),
       harnesses: [
         ...new Set([
           ...links.map((l) => l.harness),

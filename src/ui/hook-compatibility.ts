@@ -11,6 +11,15 @@ export type HookCompatibility = {
 };
 
 /** Whether each coding tool has a version of the Hook, and whether it can run here. */
+/** Whether a harness can run the Hook here: "—" when it isn't supported at all. */
+function runtimeLabel(status: string, runtimeIssue: string | null | undefined) {
+  if (status === "unsupported") {
+    return dim("—");
+  }
+
+  return runtimeIssue ? `${bad("✖")} ${runtimeIssue}` : ok("✔");
+}
+
 export function renderHookCompatibility(
   name: string,
   result: HookCompatibility,
@@ -33,11 +42,7 @@ export function renderHookCompatibility(
       result.compatibility.map((row) => [
         row.harness,
         row.status === "supported" ? row.status : dim(row.status),
-        row.status === "unsupported"
-          ? dim("—")
-          : row.runtimeIssue
-            ? `${bad("✖")} ${row.runtimeIssue}`
-            : ok("✔"),
+        runtimeLabel(row.status, row.runtimeIssue),
       ]),
       { header: ["Tool", "Support", "Ready on this machine"], indent: 0 },
     ),

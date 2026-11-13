@@ -92,8 +92,7 @@ function repoSource(
           name: asset.name,
           revision: asset.publishedVersion,
         },
-        backend.cacheKey,
-        home,
+        { key: backend.cacheKey, home },
         () => Promise.resolve(asset.entries),
       );
     },

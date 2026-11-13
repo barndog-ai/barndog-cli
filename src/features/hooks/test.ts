@@ -20,8 +20,8 @@ async function hookPackage(name: string, origin: string, home: string) {
     return repo.skillOrHookPackage("hook", asset);
   }
 
-  const selected = await selectAsset("hook", name, origin, home),
-    asset = hookSchema.parse(selected.asset);
+  const selected = await selectAsset("hook", name, origin, home);
+  const asset = hookSchema.parse(selected.asset);
 
   return cachedPackage("hook", asset, selected.connection, home);
 }
@@ -36,8 +36,10 @@ export async function testHook(
     handler?: number;
     timeout?: number;
   },
-  home = homedir(),
-  cwd = process.cwd(),
+  {
+    home = homedir(),
+    cwd = process.cwd(),
+  }: { home?: string; cwd?: string } = {},
 ) {
   if (process.platform === "win32") {
     throw new Error("Command Hook testing currently requires a POSIX shell");
@@ -108,10 +110,10 @@ export async function testHook(
     },
   );
 
-  let stdout = "",
-    stderr = "",
-    length = 0,
-    timedOut = false;
+  let stdout = "";
+  let stderr = "";
+  let length = 0;
+  let timedOut = false;
 
   const stop = () => {
     if (child.pid) {

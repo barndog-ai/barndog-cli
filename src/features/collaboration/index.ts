@@ -171,12 +171,8 @@ export async function createPackage(
   }
 
   return createWorkspace(
-    target.name,
-    target.origin,
-    target.directory,
-    cwd,
-    home,
-    target.kind,
+    { name: target.name, origin: target.origin, kind: target.kind },
+    { target: target.directory, cwd, home },
   );
 }
 
@@ -200,12 +196,8 @@ export async function pullPackage(
   }
 
   return pullSkill(
-    target.name,
-    target.origin,
-    target.directory,
-    cwd,
-    home,
-    target.kind,
+    { name: target.name, origin: target.origin, kind: target.kind },
+    { target: target.directory, cwd, home },
   );
 }
 
@@ -310,11 +302,9 @@ async function publishedPackage(target: PackageTarget, home: string) {
     type: "cloud" as const,
     client: collaborationClient(conn.server, home, target.kind),
     skill: await selectSkill(
-      target.name,
-      target.origin,
+      { name: target.name, selector: target.origin, kind: target.kind },
       conn,
       home,
-      target.kind,
     ),
   };
 }
@@ -422,9 +412,7 @@ export async function showChange(
     download(
       `/v1/skill-changes/${id}/package?revision=${change.revision}`,
       conn,
-      home,
-      change.commit,
-      target.kind,
+      { home, commit: change.commit, kind: target.kind },
     ),
     developerNames(home),
     change.baseVersionId

@@ -214,6 +214,37 @@ function knowledgeFile(content: KnowledgeContent) {
   return `---\n${stringify({ description, tags, accessMode })}---\n${markdown}`;
 }
 
+/** The files a candidate becomes in a Git workspace, under `path`. */
+function candidateFiles(
+  item: Candidate,
+  path: string,
+): { path: string; data: Buffer; executable: boolean }[] {
+  if (item.kind === "knowledge") {
+    return [
+      {
+        path,
+        data: Buffer.from(knowledgeFile(knowledgeOf(item))),
+        executable: false,
+      },
+    ];
+  }
+
+  if (item.kind === "mcp") {
+    return [
+      {
+        path,
+        data: Buffer.from(stringify(item.definition)),
+        executable: false,
+      },
+    ];
+  }
+
+  return item.entries.map((entry) => ({
+    ...entry,
+    path: `${path}/${entry.path}`,
+  }));
+}
+
 async function moveToGit(
   workspace: GitWorkspace,
   items: Candidate[],
@@ -256,27 +287,7 @@ async function moveToGit(
 
     moving.push({
       item,
-      files:
-        item.kind === "knowledge"
-          ? [
-              {
-                path,
-                data: Buffer.from(knowledgeFile(knowledgeOf(item))),
-                executable: false,
-              },
-            ]
-          : item.kind === "mcp"
-            ? [
-                {
-                  path,
-                  data: Buffer.from(stringify(item.definition)),
-                  executable: false,
-                },
-              ]
-            : item.entries.map((entry) => ({
-                ...entry,
-                path: `${path}/${entry.path}`,
-              })),
+      files: candidateFiles(item, path),
     });
   }
 
@@ -296,12 +307,10 @@ async function moveToGit(
   }
 
   const title = `Move ${moving.length} local asset${moving.length === 1 ? "" : "s"} into the workspace`;
-  const commit = await commitFiles(
-    repo,
-    tip,
-    { files: moving.flatMap((entry) => entry.files) },
-    title,
-  );
+  const commit = await commitFiles(repo, tip, {
+    files: moving.flatMap((entry) => entry.files),
+    message: title,
+  });
 
   // A workspace with nothing in it has nothing to review against.
   if (!shared.assets.length && !shared.knowledge.length) {
@@ -351,10 +360,15 @@ async function moveToCloud(
 
   const { catalog } = await environmentCatalog(home, conn);
   const docs = (
-    await request(conn, "/v1/knowledge?limit=100", knowledgeIndexSchema, home)
+    await request(conn, "/v1/knowledge?limit=100", knowledgeIndexSchema, {
+      home,
+    })
   ).documents;
 
-  const scopes = await request(conn, "/v1/scopes", z.array(scopeSchema), home);
+  const scopes = await request(conn, "/v1/scopes", z.array(scopeSchema), {
+    home,
+  });
+
   const org = scopes.find((s) => s.type === "org");
   const rows: MoveRow[] = [];
   for (const item of items) {
@@ -481,23 +495,33 @@ export function moveLocalAssets(
       options.kind,
     );
 
-    const result = options.repo
-      ? await moveToGit(
+    const moveItems = async () => {
+      if (options.repo) {
+        return moveToGit(
           await repoDestination(options.repo, home),
           items,
           options.to,
           home,
-        )
-      : options.server
-        ? await moveToCloud(
-            await serverDestination(options.server, home),
-            items,
-            options.to,
-            home,
-          )
-        : settings.gitWorkspace
-          ? await moveToGit(settings.gitWorkspace, items, options.to, home)
-          : await moveToCloud(await connection(home), items, options.to, home);
+        );
+      }
+
+      if (options.server) {
+        return moveToCloud(
+          await serverDestination(options.server, home),
+          items,
+          options.to,
+          home,
+        );
+      }
+
+      if (settings.gitWorkspace) {
+        return moveToGit(settings.gitWorkspace, items, options.to, home);
+      }
+
+      return moveToCloud(await connection(home), items, options.to, home);
+    };
+
+    const result = await moveItems();
 
     result.rows.unshift(...invalid);
     const moved = result.rows.filter((row) => row.status === "moved");
@@ -534,12 +558,13 @@ export async function listLocalAssets(home = homedir()) {
   const source = localRepoSource(settings.localWorkspace, home);
   const model = await source.model();
   const moved = await readMoved(source.label);
-  const state = (path: string, invalid?: string) =>
-    invalid
-      ? "invalid"
-      : moved.some((m) => m.path === path)
-        ? "moved"
-        : "active";
+  const state = (path: string, invalid?: string) => {
+    if (invalid) {
+      return "invalid";
+    }
+
+    return moved.some((m) => m.path === path) ? "moved" : "active";
+  };
 
   return {
     folder: settings.localWorkspace.path,
@@ -563,7 +588,9 @@ export async function listLocalAssets(home = homedir()) {
 /** Where setup can offer to send local assets in a Cloud Workspace; personal first. */
 export async function cloudMoveTargets(home: string) {
   const conn = await connection(home);
-  const scopes = await request(conn, "/v1/scopes", z.array(scopeSchema), home);
+  const scopes = await request(conn, "/v1/scopes", z.array(scopeSchema), {
+    home,
+  });
 
   return scopes
     .filter(

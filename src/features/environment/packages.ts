@@ -95,8 +95,7 @@ type CachedAsset = { id: string; name: string; revision: string };
 export async function storePackage(
   kind: PackageKind,
   asset: CachedAsset,
-  key: string,
-  home: string,
+  { key, home }: { key: string; home: string },
   load: () => Promise<PackageEntry[]>,
 ) {
   const parent = join(
@@ -171,8 +170,7 @@ export async function cachedPackage(
   return storePackage(
     kind,
     { id: asset.id, name: asset.name, revision: asset.version.commit },
-    cacheKey(conn),
-    home,
+    { key: cacheKey(conn), home },
     async () => {
       const response = await serverFetch(
         conn.server,

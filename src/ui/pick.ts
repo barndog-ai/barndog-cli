@@ -87,13 +87,13 @@ const prompt = createPrompt(
       };
 
       if (isEnterKey(key)) {
+        const current = visible[active];
+        const single = current ? [current.choice] : [];
         const values = config.multiple
           ? [...checked]
               .sort((a, b) => a - b)
               .flatMap((i) => config.choices[i] ?? [])
-          : visible[active]
-            ? [visible[active].choice]
-            : [];
+          : single;
 
         if (!values.length) {
           setError(
@@ -158,11 +158,8 @@ const prompt = createPrompt(
           loop: false,
           renderItem({ item, isActive }) {
             const cursor = isActive ? promptTheme.icon.cursor : " ";
-            const box = config.multiple
-              ? checked.has(item.index)
-                ? selected("◉ ")
-                : "◯ "
-              : "";
+            const mark = checked.has(item.index) ? selected("◉ ") : "◯ ";
+            const box = config.multiple ? mark : "";
 
             const padded = item.choice.name.padEnd(nameWidth);
             const name = isActive

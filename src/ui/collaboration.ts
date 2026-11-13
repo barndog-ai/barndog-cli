@@ -75,6 +75,18 @@ const isEnvironmentPreview = (value: unknown): value is EnvironmentPreview =>
   value.mode === "environment-preview" &&
   Array.isArray(value.events);
 
+/** A short commit hash, else `v<version>`, else nothing. */
+function baseLabel(
+  commit: string | null | undefined,
+  version: number | null | undefined,
+) {
+  if (commit) {
+    return commit.slice(0, 7);
+  }
+
+  return version ? `v${version}` : undefined;
+}
+
 function files(value: unknown): string[] {
   const parsed = filesSchema.safeParse(value);
   if (!parsed.success) {
@@ -228,7 +240,7 @@ export function renderCollaboration(
 
       return [
         primary(`${safe(status.name)}  ${safe(status.root)}`),
-        `Base: ${status.baseCommit ? status.baseCommit.slice(0, 7) : status.baseVersion ? `v${status.baseVersion}` : "new package"}`,
+        `Base: ${baseLabel(status.baseCommit, status.baseVersion) ?? "new package"}`,
         ...(status.review
           ? [
               `Review branch: ${safe(status.review.branch)}${status.review.url ? `  ${safe(status.review.url)}` : ""}`,
@@ -257,14 +269,14 @@ export function renderCollaboration(
     const workingCopy = workingCopySchema.safeParse(value);
     if (workingCopy.success) {
       const result = workingCopy.data;
+      const base = baseLabel(
+        result.commit,
+        result.version || result.baseVersion,
+      );
 
       return [
         `Working copy: ${safe(result.root)}`,
-        ...(result.commit
-          ? [`Base: ${result.commit.slice(0, 7)}`]
-          : result.version || result.baseVersion
-            ? [`Base: v${result.version ?? result.baseVersion}`]
-            : []),
+        ...(base ? [`Base: ${base}`] : []),
         ...(result.conflicts?.length
           ? result.conflicts.map(
               (path) =>

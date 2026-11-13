@@ -46,9 +46,16 @@ type AssetAction = "install" | "remove" | "enable" | "disable";
 export async function ask(
   context: CommandContext,
   value: string | undefined,
-  message: string,
-  flag: string,
-  fallback?: string,
+  {
+    message,
+    flag,
+    fallback,
+  }: {
+    message: string;
+    /** The option that supplies the value without a prompt, such as `--as`. */
+    flag: string;
+    fallback?: string;
+  },
 ): Promise<string> {
   if (value) {
     return value;
@@ -85,13 +92,17 @@ function localCandidates(
       item.kind === kind &&
       !item.via.includes("config") &&
       item.origin !== "—" &&
-      (action === "enable"
-        ? item.state === "disabled"
-        : action === "disable"
-          ? item.state !== "disabled"
-          : true),
+      (action !== "enable" || item.state === "disabled") &&
+      (action !== "disable" || item.state !== "disabled"),
   );
 }
+
+const setDescriptions = {
+  install: "Subscribe to a scope's shared assets",
+  remove: "Unsubscribe from a scope",
+  enable: "Turn a paused subscription back on",
+  disable: "Pause a subscription without removing it",
+};
 
 const localChoice = (item: InventoryItem): PickChoice<InventoryItem> => ({
   value: item,
@@ -370,11 +381,11 @@ export function registerEnvironment(program: Command, context: CommandContext) {
       command
         .command(`${action} [name]`)
         .description(
-          action === "remove"
-            ? `Remove ${labels.many} from this machine, even when a set includes them`
-            : action === "enable"
-              ? `Turn disabled ${labels.many} back on`
-              : `Turn ${labels.many} off without removing them from your selection`,
+          {
+            remove: `Remove ${labels.many} from this machine, even when a set includes them`,
+            enable: `Turn disabled ${labels.many} back on`,
+            disable: `Turn ${labels.many} off without removing them from your selection`,
+          }[action],
         )
         .option("--origin <origin>", ORIGIN_HELP)
         .action(
@@ -461,13 +472,11 @@ export function registerEnvironment(program: Command, context: CommandContext) {
 
           const as = options.reset
             ? undefined
-            : await ask(
-                context,
-                options.as,
-                "New local name",
-                "--as",
-                suggestion,
-              );
+            : await ask(context, options.as, {
+                message: "New local name",
+                flag: "--as",
+                fallback: suggestion,
+              });
 
           await runSelection(context, () =>
             context.renameAsset({
@@ -543,22 +552,23 @@ export function registerEnvironment(program: Command, context: CommandContext) {
               origin = originLabel(row.origin);
             }
 
-            origin = await ask(context, origin, "Current scope", "--origin");
-            const target = await ask(
-              context,
-              options.target,
-              "Destination scope (me, team/<slug>, repo/<slug> or org)",
-              "--target",
-              action === "fork" ? "me" : undefined,
-            );
+            origin = await ask(context, origin, {
+              message: "Current scope",
+              flag: "--origin",
+            });
 
-            const newName = await ask(
-              context,
-              options.name,
-              "New name",
-              "--name",
-              name,
-            );
+            const target = await ask(context, options.target, {
+              message:
+                "Destination scope (me, team/<slug>, repo/<slug> or org)",
+              flag: "--target",
+              fallback: action === "fork" ? "me" : undefined,
+            });
+
+            const newName = await ask(context, options.name, {
+              message: "New name",
+              flag: "--name",
+              fallback: name,
+            });
 
             const input = {
               kind,
@@ -749,15 +759,7 @@ function registerSets(program: Command, context: CommandContext) {
   for (const action of ["install", "remove", "enable", "disable"] as const) {
     const command = sets
       .command(`${action} [scope]`)
-      .description(
-        action === "install"
-          ? "Subscribe to a scope's shared assets"
-          : action === "remove"
-            ? "Unsubscribe from a scope"
-            : action === "enable"
-              ? "Turn a paused subscription back on"
-              : "Pause a subscription without removing it",
-      )
+      .description(setDescriptions[action])
       .option(
         "--origin <origin>",
         "Scope, such as org, team/engineering or repo/web-app",

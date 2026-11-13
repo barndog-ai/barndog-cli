@@ -19,6 +19,19 @@ export function packagePath(path: string, kind: PackageKind) {
 const capitalized = (word: string) =>
   `${word.charAt(0).toUpperCase()}${word.slice(1)}`;
 
+/** Renames `from` to `to`, and `publishedFrom` to `publishedTo`. */
+function renamedKey(key: string, from: string, to: string) {
+  if (key === from) {
+    return to;
+  }
+
+  if (key === `published${capitalized(from)}`) {
+    return `published${capitalized(to)}`;
+  }
+
+  return key;
+}
+
 function fields(value: unknown, from: string, to: string): unknown {
   if (Array.isArray(value)) {
     return value.map((v) => fields(v, from, to));
@@ -27,11 +40,7 @@ function fields(value: unknown, from: string, to: string): unknown {
   if (value && typeof value === "object") {
     return Object.fromEntries(
       Object.entries(value).map(([key, val]) => [
-        key === from
-          ? to
-          : key === `published${capitalized(from)}`
-            ? `published${capitalized(to)}`
-            : key,
+        renamedKey(key, from, to),
         fields(val, from, to),
       ]),
     );

@@ -35,11 +35,16 @@ export type ListFilter = {
 };
 
 const listGroup = (state: ListedAsset["state"]) =>
-  state === "available"
-    ? "available"
-    : state === "disabled"
-      ? "disabled"
-      : "installed";
+  state === "available" || state === "disabled" ? state : "installed";
+
+/** Outdated assets look pending and modified ones look clashed. */
+function badgeState(state: ListedAsset["state"]) {
+  if (state === "outdated") {
+    return "pending";
+  }
+
+  return state === "modified" ? "clash" : state;
+}
 
 /** Installed first, then disabled, then available; no filter means all three. */
 export function assetListing(
@@ -108,14 +113,7 @@ export function renderInventory(
             ? item.harnesses.map((h) => adapters[h].name).join(", ")
             : "—",
         ),
-        badge(
-          item.state === "outdated"
-            ? "pending"
-            : item.state === "modified"
-              ? "clash"
-              : item.state,
-          stateLabel[item.state],
-        ),
+        badge(badgeState(item.state), stateLabel[item.state]),
       ]),
       { header: ["Name", "Origin", "Via", "Installed in", "State"], flex: 2 },
     ),

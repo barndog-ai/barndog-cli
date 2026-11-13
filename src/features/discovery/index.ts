@@ -32,7 +32,7 @@ export async function developers(search?: string, home = homedir()) {
       conn,
       `/v1/developers?${query}`,
       developerListSchema,
-      home,
+      { home },
     );
 
     people.push(...page.developers);
@@ -55,8 +55,10 @@ export async function developerAssets(
   search?: string,
   home = homedir(),
 ) {
-  const people = await developers(undefined, home),
-    matches = people.filter((p) => p.id === selector || p.slug === selector);
+  const people = await developers(undefined, home);
+  const matches = people.filter(
+    (p) => p.id === selector || p.slug === selector,
+  );
 
   const developer = only(matches);
   if (!developer) {
@@ -81,7 +83,7 @@ export async function developerAssets(
       conn,
       `/v1/developers/${developer.id}/assets?${query}`,
       developerAssetsSchema,
-      home,
+      { home },
     );
 
     assets.push(...page.assets);
@@ -128,12 +130,13 @@ async function copyToScope(
   home: string,
 ) {
   const selected = await selectAsset(
-      input.kind,
-      input.name,
-      input.origin,
-      home,
-    ),
-    scope = await selectOrigin(input.target, selected.connection, home);
+    input.kind,
+    input.name,
+    input.origin,
+    home,
+  );
+
+  const scope = await selectOrigin(input.target, selected.connection, home);
 
   const schema = action === "fork" ? forkInputSchema : promotionInputSchema;
   const body = schema.parse({
@@ -146,9 +149,7 @@ async function copyToScope(
     selected.connection,
     `/v1/environment/${input.kind}/${selected.reference.id}/${action}`,
     promotionSchema,
-    home,
-    "POST",
-    body,
+    { home, method: "POST", body },
   );
 }
 

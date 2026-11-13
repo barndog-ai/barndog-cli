@@ -11,9 +11,9 @@ export async function publishedHooks(
   conn: Connection,
   home: string,
 ): Promise<Hook[]> {
-  const client = apiClient(conn.server, home),
-    hooks: Hook[] = [],
-    seen = new Set<string>();
+  const client = apiClient(conn.server, home);
+  const hooks: Hook[] = [];
+  const seen = new Set<string>();
 
   let cursor: string | undefined;
   do {

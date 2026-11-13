@@ -15,6 +15,7 @@ import {
 } from "@barndog-ai/api-contract";
 import { connection } from "../collaboration/remote.js";
 import { request } from "../environment/remote.js";
+import { browserCommand } from "../../shared/browser.js";
 
 export type GithubBrowserOptions = {
   /** `false` returns the URL without opening a browser. */
@@ -22,18 +23,8 @@ export type GithubBrowserOptions = {
 };
 
 function openInBrowser(url: string) {
-  const command =
-    process.platform === "darwin"
-      ? "open"
-      : process.platform === "win32"
-        ? "rundll32"
-        : "xdg-open";
-
-  const child = spawn(
-    command,
-    process.platform === "win32" ? ["url.dll,FileProtocolHandler", url] : [url],
-    { stdio: "ignore" },
-  );
+  const { command, args } = browserCommand(url);
+  const child = spawn(command, args, { stdio: "ignore" });
 
   child.once("error", () => undefined);
   child.unref();
@@ -47,13 +38,10 @@ async function startInBrowser(
   home: string,
 ) {
   const conn = await connection(home);
-  const result = await request(
-    conn,
-    path,
-    gitAuthorizationSchema,
+  const result = await request(conn, path, gitAuthorizationSchema, {
     home,
-    "POST",
-  );
+    method: "POST",
+  });
 
   if (options.browser !== false) {
     openInBrowser(result.url);
@@ -67,7 +55,7 @@ async function startInBrowser(
 export async function githubStatus(home = homedir()) {
   const conn = await connection(home);
 
-  return request(conn, "/v1/github/status", githubStatusSchema, home);
+  return request(conn, "/v1/github/status", githubStatusSchema, { home });
 }
 
 /** Links the developer's GitHub account to BarnDog; finished in the browser. */
@@ -98,6 +86,6 @@ export async function githubInstallations(home = homedir()) {
     conn,
     "/v1/github/installations",
     z.array(gitInstallationSchema),
-    home,
+    { home },
   );
 }

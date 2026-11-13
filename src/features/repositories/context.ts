@@ -68,7 +68,7 @@ export async function repositoryContext(
     conn,
     "/v1/repositories",
     z.array(repositorySchema),
-    home,
+    { home },
   );
 
   const matches = repositories.filter(
@@ -77,7 +77,7 @@ export async function repositoryContext(
 
   const repository = only(matches) ?? null;
   const teams = repository
-    ? await request(conn, "/v1/teams", z.array(teamSchema), home)
+    ? await request(conn, "/v1/teams", z.array(teamSchema), { home })
     : [];
 
   return {

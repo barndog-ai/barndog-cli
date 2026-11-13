@@ -164,7 +164,7 @@ async function workspaceAccess(settings: Settings, home: string) {
   return {
     identity: conn,
     catalog: await merge(catalog),
-    scopes: () => request(conn, "/v1/scopes", z.array(scopeSchema), home),
+    scopes: () => request(conn, "/v1/scopes", z.array(scopeSchema), { home }),
   };
 }
 

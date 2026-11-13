@@ -12,10 +12,18 @@ import { only } from "../shared/lookup.js";
  */
 export async function resolveOrigin(
   context: Pick<CommandContext, "searchCatalog" | "mode">,
-  kind: AssetKind,
-  name: string,
-  origin: string | undefined,
-  usage: string,
+  {
+    kind,
+    name,
+    origin,
+    usage,
+  }: {
+    kind: AssetKind;
+    name: string;
+    origin: string | undefined;
+    /** The command to show when the origin can't be chosen here. */
+    usage: string;
+  },
 ): Promise<string> {
   if (origin) {
     return origin;

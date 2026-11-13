@@ -18,13 +18,34 @@ import { only } from "../../shared/lookup.js";
  */
 export type RetryKey = string;
 
+/** Sends `FormData` as it is and anything else defined as JSON. */
+function requestBody(body: unknown): {
+  headers?: HeadersInit;
+  body?: BodyInit;
+} {
+  if (body instanceof FormData) {
+    return { body };
+  }
+
+  if (body === undefined) {
+    return {};
+  }
+
+  return {
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  };
+}
+
 export async function request<T>(
   conn: Connection,
   path: string,
   schema: z.ZodType<T>,
-  home = homedir(),
-  method = "GET",
-  body?: unknown,
+  {
+    home = homedir(),
+    method = "GET",
+    body,
+  }: { home?: string; method?: string; body?: unknown } = {},
 ): Promise<T> {
   if (!path.startsWith("/v1/") || path.includes("..")) {
     throw new Error("Invalid API path");
@@ -34,18 +55,7 @@ export async function request<T>(
     `${conn.server}${path}`,
     {
       method,
-      headers:
-        body instanceof FormData
-          ? undefined
-          : body === undefined
-            ? undefined
-            : { "Content-Type": "application/json" },
-      body:
-        body instanceof FormData
-          ? body
-          : body === undefined
-            ? undefined
-            : JSON.stringify(body),
+      ...requestBody(body),
     },
   );
 
@@ -93,7 +103,7 @@ export async function environmentCatalog(
       conn,
       "/v1/environment/catalog",
       environmentCatalogSchema,
-      home,
+      { home },
     ),
   };
 }
@@ -107,7 +117,7 @@ export async function getAsset(
   const path = `/v1/${assetKinds[kind].route}/${z.uuidv4().parse(id)}`;
 
   return assetKinds[kind].schema.parse(
-    await request(conn, path, z.unknown(), home),
+    await request(conn, path, z.unknown(), { home }),
   );
 }
 

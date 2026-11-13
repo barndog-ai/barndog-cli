@@ -34,8 +34,8 @@ async function sharedKnowledge(home: string, always: boolean) {
       }));
   }
 
-  const conn = await connection(home),
-    documents: typeof knowledgeIndexSchema._output.documents = [];
+  const conn = await connection(home);
+  const documents: typeof knowledgeIndexSchema._output.documents = [];
 
   const seen = new Set<string>();
   let cursor: string | null = null;
@@ -50,7 +50,7 @@ async function sharedKnowledge(home: string, always: boolean) {
       conn,
       `/v1/knowledge?${params}`,
       knowledgeIndexSchema,
-      home,
+      { home },
     );
 
     documents.push(...page.documents);
@@ -88,7 +88,7 @@ async function sharedDocument(name: string, home: string) {
     conn,
     `/v1/knowledge/${encodeURIComponent(name)}`,
     knowledgeDocumentSchema,
-    home,
+    { home },
   );
 }
 

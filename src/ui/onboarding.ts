@@ -78,6 +78,39 @@ const chooseHarnesses = (choices: HarnessChoice[]): Promise<Harness[]> => {
 
 type Choose = typeof chooseHarnesses;
 
+/** The source setup was last run with, offered as the default. */
+function savedChoice(
+  previous: Settings,
+  server: string | undefined,
+): SetupChoice | undefined {
+  if (previous.gitWorkspace) {
+    return { kind: "git", url: previous.gitWorkspace.url };
+  }
+
+  if (previous.localWorkspace) {
+    return { kind: "local" };
+  }
+
+  return server ? { kind: "cloud", server } : undefined;
+}
+
+/** The source named by `--local`, `--repo` or `--server`, if any. */
+function flagChoice(options: {
+  local?: boolean;
+  repo?: string;
+  server?: string;
+}): SetupChoice | undefined {
+  if (options.local) {
+    return { kind: "local" };
+  }
+
+  if (options.repo) {
+    return { kind: "git", url: options.repo };
+  }
+
+  return options.server ? { kind: "cloud", server: options.server } : undefined;
+}
+
 /** Starting over always offers every source; a saved server is only the default. */
 async function chooseSource(
   previous: Settings | null,
@@ -89,15 +122,7 @@ async function chooseSource(
     return server ? { kind: "cloud", server } : choose();
   }
 
-  return choose(
-    previous.gitWorkspace
-      ? { kind: "git", url: previous.gitWorkspace.url }
-      : previous.localWorkspace
-        ? { kind: "local" }
-        : server
-          ? { kind: "cloud", server }
-          : undefined,
-  );
+  return choose(savedChoice(previous, server));
 }
 
 export async function runSetup(
@@ -173,13 +198,9 @@ export async function runSetup(
     throw new Error("--local, --repo and --server cannot be combined");
   }
 
-  const choice: SetupChoice = options.local
-    ? { kind: "local" }
-    : options.repo
-      ? { kind: "git", url: options.repo }
-      : options.server
-        ? { kind: "cloud", server: options.server }
-        : await chooseSource(previous, home, options.chooseConnection);
+  const choice: SetupChoice =
+    flagChoice(options) ??
+    (await chooseSource(previous, home, options.chooseConnection));
 
   const server = choice.kind === "cloud" ? choice.server : undefined;
   let workspace: ChosenWorkspace | undefined;

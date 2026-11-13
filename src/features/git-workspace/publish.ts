@@ -26,8 +26,12 @@ const NULL_HASH = "0".repeat(40);
 export async function commitFiles(
   repo: string,
   parent: string | null,
-  change: { replace?: string; files: NewFile[] },
-  message: string,
+  change: {
+    /** A folder whose existing files the new files replace. */
+    replace?: string;
+    files: NewFile[];
+    message: string;
+  },
   options: { allowPrompt?: boolean } = {},
 ) {
   const index = join(repo, `barndog-index-${randomUUID()}`);
@@ -69,7 +73,13 @@ export async function commitFiles(
     const tree = await gitText(["write-tree"], { repo, env });
 
     return await gitText(
-      ["commit-tree", tree, ...(parent ? ["-p", parent] : []), "-m", message],
+      [
+        "commit-tree",
+        tree,
+        ...(parent ? ["-p", parent] : []),
+        "-m",
+        change.message,
+      ],
       { repo, allowPrompt: options.allowPrompt },
     ).catch(explainIdentity);
   } finally {
@@ -162,6 +172,53 @@ const signedIn = async (tool: string, host: string) => {
 /** The first web link in a tool's output: `Created https://github.com/o/r/pull/1` → the link. */
 export const firstUrl = (text: string) => /https?:\/\/\S+/.exec(text)?.[0];
 
+/** The gh or glab command that opens a review of `branch` against `base`, if the host has one. */
+function pullRequestCommand(
+  remote: { host: string; path: string },
+  change: { base: string; branch: string; title: string },
+) {
+  const repository = `${remote.host}/${remote.path}`;
+  const { base, branch, title } = change;
+  if (remote.host.includes("github")) {
+    return [
+      "gh",
+      "pr",
+      "create",
+      "--repo",
+      repository,
+      "--head",
+      branch,
+      "--base",
+      base,
+      "--title",
+      title,
+      "--body",
+      "",
+    ];
+  }
+
+  if (remote.host.includes("gitlab")) {
+    return [
+      "glab",
+      "mr",
+      "create",
+      "-R",
+      repository,
+      "-s",
+      branch,
+      "-b",
+      base,
+      "-t",
+      title,
+      "-d",
+      "",
+      "-y",
+    ];
+  }
+
+  return null;
+}
+
 /** Opens the review with gh or glab when signed in, else hands back a link. */
 export async function openPullRequest(request: {
   url: string;
@@ -180,40 +237,7 @@ export async function openPullRequest(request: {
     return fallback;
   }
 
-  const command = remote.host.includes("github")
-    ? [
-        "gh",
-        "pr",
-        "create",
-        "--repo",
-        `${remote.host}/${remote.path}`,
-        "--head",
-        branch,
-        "--base",
-        base,
-        "--title",
-        title,
-        "--body",
-        "",
-      ]
-    : remote.host.includes("gitlab")
-      ? [
-          "glab",
-          "mr",
-          "create",
-          "-R",
-          `${remote.host}/${remote.path}`,
-          "-s",
-          branch,
-          "-b",
-          base,
-          "-t",
-          title,
-          "-d",
-          "",
-          "-y",
-        ]
-      : null;
+  const command = pullRequestCommand(remote, { base, branch, title });
 
   const [program, ...args] = command ?? [];
   if (!program || !(await signedIn(program, remote.host))) {
