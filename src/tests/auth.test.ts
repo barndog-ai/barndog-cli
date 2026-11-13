@@ -156,14 +156,18 @@ test("API selections prevent account switches without changing saved credentials
   });
   await saveSettings(
     {
-      version: 2,
       harnesses: [],
       connection: {
         server: f.origin,
         organizationId: f.context.organization.id,
         developerId: randomUUID(),
       },
-      skills: [{ kind: "api", id: randomUUID(), enabled: true }],
+      environment: {
+        subscriptions: [],
+        individualAssetIds: [randomUUID()],
+        excludedAssetIds: [],
+        disabledAssetIds: [],
+      },
     },
     f.home,
   );

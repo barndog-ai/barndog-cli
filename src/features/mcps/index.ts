@@ -92,7 +92,7 @@ export async function mcpVersions(
   home = homedir(),
 ) {
   const settings = await readSettings(home);
-  if (settings?.version === 2 && settings.gitWorkspace)
+  if (settings?.gitWorkspace)
     return gitVersions(
       settings.gitWorkspace,
       { name, origin, kind: "mcp" },

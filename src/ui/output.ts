@@ -3,7 +3,7 @@ import { styleText } from "node:util";
 import { homedir } from "node:os";
 import { basename, isAbsolute, relative, sep } from "node:path";
 import { SetupRequiredError } from "../config/settings.js";
-import type { SyncEvent } from "../features/skills/sync.js";
+import type { SyncEvent } from "../features/environment/events.js";
 import { adapters, isHarness } from "../harnesses/registry.js";
 import { primary, danger } from "./theme.js";
 import {

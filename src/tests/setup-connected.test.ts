@@ -187,8 +187,7 @@ for (const state of ["missing", "expired", "valid", "revoked"] as const) {
 
     await runSetup({ ...options, confirmApply: async () => true });
     const saved = await readSettings(home);
-    expect(saved?.version).toBe(2);
-    if (saved?.version !== 2) throw new Error("Expected connected settings");
+    if (!saved) throw new Error("Expected connected settings");
     expect(saved.connection?.server).toBe(origin);
     expect(saved.knowledge).toBe(true);
     expect(saved.harnesses).toStrictEqual(["codex"]);
@@ -210,7 +209,7 @@ for (const state of ["missing", "expired", "valid", "revoked"] as const) {
       expect(await readFile(settingsPath(home), "utf8")).toBe(original);
       await installSetAssets({ origin: "org", assetIds: [mcpId] }, home);
       const custom = await readSettings(home);
-      assert(custom?.version === 2);
+      assert(custom);
       expect(custom.environment?.subscriptions).toStrictEqual([]);
       expect(custom.environment?.individualAssetIds).toStrictEqual([mcpId]);
     }
@@ -226,7 +225,7 @@ for (const state of ["missing", "expired", "valid", "revoked"] as const) {
 test("local setup is explicit and final cancellation preserves saved settings", async (t) => {
   const home = await mkdtemp(join(tmpdir(), "barndog-local-setup-"));
   t.onTestFinished(() => rm(home, { recursive: true, force: true }));
-  await saveSettings({ version: 1, harnesses: ["claude"], skills: [] }, home);
+  await saveSettings({ harnesses: ["claude"] }, home);
   await runSetup({
     home,
     restart: true,

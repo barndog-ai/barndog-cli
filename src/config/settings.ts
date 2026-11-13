@@ -10,24 +10,12 @@ import { isHarness, type Harness } from "../harnesses/registry.js";
 import { errorCode } from "../errors.js";
 import { NAME, UUID_V4 } from "../shared/patterns.js";
 
-export type SkillSelection = { id: string; source: string; enabled: boolean };
-
 export class SetupRequiredError extends Error {
   constructor() {
     super("Harness selection is not configured.");
     this.name = "SetupRequiredError";
   }
 }
-
-export type LegacySettings = {
-  version: 1;
-  harnesses: Harness[];
-  skills: SkillSelection[];
-};
-
-export type LocalSelection = SkillSelection & { kind: "local" };
-
-export type ApiSelection = { kind: "api"; id: string; enabled: boolean };
 
 export type Connection = {
   server: string;
@@ -48,10 +36,9 @@ export type LocalWorkspace = {
   workspaceId: string;
 };
 
-export type SettingsV2 = {
-  version: 2;
+/** `~/.barndog/config.yaml`. */
+export type Settings = {
   harnesses: Harness[];
-  skills: (LocalSelection | ApiSelection)[];
   connection?: Connection;
   gitWorkspace?: GitWorkspace;
   localWorkspace?: LocalWorkspace;
@@ -61,48 +48,11 @@ export type SettingsV2 = {
   localNames?: Record<string, string>;
 };
 
-export type Settings = LegacySettings | SettingsV2;
-
-export function upgradeSettings(settings: Settings): SettingsV2 {
-  return settings.version === 2
-    ? settings
-    : {
-        ...settings,
-        version: 2,
-        skills: settings.skills.map((skill) => ({ ...skill, kind: "local" })),
-      };
-}
-
 export function settingsPath(home = homedir()): string {
   return join(home, ".barndog", "config.yaml");
 }
 
 const uuid = z.string().regex(UUID_V4);
-
-// Loose objects keep keys this version doesn't know, as the file had them.
-const headerSchema = z.looseObject({
-  version: z.union([z.literal(1), z.literal(2)]),
-  harnesses: z
-    .array(z.custom<Harness>(isHarness))
-    .refine((list) => new Set(list).size === list.length),
-  skills: z.array(z.unknown()),
-});
-
-const legacySkillSchema = z.looseObject({
-  id: z.string(),
-  source: z.string(),
-  enabled: z.boolean(),
-});
-
-const skillSchema = z.union([
-  z.looseObject({
-    kind: z.literal("local"),
-    id: uuid,
-    enabled: z.boolean(),
-    source: z.string().refine((source) => source.trim() !== ""),
-  }),
-  z.looseObject({ kind: z.literal("api"), id: uuid, enabled: z.boolean() }),
-]);
 
 const connectionSchema = z.looseObject({
   server: z.string().regex(/^https?:\/\//),
@@ -126,10 +76,12 @@ const localWorkspaceSchema = z.looseObject({
 
 const localNamesSchema = z.record(uuid, z.string().regex(NAME).max(64));
 
-/** Every part of a version-2 file; each optional key is named only here. */
-const settingsV2Schema = headerSchema.extend({
-  version: z.literal(2),
-  skills: z.array(skillSchema),
+/** Every part of the file; each optional key is named only here. */
+// Loose objects keep keys this version doesn't know, as the file had them.
+const settingsSchema = z.looseObject({
+  harnesses: z
+    .array(z.custom<Harness>(isHarness))
+    .refine((list) => new Set(list).size === list.length),
   connection: connectionSchema.optional(),
   gitWorkspace: gitWorkspaceSchema.optional(),
   localWorkspace: localWorkspaceSchema.optional(),
@@ -139,11 +91,12 @@ const settingsV2Schema = headerSchema.extend({
   localNames: localNamesSchema.optional(),
 });
 
-const invalidSkill = "Invalid user settings: invalid skill selection";
+const invalidSettings =
+  "Invalid user settings: expected a unique harnesses list (claude, codex, cursor)";
 
 /** What to say about an invalid part, keyed by the field Zod reports it under. */
 const invalidPart = {
-  skills: invalidSkill,
+  harnesses: invalidSettings,
   connection: "Invalid user settings: invalid server connection",
   gitWorkspace: "Invalid user settings: invalid Git workspace",
   localWorkspace: "Invalid user settings: invalid local workspace",
@@ -151,56 +104,35 @@ const invalidPart = {
   knowledge: "Invalid knowledge integration setting",
   localNames:
     "Invalid user settings: localNames maps asset IDs to lowercase hyphenated names",
-} satisfies Partial<Record<keyof typeof settingsV2Schema.shape, string>>;
+} satisfies Partial<Record<keyof typeof settingsSchema.shape, string>>;
 
 const isInvalidPart = (key: unknown): key is keyof typeof invalidPart =>
   typeof key === "string" && Object.hasOwn(invalidPart, key);
 
-/** Parses one part of the settings, failing with `message` instead of Zod's issues. */
-function part<T>(schema: z.ZodType<T>, value: unknown, message: string): T {
-  const result = schema.safeParse(value);
-  if (!result.success) throw new Error(message);
-  return result.data;
-}
-
 function validate(value: unknown): Settings {
-  const header = part(
-    headerSchema,
-    value,
-    "Invalid user settings: expected version: 1 or 2, a unique harnesses list (claude, codex, cursor), and a skills array",
-  );
-  if (header.version === 1)
-    return {
-      ...header,
-      version: 1,
-      skills: part(z.array(legacySkillSchema), header.skills, invalidSkill),
-    };
-  const result = settingsV2Schema.safeParse(header);
+  const result = settingsSchema.safeParse(value);
   if (!result.success) {
     const field = result.error.issues[0]?.path[0];
     throw new Error(
-      isInvalidPart(field) ? invalidPart[field] : "Invalid user settings",
+      isInvalidPart(field) ? invalidPart[field] : invalidSettings,
     );
   }
-  const settings = result.data;
-  const { skills, connection, gitWorkspace, localWorkspace, environment } =
-    settings;
-  if (
-    new Set(skills.map((skill) => skill.id.toLowerCase())).size !==
-    skills.length
-  )
-    throw new Error("Invalid user settings: duplicate Skill ID");
+  // Keys older files had (a format `version` and a `skills` list) are left
+  // out here, so the next save removes them.
+  const { version, skills, ...settings } = result.data;
+  void version;
+  void skills;
+  const { connection, gitWorkspace, localWorkspace, environment } = settings;
   if (connection && gitWorkspace)
     throw new Error(
       "Invalid user settings: use only one of connection and gitWorkspace",
     );
   const selectsRemoteAssets =
-    skills.some((skill) => skill.kind === "api") ||
-    (environment &&
-      (environment.subscriptions.length ||
-        environment.individualAssetIds.length) &&
-      !gitWorkspace &&
-      !localWorkspace);
+    environment &&
+    (environment.subscriptions.length ||
+      environment.individualAssetIds.length) &&
+    !gitWorkspace &&
+    !localWorkspace;
   if (selectsRemoteAssets && !connection)
     throw new Error(
       "Invalid user settings: API selections require a connection",
@@ -220,14 +152,20 @@ export async function readSettings(
   }
 }
 
+/** The file's text, after checking the settings are valid. */
+export function settingsText(settings: Settings): string {
+  validate(settings);
+  return stringify(settings);
+}
+
 export async function saveSettings(
   settings: Settings,
   home = homedir(),
 ): Promise<void> {
-  validate(settings);
+  const text = settingsText(settings);
   const path = settingsPath(home);
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
   const temporary = `${path}.${randomUUID()}.tmp`;
-  await writeFile(temporary, stringify(settings), { mode: 0o600 });
+  await writeFile(temporary, text, { mode: 0o600 });
   await rename(temporary, path);
 }

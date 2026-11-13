@@ -19,7 +19,7 @@ import type {
   workingDiff,
   workingStatus,
 } from "../features/collaboration/index.js";
-import type { SyncEvent } from "../features/skills/sync.js";
+import type { SyncEvent } from "../features/environment/events.js";
 import type { SyncOptions } from "../features/environment/sync.js";
 import type {
   changeAsset,

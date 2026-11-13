@@ -6,7 +6,6 @@ import {
   readSettings,
   SetupRequiredError,
   type Settings,
-  type SettingsV2,
 } from "../../config/settings.js";
 import { selectionState, withSelection } from "../../config/environment.js";
 import {
@@ -25,7 +24,7 @@ import type {
   SelectionState,
   Subscription,
 } from "../asset-selection/types.js";
-import type { SyncEvent } from "../skills/sync.js";
+import type { SyncEvent } from "./events.js";
 import { environmentCatalog, request } from "./remote.js";
 import { matchesOrigin } from "../collaboration/remote.js";
 import { locked } from "./transaction.js";
@@ -188,7 +187,7 @@ function withLockedWorkspace<T>(
 async function syncSelection(
   workspace: Workspace,
   state: SelectionState,
-  next: SettingsV2 = withSelection(workspace.settings, state),
+  next: Settings = withSelection(workspace.settings, state),
 ): Promise<Applied> {
   return {
     status: "applied",
@@ -243,7 +242,7 @@ function assetId(
 ) {
   const { settings, catalog, identity } = workspace;
   const command = `barndog ${assetKinds[target.kind].command} ${change}`;
-  const localNames = settings.version === 2 ? (settings.localNames ?? {}) : {};
+  const localNames = settings.localNames ?? {};
   const named = catalog.assets.filter(
     (a) =>
       a.kind === target.kind &&
@@ -323,7 +322,7 @@ export function renameAsset(
     const id = assetId(workspace, target, "rename");
     const asset = catalog.assets.find((a) => a.id === id);
     const names = {
-      ...(settings.version === 2 ? (settings.localNames ?? {}) : {}),
+      ...(settings.localNames ?? {}),
     };
     if (target.reset || target.as === asset?.name) delete names[id];
     else {
@@ -348,7 +347,7 @@ export function renameAsset(
         );
       names[id] = name;
     }
-    const next: SettingsV2 = withSelection(settings, current);
+    const next: Settings = withSelection(settings, current);
     if (Object.keys(names).length) next.localNames = names;
     else delete next.localNames;
     return syncSelection(workspace, current, next);
@@ -521,10 +520,9 @@ export function setKnowledge(
   return locked(home, async () => {
     const settings = await readRequiredSettings(home);
     if (
-      settings.version !== 2 ||
-      (!settings.connection &&
-        !settings.gitWorkspace &&
-        !settings.localWorkspace)
+      !settings.connection &&
+      !settings.gitWorkspace &&
+      !settings.localWorkspace
     )
       throw new Error("Set up a workspace with barndog init first");
     return {

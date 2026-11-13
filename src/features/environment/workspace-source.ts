@@ -20,7 +20,6 @@ export function openRepoSource(
   home: string,
   options: SourceOptions = {},
 ): RepoSource | undefined {
-  if (settings.version !== 2) return undefined;
   if (settings.gitWorkspace)
     return gitRepoSource(settings.gitWorkspace, home, options);
   if (settings.localWorkspace && !settings.connection)
@@ -33,10 +32,9 @@ export function openWorkspaceSource(
   home: string,
   options: SourceOptions = {},
 ): WorkspaceSource | undefined {
-  const primary =
-    settings.version === 2 && settings.connection
-      ? cloudSource(settings.connection, home)
-      : openRepoSource(settings, home, options);
+  const primary = settings.connection
+    ? cloudSource(settings.connection, home)
+    : openRepoSource(settings, home, options);
   const overlay = localOverlay(settings, home);
   return primary && overlay ? withOverlay(primary, overlay) : primary;
 }

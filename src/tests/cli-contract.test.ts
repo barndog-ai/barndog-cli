@@ -67,7 +67,7 @@ async function localHome(t: TestContext) {
     choose: async () => ["claude"],
   });
   const settings = await readSettings(home);
-  assert(settings?.version === 2 && settings.localWorkspace);
+  assert(settings?.localWorkspace);
   return { root, home, folder: settings.localWorkspace.path };
 }
 

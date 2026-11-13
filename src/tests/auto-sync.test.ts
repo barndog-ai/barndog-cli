@@ -5,14 +5,14 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { saveSettings, type SettingsV2 } from "../config/settings.js";
+import { saveSettings, type Settings } from "../config/settings.js";
 import { updateCredentials } from "../features/auth/credentials.js";
 import { autoSync } from "../features/environment/auto-sync.js";
 import { synchronize } from "../features/environment/sync.js";
 
 type TestContext = import("vitest").TestContext;
 
-async function connectedHome(t: TestContext, extra: Partial<SettingsV2> = {}) {
+async function connectedHome(t: TestContext, extra: Partial<Settings> = {}) {
   const home = await mkdtemp(join(tmpdir(), "barndog-auto-sync-"));
 
   t.onTestFinished(() => rm(home, { recursive: true, force: true }));
@@ -77,9 +77,7 @@ async function connectedHome(t: TestContext, extra: Partial<SettingsV2> = {}) {
 
   await saveSettings(
     {
-      version: 2,
       harnesses: ["claude"],
-      skills: [],
       knowledge: false,
       connection: { server: url, organizationId, developerId },
       environment: {

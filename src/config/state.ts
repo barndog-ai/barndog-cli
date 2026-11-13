@@ -1,4 +1,4 @@
-import { readFile, readlink, rename, writeFile } from "node:fs/promises";
+import { readFile, readlink } from "node:fs/promises";
 import { basename, dirname, isAbsolute } from "node:path";
 import {
   isHarness,
@@ -95,10 +95,4 @@ export async function readState(path: string, home: string): Promise<State> {
     });
   }
   return { ...value, version: 1, links: checked };
-}
-
-export async function saveState(path: string, state: State) {
-  const temp = `${path}.${process.pid}.tmp`;
-  await writeFile(temp, `${JSON.stringify(state, null, 2)}\n`, { mode: 0o600 });
-  await rename(temp, path);
 }

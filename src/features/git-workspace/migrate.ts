@@ -15,7 +15,6 @@ import {
   readSettings,
   saveSettings,
   SetupRequiredError,
-  upgradeSettings,
   type Connection,
 } from "../../config/settings.js";
 import { CliError } from "../../errors.js";
@@ -202,7 +201,6 @@ export async function migrate(
     if (!settings) throw new SetupRequiredError();
     const source = openRepoSource(settings, home);
     if (
-      settings.version === 2 &&
       !settings.gitWorkspace &&
       settings.localWorkspace &&
       !settings.connection
@@ -295,10 +293,9 @@ export async function migrate(
       );
     for (const publish of pending) await publish();
     const { catalog } = await environmentCatalog(home, conn);
-    const upgraded = upgradeSettings(settings);
     const next = withSelection(
       {
-        ...upgraded,
+        ...settings,
         connection: conn,
         gitWorkspace: undefined,
       },

@@ -101,7 +101,7 @@ export async function doctor(home = homedir()): Promise<Check[]> {
       fix: found ? undefined : "barndog init",
     });
   }
-  const connected = settings.version === 2 ? settings.connection : undefined;
+  const connected = settings.connection;
   if (connected) {
     try {
       const session = await authStatus(home, connected.server);
@@ -121,7 +121,7 @@ export async function doctor(home = homedir()): Promise<Check[]> {
       return checks;
     }
   }
-  if (settings.version === 2 && settings.gitWorkspace)
+  if (settings.gitWorkspace)
     checks.push(...(await gitChecks(settings.gitWorkspace, home)));
   try {
     const events = await synchronize(undefined, home, undefined, {

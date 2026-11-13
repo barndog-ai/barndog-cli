@@ -61,11 +61,9 @@ export function adaptPrompt(input: AdaptInput) {
 async function resolveHook(name: string, origin: string, home: string) {
   const settings = await readSettings(home);
   if (!settings) throw new SetupRequiredError();
-  const local = settings.version === 2 ? settings.localWorkspace : undefined;
-  const git = settings.version === 2 ? settings.gitWorkspace : undefined;
-  const shared = Boolean(
-    settings.version === 2 && (git || settings.connection),
-  );
+  const local = settings.localWorkspace;
+  const git = settings.gitWorkspace;
+  const shared = Boolean(git || settings.connection);
   const repo = repoForOrigin(settings, home, origin);
   if (!repo) {
     const selected = await selectAsset("hook", name, origin, home);

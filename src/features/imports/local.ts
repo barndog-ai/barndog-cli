@@ -1,6 +1,6 @@
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { join } from "node:path";
 
 import {
   packageFingerprint,
@@ -16,13 +16,11 @@ import { selectionState, withSelection } from "../../config/environment.js";
 import {
   readSettings,
   saveSettings,
-  settingsPath,
   SetupRequiredError,
-  upgradeSettings,
   type LocalWorkspace,
   type Settings,
 } from "../../config/settings.js";
-import { CliError, friendlyMessage, errorCode } from "../../errors.js";
+import { CliError, errorCode } from "../../errors.js";
 import { renameSkillEntries } from "../environment/installed.js";
 import {
   assertAssetName,
@@ -32,12 +30,7 @@ import {
 import { withLocalSubscription } from "../git-workspace/overlay.js";
 import { localWorkspace } from "../git-workspace/setup.js";
 import { localRepoSource } from "../git-workspace/source.js";
-import {
-  discoverSkills,
-  folderEntries,
-  type SkillCandidate,
-} from "./discover.js";
-import { readFolder } from "./folder.js";
+import { folderEntries, type SkillCandidate } from "./discover.js";
 import { fetchRemote, type RemoteRepo } from "./remote.js";
 import {
   assetKinds,
@@ -97,7 +90,7 @@ export async function importedFrom(
   home = homedir(),
 ) {
   const settings = await readSettings(home);
-  if (settings?.version !== 2 || !settings.localWorkspace) return null;
+  if (!settings || !settings.localWorkspace) return null;
   const { imports } = await readSources(settings.localWorkspace.path);
   return imports.find((e) => e.kind === kind && e.name === name) ?? null;
 }
@@ -108,12 +101,11 @@ export async function ensureLocalWorkspace(
 ): Promise<LocalWorkspace> {
   const settings = await readSettings(home);
   if (!settings) throw new SetupRequiredError();
-  if (settings.version === 2 && settings.localWorkspace)
-    return settings.localWorkspace;
+  if (settings.localWorkspace) return settings.localWorkspace;
   const workspace = await localWorkspace(home);
   const kept = await localRepoSource(workspace, home).model();
   const next: Settings = {
-    ...upgradeSettings(settings),
+    ...settings,
     localWorkspace: workspace,
   };
   await saveSettings(
@@ -121,85 +113,6 @@ export async function ensureLocalWorkspace(
     home,
   );
   return workspace;
-}
-
-/**
- * Brings Skills linked from outside folders into the workspace, so every asset on
- * this machine lives in one place. The originals are left alone.
- */
-export async function adoptLinkedFolders(home: string): Promise<string[]> {
-  const settings = await readSettings(home);
-  if (!settings) return [];
-  const linked = upgradeSettings(settings).skills.filter(
-    (skill) => skill.kind === "local",
-  );
-  if (!linked.length) return [];
-  const notices: string[] = [];
-  const adopted: { id: string; name: string; enabled: boolean }[] = [];
-  for (const entry of linked) {
-    const source = resolve(dirname(settingsPath(home)), entry.source);
-    try {
-      const remote = await readFolder(source);
-      const { skills, skipped } = discoverSkills(remote);
-      const skill = skills.find((s) => s.root === "");
-      if (!skill)
-        throw new CliError(skipped[0]?.reason ?? "It has no valid SKILL.md.");
-      await saveImported(
-        {
-          kind: "skill",
-          name: skill.name,
-          entries: skill.entries,
-          mode: "fork",
-          remote,
-          root: "",
-        },
-        home,
-      );
-      adopted.push({ id: entry.id, name: skill.name, enabled: entry.enabled });
-      notices.push(
-        `Copied ${skill.name} into your workspace. The original folder wasn't changed.`,
-      );
-    } catch (error) {
-      notices.push(
-        `Couldn't copy ${source} into your workspace, so it stays linked for now: ${friendlyMessage(error)}`,
-      );
-    }
-  }
-  if (!adopted.length) return notices;
-  const current = upgradeSettings(
-    defined(await readSettings(home), "Settings disappeared during adoption"),
-  );
-  const ids = new Set(adopted.map((skill) => skill.id));
-  const skills = current.skills.filter((skill) => !ids.has(skill.id));
-  const off = new Set(adopted.filter((s) => !s.enabled).map((s) => s.name));
-  const selection = selectionState(current);
-  const assets = off.size
-    ? (
-        await localRepoSource(
-          defined(current.localWorkspace, "Adoption needs a local workspace"),
-          home,
-        ).model()
-      ).assets
-    : [];
-  await saveSettings(
-    off.size
-      ? {
-          ...current,
-          skills,
-          environment: {
-            ...selection,
-            disabledAssetIds: [
-              ...selection.disabledAssetIds,
-              ...assets
-                .filter((a) => a.kind === "skill" && off.has(a.name))
-                .map((a) => a.id),
-            ],
-          },
-        }
-      : { ...current, skills },
-    home,
-  );
-  return notices;
 }
 
 function folderFor(kind: PackageKind, name: string) {
@@ -339,7 +252,7 @@ export async function updateImported(
   home = homedir(),
 ) {
   const settings = await readSettings(home);
-  if (settings?.version !== 2 || !settings.localWorkspace)
+  if (!settings || !settings.localWorkspace)
     throw new CliError("This machine has no assets added from a repo.");
   const folder = settings.localWorkspace.path;
   const sources = await readSources(folder);

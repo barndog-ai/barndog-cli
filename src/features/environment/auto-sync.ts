@@ -86,11 +86,7 @@ export async function autoSync(
 ): Promise<void> {
   const settings = await readSettings(home);
 
-  if (
-    settings?.version !== 2 ||
-    !settings.connection ||
-    settings.localWorkspace
-  ) {
+  if (!settings || !settings.connection || settings.localWorkspace) {
     await sync();
 
     return;

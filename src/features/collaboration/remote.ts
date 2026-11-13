@@ -26,7 +26,7 @@ import { splitOrigin } from "../../shared/patterns.js";
 export async function connection(home = homedir(), expected?: Connection) {
   const settings = await readSettings(home);
   if (
-    settings?.version === 2 &&
+    settings &&
     !settings.connection &&
     (settings.gitWorkspace || settings.localWorkspace)
   )
@@ -36,7 +36,7 @@ export async function connection(home = homedir(), expected?: Connection) {
         ? "barndog migrate --to <server>"
         : "barndog init --server <url>",
     );
-  if (!settings || settings.version !== 2 || !settings.connection)
+  if (!settings || !settings.connection)
     throw new CliError(
       "This machine isn't connected to a BarnDog workspace.",
       "barndog init",

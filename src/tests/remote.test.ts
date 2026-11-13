@@ -2,26 +2,11 @@ import { updateCredentials } from "../features/auth/credentials.js";
 import { expect, test, type TestContext } from "vitest";
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
-import {
-  mkdir,
-  mkdtemp,
-  readFile,
-  realpath,
-  rm,
-  writeFile,
-  readlink,
-} from "node:fs/promises";
+import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Skill } from "@barndog-ai/api-contract";
-import { catalog, connect } from "../features/skills/remote.js";
-import {
-  readSettings,
-  saveSettings,
-  settingsPath,
-} from "../config/settings.js";
-import { initialize } from "../features/onboarding/setup.js";
-import { sync } from "../features/skills/sync.js";
+import { catalog } from "../features/skills/remote.js";
 
 async function fixture(t: TestContext) {
   const home = await realpath(await mkdtemp(join(tmpdir(), "barndog-remote-")));
@@ -154,77 +139,4 @@ test("catalog retrieves every page before selection; rejects malformed and cycli
   await expect(catalog(f.connection, f.home)).rejects.toThrow(/pagination/);
   f.malformed();
   await expect(catalog(f.connection, f.home)).rejects.toThrow();
-});
-test("connecting upgrades v1 only on requested save and keeps local sources and activation", async (t) => {
-  const f = await fixture(t);
-  const skills = [{ id: randomUUID(), source: "../my-skill", enabled: false }];
-  await saveSettings({ version: 1, skills, harnesses: ["codex"] }, f.home);
-  const before = await readFile(settingsPath(f.home), "utf8");
-  await readSettings(f.home);
-  expect(await readFile(settingsPath(f.home), "utf8")).toBe(before);
-  await connect(f.connection.server, f.home);
-  const after = await readSettings(f.home);
-  expect(after!.version).toBe(2);
-  expect(after!.skills).toStrictEqual([{ ...skills[0], kind: "local" }]);
-  expect(after!.harnesses).toStrictEqual(["codex"]);
-  f.fail();
-  const saved = await readFile(settingsPath(f.home), "utf8");
-  await expect(
-    initialize({
-      home: f.home,
-      server: f.connection.server,
-      detected: [],
-      choose: async () => ["claude"],
-    }),
-  ).rejects.toThrow();
-  expect(await readFile(settingsPath(f.home), "utf8")).toBe(saved);
-});
-test("API failures, missing selections and failed downloads preserve installed local files and state", async (t) => {
-  const f = await fixture(t);
-  const source = join(f.home, "local-skill");
-  await mkdir(source);
-  await writeFile(
-    join(source, "SKILL.md"),
-    "---\nname: local-skill\ndescription: local\n---\n",
-  );
-  await saveSettings(
-    {
-      version: 1,
-      harnesses: ["codex"],
-      skills: [{ id: randomUUID(), source, enabled: true }],
-    },
-    f.home,
-  );
-  await sync(undefined, f.home);
-  const installed = join(f.home, ".agents", "skills", "local-skill");
-  const statePath = join(f.home, ".barndog", "state.json");
-  const previous = await readFile(statePath, "utf8");
-  await connect(f.connection.server, f.home);
-  const next = await readSettings(f.home);
-  if (!next || next.version !== 2) throw new Error("Expected v2");
-  next.skills.push({ kind: "api", id: randomUUID(), enabled: true });
-  await saveSettings(next, f.home);
-  await expect(sync(undefined, f.home)).rejects.toThrow(
-    /missing from the server/,
-  );
-  next.skills.pop();
-  next.skills.push({ kind: "api", id: f.skills[0]!.id, enabled: true });
-  await saveSettings(next, f.home);
-  await expect(sync(undefined, f.home)).rejects.toThrow(
-    /Package download failed/,
-  );
-  f.malformed();
-  await expect(sync(undefined, f.home)).rejects.toThrow();
-  f.fail();
-  await expect(sync(undefined, f.home)).rejects.toThrow();
-  expect(await readlink(installed)).toBe(source);
-  expect(await readFile(statePath, "utf8")).toBe(previous);
-  // A v2 local-only configuration remains independent of server availability.
-  next.skills = next.skills.filter((skill) => skill.kind === "local");
-  await saveSettings(next, f.home);
-  expect(
-    (await sync(undefined, f.home)).every(
-      (event) => event.type === "unchanged",
-    ),
-  ).toBeTruthy();
 });

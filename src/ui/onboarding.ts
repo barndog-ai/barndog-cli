@@ -85,11 +85,10 @@ async function chooseSource(
 ): Promise<SetupChoice> {
   const server = await configuredServer(home);
   if (!previous) return server ? { kind: "cloud", server } : choose();
-  const saved = previous.version === 2 ? previous : undefined;
   return choose(
-    saved?.gitWorkspace
-      ? { kind: "git", url: saved.gitWorkspace.url }
-      : saved?.localWorkspace
+    previous.gitWorkspace
+      ? { kind: "git", url: previous.gitWorkspace.url }
+      : previous.localWorkspace
         ? { kind: "local" }
         : server
           ? { kind: "cloud", server }
@@ -263,9 +262,7 @@ export async function runSetup(
     );
   }
   const keptFolder =
-    previous?.version === 2 && choice.kind !== "local"
-      ? previous.localWorkspace
-      : undefined;
+    previous && choice.kind !== "local" ? previous.localWorkspace : undefined;
   const localCount = keptFolder
     ? await localRepoSource(keptFolder, home)
         .model()
@@ -298,18 +295,13 @@ export async function runSetup(
         ["Coding tools", settings.harnesses.join(", ") || "none"],
         [
           "Workspace",
-          settings.version === 2
-            ? (settings.connection?.server ??
-              settings.gitWorkspace?.url ??
-              settings.localWorkspace?.path)
-            : undefined,
+          settings.connection?.server ??
+            settings.gitWorkspace?.url ??
+            settings.localWorkspace?.path,
         ],
       ]))
         write(line);
-      if (
-        settings.version === 2 &&
-        (settings.connection || settings.gitWorkspace)
-      ) {
+      if (settings.connection || settings.gitWorkspace) {
         const selection = selectionState(settings);
         write("");
         write(

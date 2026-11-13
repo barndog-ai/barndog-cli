@@ -16,7 +16,6 @@ import type {
   GitWorkspace,
   LocalWorkspace,
   Settings,
-  SettingsV2,
 } from "../../config/settings.js";
 import { homedir } from "node:os";
 import { detectHarnesses } from "../../harnesses/detect.js";
@@ -25,7 +24,6 @@ import {
   readSettings,
   saveSettings,
   settingsPath,
-  upgradeSettings,
 } from "../../config/settings.js";
 
 import { connectionContext } from "../skills/remote.js";
@@ -43,20 +41,19 @@ export type ChosenWorkspace =
   { kind: "git"; git: GitWorkspace } | { kind: "local"; local: LocalWorkspace };
 
 /** Only one source can be active, and API selections mean nothing without cloud. */
-function withoutSource(settings: SettingsV2): SettingsV2 {
+function withoutSource(settings: Settings): Settings {
   const { connection, gitWorkspace, localWorkspace, ...rest } = settings;
   void connection;
   void gitWorkspace;
   void localWorkspace;
-  return { ...rest, skills: rest.skills.filter((s) => s.kind === "local") };
+  return rest;
 }
 
 function applyWorkspace(settings: Settings, chosen: ChosenWorkspace) {
-  const upgraded = upgradeSettings(settings);
-  const previousId = (upgraded.gitWorkspace ?? upgraded.localWorkspace)
+  const previousId = (settings.gitWorkspace ?? settings.localWorkspace)
     ?.workspaceId;
-  const next: SettingsV2 = {
-    ...withoutSource(upgraded),
+  const next: Settings = {
+    ...withoutSource(settings),
     ...(chosen.kind === "git"
       ? { gitWorkspace: chosen.git }
       : { localWorkspace: chosen.local }),
@@ -98,9 +95,9 @@ export async function initialize(options: {
       checked: previous?.harnesses.includes(harness.id) ?? false,
     }));
     const selected = await options.choose(choices);
-    let next = previous
+    let next: Settings = previous
       ? { ...previous, harnesses: selected }
-      : { version: 1 as const, harnesses: selected, skills: [] };
+      : { harnesses: selected };
     if (options.workspace) {
       next = applyWorkspace(next, options.workspace);
       const model =
@@ -127,30 +124,25 @@ export async function initialize(options: {
     }
     if (options.server) {
       const connection = await connectionContext(options.server, home);
-      const upgraded = upgradeSettings(next);
       if (
-        hasRemoteSelections(upgraded) &&
-        upgraded.connection &&
-        (upgraded.connection.server !== connection.server ||
-          upgraded.connection.organizationId !== connection.organizationId ||
-          upgraded.connection.developerId !== connection.developerId)
+        hasRemoteSelections(next) &&
+        next.connection &&
+        (next.connection.server !== connection.server ||
+          next.connection.organizationId !== connection.organizationId ||
+          next.connection.developerId !== connection.developerId)
       )
         throw new Error(
           "Remove API selections before switching server, organization, or developer",
         );
-      if (upgraded.gitWorkspace || upgraded.localWorkspace) {
+      if (next.gitWorkspace || next.localWorkspace) {
         // Repo asset IDs mean nothing to a server, so those choices can't carry over.
-        const { environment, localNames, ...cleared } = withoutSource(upgraded);
+        const { environment, localNames, ...cleared } = withoutSource(next);
         void environment;
         void localNames;
         next = { ...cleared, connection };
-      } else next = { ...upgraded, connection };
+      } else next = { ...next, connection };
     }
-    if (
-      options.chooseEnvironment &&
-      next.version === 2 &&
-      (next.connection || next.gitWorkspace)
-    ) {
+    if (options.chooseEnvironment && (next.connection || next.gitWorkspace)) {
       const choices = await onboardingEnvironment(next, home);
       next = selectedEnvironment(
         next,
@@ -161,7 +153,7 @@ export async function initialize(options: {
     if (options.keepLocal) {
       const kept = await localRepoSource(options.keepLocal, home).model();
       const settings = {
-        ...upgradeSettings(next),
+        ...next,
         localWorkspace: options.keepLocal,
       };
       next = withSelection(
@@ -169,10 +161,7 @@ export async function initialize(options: {
         withLocalSubscription(selectionState(settings), kept),
       );
     }
-    if (
-      next.version === 2 &&
-      (next.connection || next.gitWorkspace || next.localWorkspace)
-    ) {
+    if (next.connection || next.gitWorkspace || next.localWorkspace) {
       next = { ...next, knowledge: next.knowledge ?? true };
     }
     if (options.confirm && !(await options.confirm(next))) {

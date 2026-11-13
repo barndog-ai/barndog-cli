@@ -11,7 +11,7 @@ import {
   readSettings,
   saveSettings,
   settingsPath,
-  type SettingsV2,
+  type Settings,
 } from "../config/settings.js";
 import { updateCredentials } from "../features/auth/credentials.js";
 import {
@@ -156,10 +156,8 @@ test("connected onboarding loads actual membership without using repository sugg
       context,
     };
   });
-  const settings: SettingsV2 = {
-    version: 2,
+  const settings: Settings = {
     harnesses: [],
-    skills: [],
     knowledge: false,
     connection: { server: url, organizationId: org, developerId: developer },
     environment: {
@@ -193,12 +191,11 @@ test("connected onboarding loads actual membership without using repository sugg
     },
   });
   const saved = await readSettings(home);
-  expect(saved?.version).toBe(2);
-  expect((saved as SettingsV2).environment?.excludedAssetIds).toStrictEqual([
+  expect((saved as Settings).environment?.excludedAssetIds).toStrictEqual([
     asset,
   ]);
-  expect((saved as SettingsV2).knowledge).toBe(false);
-  expect((saved as SettingsV2).environment?.subscriptions[0]?.mode).toBe(
+  expect((saved as Settings).knowledge).toBe(false);
+  expect((saved as Settings).environment?.subscriptions[0]?.mode).toBe(
     "optional",
   );
   const before = await readFile(settingsPath(home), "utf8");
@@ -261,10 +258,7 @@ test("inspection command routing is separate from working-copy workflows", async
 test("local-only environment inspection and synchronization preview need no server", async (t) => {
   const home = await mkdtemp(join(tmpdir(), "barndog-local-inspect-"));
   t.onTestFinished(() => rm(home, { recursive: true, force: true }));
-  await saveSettings(
-    { version: 1, harnesses: ["claude", "codex"], skills: [] },
-    home,
-  );
+  await saveSettings({ harnesses: ["claude", "codex"] }, home);
   const before = await readFile(settingsPath(home), "utf8");
   const diff = (await workingDiff(home, home)) as {
     mode: string;

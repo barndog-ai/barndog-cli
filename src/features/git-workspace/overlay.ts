@@ -60,7 +60,6 @@ export function localOverlay(
   home: string,
 ): RepoSource | undefined {
   if (
-    settings.version !== 2 ||
     !settings.localWorkspace ||
     (!settings.connection && !settings.gitWorkspace)
   )

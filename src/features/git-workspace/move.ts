@@ -398,7 +398,7 @@ export function moveLocalAssets(
   return locked(home, async () => {
     const settings = await readSettings(home);
     if (!settings) throw new SetupRequiredError();
-    if (settings.version !== 2 || !settings.localWorkspace)
+    if (!settings.localWorkspace)
       throw new CliError("This machine has no local assets to move.");
     const overlay = localRepoSource(settings.localWorkspace, home);
     const shared =
@@ -460,7 +460,7 @@ export function moveLocalAssets(
 
 export async function listLocalAssets(home = homedir()) {
   const settings = await readSettings(home);
-  if (settings?.version !== 2 || !settings.localWorkspace)
+  if (!settings || !settings.localWorkspace)
     throw new CliError(
       "This machine has no local assets.",
       "barndog init --local",

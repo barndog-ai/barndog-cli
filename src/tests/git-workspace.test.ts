@@ -11,8 +11,10 @@ import {
   mkdtemp,
   readdir,
   readFile,
+  readlink,
   realpath,
   rm,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -20,11 +22,7 @@ import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 
 import { defaultServer } from "../config/build.js";
-import {
-  readSettings,
-  saveSettings,
-  type SettingsV2,
-} from "../config/settings.js";
+import { readSettings, saveSettings } from "../config/settings.js";
 import { z } from "zod";
 
 import { CliError, friendlyMessage } from "../errors.js";
@@ -194,7 +192,7 @@ async function setupLocal(home: string) {
     choose: async () => ["claude"],
   });
   const settings = await readSettings(home);
-  assert(settings?.version === 2 && settings.localWorkspace);
+  assert(settings?.localWorkspace);
   return settings.localWorkspace.path;
 }
 
@@ -265,7 +263,7 @@ const installed = (home: string, path: string) =>
 
 const gitWorkspaceId = async (home: string) => {
   const settings = await readSettings(home);
-  assert(settings?.version === 2 && settings.gitWorkspace);
+  assert(settings?.gitWorkspace);
   return settings.gitWorkspace.workspaceId;
 };
 
@@ -307,7 +305,7 @@ test("an admin creates a workspace and a member installs every asset kind", asyn
   const member = join(root, "member");
   await setupGit(url, member);
   const settings = await readSettings(member);
-  assert(settings?.version === 2 && settings.gitWorkspace);
+  assert(settings?.gitWorkspace);
   expect(settings.gitWorkspace.branch).toBe("main");
   expect(settings.connection).toBe(undefined);
   expect(await installed(member, "skills/code-review/SKILL.md")).toMatch(
@@ -401,7 +399,7 @@ for (const newcomer of ["org", "teams/web"]) {
     const member = join(root, "member");
     await setupGit(url, member, undefined, everyScope);
     const settings = await readSettings(member);
-    assert(settings?.version === 2);
+    assert(settings);
     const state = JSON.parse(
       await readFile(join(member, ".barndog/state.json"), "utf8"),
     );
@@ -607,7 +605,7 @@ test("an invalid Skill renamed since it broke still holds its installed name", a
   );
   await commit(clone, "Break and add");
   const settings = await readSettings(member);
-  assert(settings?.version === 2);
+  assert(settings);
   await saveSettings({ ...settings, localNames: { [id]: "renamed" } }, member);
   const events = await synchronize(undefined, member);
   expect(
@@ -618,7 +616,7 @@ test("an invalid Skill renamed since it broke still holds its installed name", a
     /Do the thing/,
   );
   const saved = await readSettings(member);
-  assert(saved?.version === 2);
+  assert(saved);
   expect(saved.localNames?.[id]).toBe("renamed");
   // Its installed name isn't free just because a rename is waiting on a fix.
   await expect(
@@ -706,7 +704,7 @@ test("a Cloud machine with a local folder keeps Cloud collaboration", async (t) 
   const home = await temp(t);
   await setupLocal(home);
   const settings = await readSettings(home);
-  assert(settings?.version === 2);
+  assert(settings);
   await saveSettings(
     {
       ...settings,
@@ -863,9 +861,7 @@ test("a terminal clone connects the workspace and an empty repo returns null", a
   expect(workspace?.branch).toBe("main");
   await saveSettings(
     {
-      version: 2,
       harnesses: ["claude"],
-      skills: [],
       gitWorkspace: workspace!,
     },
     home,
@@ -880,17 +876,9 @@ test("a terminal clone connects the workspace and an empty repo returns null", a
 test("starting over offers every source without contacting the saved server", async (t) => {
   const root = await temp(t);
   const home = join(root, "home");
-  const local = {
-    kind: "local" as const,
-    id: randomUUID(),
-    source: "./skills/mine",
-    enabled: true,
-  };
   await saveSettings(
     {
-      version: 2,
       harnesses: ["claude"],
-      skills: [local, { kind: "api", id: randomUUID(), enabled: true }],
       // Nothing listens here, so any request would fail setup.
       connection: {
         server: "http://127.0.0.1:9",
@@ -900,8 +888,6 @@ test("starting over offers every source without contacting the saved server", as
     },
     home,
   );
-  await mkdir(join(home, ".barndog/skills/mine"), { recursive: true });
-  await write(join(home, ".barndog"), "skills/mine/SKILL.md", skill("mine"));
   let offered: unknown;
   await runSetup({
     home,
@@ -922,9 +908,8 @@ test("starting over offers every source without contacting the saved server", as
     server: "http://127.0.0.1:9",
   });
   const saved = await readSettings(home);
-  assert(saved?.version === 2 && saved.localWorkspace);
+  assert(saved?.localWorkspace);
   expect(saved.connection).toBe(undefined);
-  expect(saved.skills).toStrictEqual([local]);
 });
 
 test("--local and --repo replace a connected source once confirmed", async (t) => {
@@ -932,9 +917,7 @@ test("--local and --repo replace a connected source once confirmed", async (t) =
   const home = join(root, "connected");
   await saveSettings(
     {
-      version: 2,
       harnesses: ["claude"],
-      skills: [],
       connection: {
         server: "http://127.0.0.1:9",
         organizationId: randomUUID(),
@@ -945,7 +928,7 @@ test("--local and --repo replace a connected source once confirmed", async (t) =
   );
   await setupGit(url, home);
   const saved = await readSettings(home);
-  assert(saved?.version === 2 && saved.gitWorkspace);
+  assert(saved?.gitWorkspace);
   expect(saved.connection).toBe(undefined);
 });
 
@@ -980,7 +963,7 @@ test("choosing cloud clears a repo workspace and its choices", async (t) => {
     choose: async () => [],
   });
   const saved = await readSettings(home);
-  assert(saved?.version === 2 && saved.connection);
+  assert(saved?.connection);
   expect(saved.gitWorkspace).toBe(undefined);
   expect(saved.environment).toBe(undefined);
 });
@@ -990,7 +973,7 @@ test("--repo accepts a clone on disk and uses the remote it came from", async (t
   const member = join(root, "member");
   await setupGit(clone, member);
   const settings = await readSettings(member);
-  expect(settings?.version === 2 && settings.gitWorkspace?.url).toBe(url);
+  expect(settings?.gitWorkspace?.url).toBe(url);
 });
 
 test("sync uses the last fetch when the host is unreachable", async (t) => {
@@ -1248,7 +1231,7 @@ test("local mode delivers every kind from a folder and needs no Git", async (t) 
     choose: async () => ["claude"],
   });
   const settings = await readSettings(home);
-  assert(settings?.version === 2 && settings.localWorkspace);
+  assert(settings?.localWorkspace);
   const folder = settings.localWorkspace.path;
   await addAssets(folder);
   await synchronize(undefined, home);
@@ -1273,6 +1256,35 @@ test("local mode delivers every kind from a folder and needs no Git", async (t) 
   await expect(
     pullPackage({ name: "code-review", origin: "org" }, root, home),
   ).rejects.toThrow(/Edit them directly/);
+});
+
+test("sync unlinks removed Skills and refuses to replace a link it doesn't own", async (t) => {
+  const root = await temp(t);
+  const home = join(root, "home");
+  await runSetup({
+    home,
+    local: true,
+    restart: true,
+    interactive: true,
+    detected: [],
+    write: () => {},
+    confirmApply: async () => true,
+    choose: async () => ["claude"],
+  });
+  const settings = await readSettings(home);
+  assert(settings?.localWorkspace);
+  const folder = settings.localWorkspace.path;
+  const link = join(home, ".claude/skills/example");
+  await write(folder, "org/skills/example/SKILL.md", skill("example"));
+  await synchronize(undefined, home);
+  expect(await installed(home, "skills/example/SKILL.md")).toMatch(/example/);
+  await rm(join(folder, "org/skills/example"), { recursive: true });
+  await synchronize(undefined, home);
+  await expect(lstat(link)).rejects.toMatchObject({ code: "ENOENT" });
+  await write(folder, "org/skills/example/SKILL.md", skill("example"));
+  await symlink(root, link);
+  await expect(synchronize(undefined, home)).rejects.toThrow(/unmanaged/);
+  expect(await readlink(link)).toBe(root);
 });
 
 test("validate reports each problem for repo CI", async (t) => {
@@ -1300,9 +1312,7 @@ test("settings allow only one workspace and repo URLs are checked", async (t) =>
   await expect(
     saveSettings(
       {
-        version: 2,
         harnesses: [],
-        skills: [],
         gitWorkspace: { url: "a", branch: "main", workspaceId },
         connection: {
           server: "http://127.0.0.1:9",
@@ -1500,7 +1510,7 @@ test("migrate previews, then moves assets and choices to cloud by scope and name
   const done = await migrate({ server: origin }, home);
   expect(done.migrated).toBe(true);
   const moved = await readSettings(home);
-  assert(moved?.version === 2 && moved.connection);
+  assert(moved?.connection);
   expect(moved.gitWorkspace).toBe(undefined);
   expect(moved.environment?.subscriptions).toStrictEqual([
     { scope: { type: "org", id: org }, mode: "all", enabled: true },
@@ -1583,9 +1593,7 @@ test("switching keeps local assets active next to the Git workspace", async (t) 
   await synchronize(undefined, home);
   await setupGit(url, home, "keep");
   const saved = await readSettings(home);
-  expect(
-    saved?.version === 2 && saved.gitWorkspace && saved.localWorkspace,
-  ).toBeTruthy();
+  expect(saved?.gitWorkspace && saved.localWorkspace).toBeTruthy();
   expect(await installed(home, "skills/mine/SKILL.md")).toMatch(/mine/);
   expect(await installed(home, "skills/code-review/SKILL.md")).toMatch(
     /code-review/,
@@ -1624,7 +1632,7 @@ test("leaving local assets uninstalls them and never touches the folder", async 
   await synchronize(undefined, home);
   await setupGit(url, home, "leave");
   const saved = await readSettings(home);
-  expect(saved?.version === 2 && saved.localWorkspace).toBe(undefined);
+  expect(saved?.localWorkspace).toBe(undefined);
   await expect(installed(home, "skills/mine/SKILL.md")).rejects.toThrow();
   expect(await readFile(join(folder, "org/skills/mine/SKILL.md"), "utf8")).toBe(
     skill("mine"),
@@ -1833,9 +1841,7 @@ test("moving to cloud defaults to personal and keeps knowledge within permission
     chooseLocalAssets: async () => "keep",
   });
   const saved = await readSettings(home);
-  expect(
-    saved?.version === 2 && saved.connection && saved.localWorkspace,
-  ).toBeTruthy();
+  expect(saved?.connection && saved.localWorkspace).toBeTruthy();
   expect(await readFile(join(home, ".claude.json"), "utf8")).toMatch(
     /DOCS_TOKEN/,
   );
@@ -1962,48 +1968,6 @@ test("a plain folder can be copied or moved into the workspace", async (t) => {
   await expect(
     addHook(join(root, "plain/keep"), {}, quiet(home)),
   ).rejects.toThrow(/isn't a Git repo/);
-});
-
-test("linked folders in the config are copied into the workspace on sync", async (t) => {
-  const { root, home, folder } = await localHome(t);
-  await write(
-    root,
-    "linked/SKILL.md",
-    "---\nname: linked\ndescription: Linked\n---\nBody\n",
-  );
-  const settings = (await readSettings(home)) as SettingsV2;
-  await saveSettings(
-    {
-      ...settings,
-      skills: [
-        {
-          id: "729b9d5a-4a8c-4aa7-9b8d-975a55ac373e",
-          source: join(root, "linked"),
-          enabled: true,
-          kind: "local",
-        },
-      ],
-    },
-    home,
-  );
-  const events = await synchronize(undefined, home, undefined, {
-    prompt: false,
-  });
-  expect(
-    events.some((e) => e.type === "notice" && /Copied linked/.test(e.message)),
-  ).toBeTruthy();
-  expect(((await readSettings(home)) as SettingsV2).skills.length).toBe(0);
-  expect(
-    await readFile(join(folder, "org/skills/linked/SKILL.md"), "utf8"),
-  ).toMatch(/name: linked/);
-  expect(await readFile(join(root, "linked/SKILL.md"), "utf8")).toMatch(
-    /name: linked/,
-  );
-  const [item] = (await inventory(home)).items.filter(
-    (i) => i.name === "linked",
-  );
-  expect(item?.origin).toBe("local");
-  expect(item?.state).toBe("installed");
 });
 
 test("setup asks nothing about an empty Git repo but still follows it", async () => {
@@ -2183,9 +2147,7 @@ test("a machine with only a Git workspace gains a local folder when adding", asy
   });
   await addSkills(source.url, { updates: "fork" }, quiet(home));
   const settings = await readSettings(home);
-  expect(
-    settings?.version === 2 && settings.gitWorkspace && settings.localWorkspace,
-  ).toBeTruthy();
+  expect(settings?.gitWorkspace && settings.localWorkspace).toBeTruthy();
   expect(await installed(home, "skills/extra/SKILL.md")).toMatch(/extra/);
 });
 
@@ -2707,9 +2669,7 @@ test("a local-only machine can promote to a repo without switching", async (t) =
   ).toMatch(/mine/);
   const settings = await readSettings(home);
   expect(
-    settings?.version === 2 &&
-      settings.localWorkspace &&
-      !settings.gitWorkspace,
+    settings && settings.localWorkspace && !settings.gitWorkspace,
   ).toBeTruthy();
   expect(await installed(home, "skills/mine/SKILL.md")).toMatch(/mine/);
   await assertCommandAvailable(

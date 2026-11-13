@@ -39,7 +39,7 @@ export async function currentSetupMode(
   home = homedir(),
 ): Promise<SetupMode | undefined> {
   const settings = await readSettings(home).catch(() => null);
-  if (settings?.version !== 2 || settings.connection) return undefined;
+  if (!settings || settings.connection) return undefined;
   if (settings.gitWorkspace) return "git";
   return settings.localWorkspace ? "local" : undefined;
 }
@@ -91,7 +91,7 @@ export async function assertCommandAvailable(
       throw new CliError("You aren't signed in.");
     return;
   }
-  if (settings?.version !== 2 || settings.connection) return;
+  if (!settings || settings.connection) return;
   const git = settings.gitWorkspace;
   const folder = settings.localWorkspace?.path;
   if (!git && !folder) return;

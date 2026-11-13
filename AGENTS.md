@@ -137,12 +137,10 @@ Connected setup preselects the organization and, when the developer belongs to e
 
 A set is an existing organization, team, or repository scope. Individually installing an asset records a persistent independent selection, even when a set already supplies it. Team switching replaces team subscriptions and retains other subscriptions, independent choices, exclusions, and activation overrides. `remove`, `enable`, `disable`, and `rename` exist under `skills`, `mcp`, and `hooks`; a removal also excludes an asset still supplied by a subscription. `sets switch` replaces the team or repository subscriptions of the same type. Reinstalling a scope or asset with existing overrides asks for a decision. Noninteractive callers must pass `--overrides preserve`, `--overrides clear`, or a JSON `--decisions` file containing `[{"assetId":"<uuid>","choice":"preserve"}]`.
 
-There is one user configuration, `~/.barndog/config.yaml`. All commands apply the same machine-wide environment regardless of the current directory. Version-1 local selections and version-2 API selections migrate without losing connection, harness, or activation settings. API selections live in `environment`:
+There is one user configuration, `~/.barndog/config.yaml`. All commands apply the same machine-wide environment regardless of the current directory. The file has one shape, `Settings` in `src/config/settings.ts`, with no format version. API selections live in `environment`:
 
 ```yaml
-version: 2
 harnesses: [claude, codex, cursor]
-skills: []
 connection:
   server: https://your-barndog.example
   organizationId: <uuid>
@@ -155,7 +153,7 @@ environment:
 knowledge: true
 ```
 
-`sync --config <path>` is an explicit one-shot delivery input that shares the user's installation ownership state. It does not establish project configuration or change the default preferences. The override must include `version`, `harnesses`, and `skills`. `fixtures/config.yaml` is a development example and is never loaded automatically.
+`sync --config <path>` is an explicit one-shot delivery input that shares the user's installation ownership state. It does not establish project configuration or change the default preferences. The override must include `harnesses`.
 
 `skills list`, `mcp list`, and `hooks list` show installed, then disabled, then available assets (origin, contributing sets, harnesses, state; `--paths` for locations). `--installed`, `--disabled`, and `--available` narrow the list. Catalog search (`skills search [query]`, also `mcp`/`hooks`) and `sets list` show 20 results per page by default with `--origin`, `--page`, and `--limit` (up to 100). Search and pagination filter the complete visible catalog locally; they do not install assets or change selections.
 
@@ -227,28 +225,13 @@ Connect, import, and transfer make GitHub authoritative. Working-copy `push` cre
 
 `--mode mirror` keeps BarnDog authoritative and uses internal collaboration. Divergence requires `github resolve-mirror <id> --action <use-barndog|use-mirror|disconnect> --expected-version <uuid> --expected-remote <sha|absent> --key <retry-key>`. No mode silently changes authority or overwrites unrelated history. `github import --authority barndog` makes an independent BarnDog-owned copy with published ancestry; `--authority github` (the default) keeps connected-import behavior. `github create-repository` creates a destination and exports published history; an ambiguous create never silently adopts an existing repository.
 
-## Legacy local-source format
-
-Version-1 configurations list local Skill directories directly and still work:
-
-```yaml
-version: 1
-harnesses: [claude, codex]
-skills:
-  - id: 729b9d5a-4a8c-4aa7-9b8d-975a55ac373e
-    source: ./skills/example
-    enabled: true
-```
-
-Each selection has a stable UUIDv4, a local source directory, and an explicit enabled flag. Relative sources resolve from the configuration file, so `./skills/example` means `~/.barndog/skills/example`; absolute paths also work. The directory must contain `SKILL.md` with a lowercase hyphenated `name` matching the directory name and a nonempty `description` in YAML frontmatter.
-
-The next sync adopts these entries (`adoptLinkedFolders` in `src/features/imports/local.ts`): it copies each folder into the local workspace at `~/.barndog/workspace/org/skills/<name>`, removes the entry from `skills`, and leaves the original folder untouched. An entry with `enabled: false` stays disabled. From then on the workspace copy is what installs, so editing or removing the original folder, or the `skills` entry, no longer changes what is installed; edit or delete the workspace copy instead. A folder that can't be copied stays linked and the sync reports why. Adoption happens even when the copied Skill is skipped by a name clash. Local directories are never uploaded to a server.
+## Native links
 
 Deselecting a harness removes its managed links and keeps selections. Sync refuses to overwrite unmanaged destinations, including links whose ownership records were lost, and never recursively deletes a skill directory.
 
 ## Live distribution check
 
-Filesystem tests alone do not establish that a live agent discovered or used a Skill. To check native discovery, select `fixtures/skills/barndog-distribution-check`, run `barndog sync`, then in a fresh session invoke `/barndog-distribution-check` (Claude Code), `$barndog-distribution-check` (Codex), or `/barndog-distribution-check` in a local Cursor Agent chat. Each agent must read the supporting file and return:
+Filesystem tests alone do not establish that a live agent discovered or used a Skill. To check native discovery, run `barndog skills add fixtures/skills/barndog-distribution-check` (it copies the Skill into the local workspace) and `barndog sync`, then in a fresh session invoke `/barndog-distribution-check` (Claude Code), `$barndog-distribution-check` (Codex), or `/barndog-distribution-check` in a local Cursor Agent chat. Each agent must read the supporting file and return:
 
 ```text
 BarnDog skill distribution verified: amber-otter-729.

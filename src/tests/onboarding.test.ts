@@ -69,9 +69,7 @@ test("first onboarding requires explicit selection and saves machine settings; r
     },
   });
   expect(await readSettings(home)).toStrictEqual({
-    version: 1,
     harnesses: ["codex"],
-    skills: [],
   });
   await initialize({
     home,
@@ -102,7 +100,7 @@ test("cancelling onboarding preserves previous settings or leaves first-time set
     /cancelled/,
   );
   expect(await readSettings(home)).toBe(null);
-  await saveSettings({ version: 1, harnesses: ["cursor"], skills: [] }, home);
+  await saveSettings({ harnesses: ["cursor"] }, home);
   const original = await readFile(settingsPath(home), "utf8");
   await expect(initialize({ home, detected, choose })).rejects.toThrow(
     /cancelled/,
@@ -112,15 +110,13 @@ test("cancelling onboarding preserves previous settings or leaves first-time set
 
 test("empty selection persists and invalid settings never default to all harnesses", async (t) => {
   const home = await setup(t);
-  await saveSettings({ version: 1, harnesses: [], skills: [] }, home);
+  await saveSettings({ harnesses: [] }, home);
   expect(await readSettings(home)).toStrictEqual({
-    version: 1,
     harnesses: [],
-    skills: [],
   });
   for (const content of [
-    "version: 1\nharnesses: [unknown]\n",
-    "version: 1\nharnesses: [codex, codex]\n",
+    "harnesses: [unknown]\n",
+    "harnesses: [codex, codex]\n",
     "skills: []\n",
   ]) {
     await writeFile(settingsPath(home), content);
@@ -146,7 +142,7 @@ test("CLI help is noninteractive; explicit onboarding refuses piped input withou
 
 test("bare invocation reports existing configuration without prompting or rewriting it", async (t) => {
   const home = await setup(t);
-  await saveSettings({ version: 1, harnesses: ["codex"], skills: [] }, home);
+  await saveSettings({ harnesses: ["codex"] }, home);
   const original = await readFile(settingsPath(home), "utf8");
   const messages: string[] = [];
   await runSetup({
@@ -167,7 +163,7 @@ test("bare invocation reports existing configuration without prompting or rewrit
 
 test("declining or cancelling restart leaves the configuration untouched", async (t) => {
   const home = await setup(t);
-  await saveSettings({ version: 1, harnesses: ["codex"], skills: [] }, home);
+  await saveSettings({ harnesses: ["codex"] }, home);
   const original = await readFile(settingsPath(home), "utf8");
   const messages: string[] = [];
   const options = {
@@ -192,16 +188,9 @@ test("declining or cancelling restart leaves the configuration untouched", async
   expect(await readFile(settingsPath(home), "utf8")).toBe(original);
 });
 
-test("confirmed restart reopens harness selection while preserving saved skills", async (t) => {
+test("confirmed restart reopens harness selection while preserving saved settings", async (t) => {
   const home = await setup(t);
-  const skills = [
-    {
-      id: "729b9d5a-4a8c-4aa7-9b8d-975a55ac373e",
-      source: "./skills/example",
-      enabled: false,
-    },
-  ];
-  await saveSettings({ version: 1, harnesses: ["codex"], skills }, home);
+  await saveSettings({ harnesses: ["codex"], knowledge: false }, home);
   let confirmed = false;
   await runSetup({
     home,
@@ -222,12 +211,9 @@ test("confirmed restart reopens harness selection while preserving saved skills"
     },
   });
   const saved = await readSettings(home);
-  expect(saved?.version).toBe(2);
   expect(saved?.harnesses).toStrictEqual(["claude"]);
-  expect(saved?.skills).toStrictEqual([{ ...skills[0]!, kind: "local" }]);
-  expect(saved?.version === 2 && saved.localWorkspace?.path).toBe(
-    join(home, ".barndog/workspace"),
-  );
+  expect(saved?.knowledge).toBe(false);
+  expect(saved?.localWorkspace?.path).toBe(join(home, ".barndog/workspace"));
 });
 
 test("first setup skips restart confirmation and still requires an interactive terminal", async (t) => {
@@ -250,25 +236,16 @@ test("first setup skips restart confirmation and still requires an interactive t
   });
   const saved = await readSettings(home);
   expect(saved?.harnesses).toStrictEqual(["codex"]);
-  expect(saved?.skills).toStrictEqual([]);
-  assert(saved?.version === 2 && saved.localWorkspace);
+  assert(saved?.localWorkspace);
 });
 
-test("reinitializing harness selection preserves skills in the home configuration", async (t) => {
+test("reinitializing harness selection preserves the rest of the home configuration", async (t) => {
   const home = await setup(t);
-  const skills = [
-    {
-      id: "729b9d5a-4a8c-4aa7-9b8d-975a55ac373e",
-      source: "./skills/example",
-      enabled: false,
-    },
-  ];
-  await saveSettings({ version: 1, harnesses: ["codex"], skills }, home);
+  await saveSettings({ harnesses: ["codex"], knowledge: false }, home);
   expect(settingsPath(home)).toBe(join(home, ".barndog/config.yaml"));
   await initialize({ home, detected: [], choose: async () => ["claude"] });
   expect(await readSettings(home)).toStrictEqual({
-    version: 1,
     harnesses: ["claude"],
-    skills,
+    knowledge: false,
   });
 });

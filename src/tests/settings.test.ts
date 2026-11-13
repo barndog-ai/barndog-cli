@@ -4,12 +4,12 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { stringify } from "yaml";
 
-import { readSettings } from "../config/settings.js";
+import { readSettings, settingsText } from "../config/settings.js";
 
 const workspaceId = "729b9d5a-4a8c-4aa7-9b8d-975a55ac373e";
-const base = { version: 2, harnesses: ["claude"], skills: [] };
+const base = { harnesses: ["claude"] };
 
-describe("readSettings for version 2", () => {
+describe("readSettings", () => {
   let home: string;
 
   beforeAll(async () => {
@@ -27,7 +27,8 @@ describe("readSettings for version 2", () => {
   };
 
   test.each([
-    [{ skills: [{ kind: "api" }] }, "invalid skill selection"],
+    [{ harnesses: ["claude", "claude"] }, "unique harnesses list"],
+    [{ harnesses: ["unknown"] }, "unique harnesses list"],
     [{ connection: { server: "ftp://x" } }, "invalid server connection"],
     [
       { gitWorkspace: { url: "-x", branch: "main", workspaceId } },
@@ -66,5 +67,22 @@ describe("readSettings for version 2", () => {
       localNames: { [workspaceId]: "code-review" },
       knowledge: true,
     });
+  });
+
+  test("writes settings as they are", () => {
+    expect(settingsText({ harnesses: ["codex"] })).toBe(
+      "harnesses:\n  - codex\n",
+    );
+  });
+
+  test("drops a leftover version and skills list, so the next save leaves them out", async () => {
+    const settings = await read({
+      version: 2,
+      skills: [
+        { kind: "local", id: workspaceId, source: "./x", enabled: true },
+      ],
+    });
+    expect(settings).toStrictEqual(base);
+    expect(settings && settingsText(settings)).not.toMatch(/version|skills/);
   });
 });

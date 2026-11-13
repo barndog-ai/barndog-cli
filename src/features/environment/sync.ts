@@ -8,17 +8,17 @@ import {
   resolve,
   sep,
 } from "node:path";
-import { realpath, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { stringify, parse } from "yaml";
+import { parse } from "yaml";
 import { z } from "zod";
 import { hookManifestSchema } from "@barndog-ai/api-contract";
 import { readState, type Link } from "../../config/state.js";
 import {
   readSettings,
   settingsPath,
+  settingsText,
   SetupRequiredError,
-  upgradeSettings,
   type Settings,
 } from "../../config/settings.js";
 import { packageFingerprint } from "@barndog-ai/api-contract/package";
@@ -38,14 +38,10 @@ import {
 } from "./names.js";
 import { selectionState, withSelection } from "../../config/environment.js";
 import { harnesses, skillDirectory } from "../../harnesses/registry.js";
-import {
-  validateSelection,
-  validateSkillSource,
-} from "../skills/validation.js";
-import type { SyncEvent } from "../skills/sync.js";
+import type { SyncEvent } from "./events.js";
 import { resolveAssets } from "../asset-selection/index.js";
 import { pruneCache } from "./packages.js";
-import { adoptLinkedFolders, followImports } from "../imports/local.js";
+import { followImports } from "../imports/local.js";
 import { adoptMoved, localOverlay } from "../git-workspace/overlay.js";
 import { openWorkspaceSource, type RefreshPolicy } from "./workspace-source.js";
 import type { WorkspaceSource } from "./source.js";
@@ -172,10 +168,6 @@ export async function synchronize(
 ): Promise<SyncEvent[]> {
   home = resolve(home);
   return locked(home, async () => {
-    const adoptionNotices =
-      configPath || override || options.dryRun
-        ? []
-        : await adoptLinkedFolders(home);
     const path = resolve(configPath ?? settingsPath(home));
     const settings = override ?? (await readSettings(home, path));
     if (!settings) throw new SetupRequiredError();
@@ -209,7 +201,7 @@ export async function synchronize(
         throw new Error("Invalid installed package state");
     let selection = selectionState(settings);
     const followNotices =
-      settings.version === 2 && settings.localWorkspace && !options.dryRun
+      settings.localWorkspace && !options.dryRun
         ? await followImports(
             settings.localWorkspace.path,
             options.refresh ?? "always",
@@ -250,7 +242,6 @@ export async function synchronize(
       trees: InstalledTree[] = [],
       events: SyncEvent[] = [
         ...new Set([
-          ...adoptionNotices,
           ...followNotices,
           ...(source?.notices() ?? []),
           ...((await source?.warnings?.()) ?? []),
@@ -262,24 +253,6 @@ export async function synchronize(
       })),
       names = new Set<string>(),
       ids = new Set<string>();
-    const locals: { id: string; root: string; name: string }[] = [];
-    for (const local of settings.skills) {
-      if (settings.version === 2 && "kind" in local && local.kind === "api")
-        continue;
-      validateSelection(local);
-      if (ids.has(local.id)) throw new Error(`Duplicate Skill ID: ${local.id}`);
-      ids.add(local.id);
-      if (!local.enabled) {
-        events.push({ type: "disabled", id: local.id });
-        continue;
-      }
-      const root = await realpath(resolve(dirname(path), local.source));
-      locals.push({
-        id: local.id,
-        root,
-        name: (await validateSkillSource(root)).name,
-      });
-    }
     // Installed names share one namespace per kind; resolve clashes before staging.
     const owned = (id: string) =>
       before.links.some((link) => link.id === id) ||
@@ -295,8 +268,7 @@ export async function synchronize(
       if (actual === null || (shared && actual !== entry.fingerprint))
         vanished.add(entry.id);
     }
-    const savedNames =
-      settings.version === 2 ? (settings.localNames ?? {}) : {};
+    const savedNames = settings.localNames ?? {};
     // An invalid asset stays under the name it's installed at, whatever it was renamed to since.
     const heldNames = new Map<string, string>();
     for (const { asset, enabled } of effective.assets) {
@@ -307,14 +279,6 @@ export async function synchronize(
     }
     const outcome = await resolveClashes(
       [
-        ...locals.map((local) => ({
-          id: local.id,
-          kind: "skill" as const,
-          name: local.name,
-          origin: { type: "local", slug: "folder" },
-          installed: owned(local.id),
-          renamable: false,
-        })),
         ...effective.assets.flatMap(({ asset, enabled }) => {
           const { kind } = asset;
           if (
@@ -346,16 +310,12 @@ export async function synchronize(
       if (savedNames[id] === undefined) delete localNames[id];
       else localNames[id] = savedNames[id];
     }
-    const localIds = new Set(locals.map((local) => local.id));
-    const disabledLocals = new Set(
-      outcome.disabledAssetIds.filter((id) => localIds.has(id)),
-    );
     selection = {
       ...selection,
       disabledAssetIds: [
         ...new Set([
           ...selection.disabledAssetIds,
-          ...outcome.disabledAssetIds.filter((id) => !localIds.has(id)),
+          ...outcome.disabledAssetIds,
         ]),
       ],
     };
@@ -390,10 +350,6 @@ export async function synchronize(
         desired.push({ id, harness, source, target });
       }
     };
-    for (const local of locals) {
-      if (skipped.has(local.id) || disabledLocals.has(local.id)) continue;
-      addSkill(local.id, local.root, local.name);
-    }
     const stage = async (
       id: string,
       kind: PackageKind,
@@ -532,7 +488,7 @@ export async function synchronize(
         }
       }
     }
-    if (source && (settings.version !== 2 || settings.knowledge !== false)) {
+    if (source && settings.knowledge !== false) {
       const script = fileURLToPath(
         new URL("../knowledge/startup.js", import.meta.url),
       );
@@ -552,8 +508,9 @@ export async function synchronize(
       }
     }
     if (
-      settings.version === 2 &&
-      (settings.connection || settings.gitWorkspace || settings.localWorkspace)
+      settings.connection ||
+      settings.gitWorkspace ||
+      settings.localWorkspace
     ) {
       const script = fileURLToPath(
         new URL("../git-workspace/startup.js", import.meta.url),
@@ -600,7 +557,6 @@ export async function synchronize(
       )
         throw new CliError(
           `The installed copy at ${entry.path} was edited by hand. Syncing would overwrite those edits. ${
-            settings.version === 2 &&
             settings.localWorkspace &&
             !settings.connection &&
             !settings.gitWorkspace
@@ -745,19 +701,16 @@ export async function synchronize(
     });
     // Explicit overrides are one-shot delivery inputs, never a change to default preferences.
     if (!configPath) {
-      const next = upgradeSettings(
-        source ? withSelection(settings, selection) : settings,
-      );
-      next.skills = next.skills.map((skill) =>
-        disabledLocals.has(skill.id) ? { ...skill, enabled: false } : skill,
-      );
+      const next = source
+        ? withSelection(settings, selection)
+        : { ...settings };
       if (Object.keys(localNames).length) next.localNames = localNames;
       else delete next.localNames;
       writes.push({
         kind: "file",
         path: settingsPath(home),
         before: await fileText(settingsPath(home)),
-        after: stringify(next),
+        after: settingsText(next),
       });
     }
     if (options.dryRun) return events;

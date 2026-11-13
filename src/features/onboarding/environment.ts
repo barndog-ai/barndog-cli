@@ -11,7 +11,7 @@ import {
   withSelection,
   selectionStateSchema,
 } from "../../config/environment.js";
-import type { SettingsV2 } from "../../config/settings.js";
+import type { Settings } from "../../config/settings.js";
 import type { SelectionState, Subscription } from "../asset-selection/types.js";
 
 export type OnboardingChoices = {
@@ -25,7 +25,7 @@ export type OnboardingChoices = {
 };
 
 export async function onboardingEnvironment(
-  settings: SettingsV2,
+  settings: Settings,
   home: string,
 ): Promise<OnboardingChoices> {
   const repo = openRepoSource(settings, home, { refresh: "none" });
@@ -80,9 +80,7 @@ export async function onboardingEnvironment(
     scopes,
     memberTeamIds,
     developerId: connection.developerId,
-    firstSetup:
-      settings.environment === undefined &&
-      !settings.skills.some((s) => s.kind === "api"),
+    firstSetup: settings.environment === undefined,
     previous: selectionState(settings),
   };
 }
@@ -241,7 +239,7 @@ export function selectOnboardingSources(
 }
 
 export function selectedEnvironment(
-  settings: SettingsV2,
+  settings: Settings,
   choices: EnvironmentChoices,
   selection: SelectionState,
 ) {

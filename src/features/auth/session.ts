@@ -31,9 +31,7 @@ export async function configuredServer(
 ): Promise<string | undefined> {
   const settings = await readSettings(home);
   const credentials = await readCredentials(home);
-  const value =
-    (settings?.version === 2 ? settings.connection?.server : undefined) ??
-    credentials.selectedServer;
+  const value = settings?.connection?.server ?? credentials.selectedServer;
   return value ? normalizeServer(value) : undefined;
 }
 
@@ -92,7 +90,7 @@ export async function login(options: LoginOptions) {
     try {
       const settings = await readSettings(home);
       if (
-        settings?.version === 2 &&
+        settings &&
         hasRemoteSelections(settings) &&
         settings.connection &&
         (settings.connection.server !== server ||

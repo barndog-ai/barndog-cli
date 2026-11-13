@@ -1,6 +1,5 @@
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
-import { realpath } from "node:fs/promises";
 import { z } from "zod";
 import { readSettings, SetupRequiredError } from "../../config/settings.js";
 import { selectionState } from "../../config/environment.js";
@@ -17,7 +16,6 @@ import {
   originLabel,
   resolveClashes,
 } from "../environment/names.js";
-import { validateSkillSource } from "../skills/validation.js";
 import { asRecord } from "../../shared/values.js";
 import type { Harness } from "../../harnesses/types.js";
 import type { AssetKind } from "../asset-selection/types.js";
@@ -84,8 +82,8 @@ export async function inventory(home = homedir()): Promise<Inventory> {
   const parsed = asRecord(raw ? JSON.parse(raw) : {});
   const native = nativeSchema.parse(parsed.native ?? []);
   const installed = installedSchema.parse(parsed.installed ?? []);
-  const conn = settings.version === 2 ? settings.connection : undefined;
-  const localNames = settings.version === 2 ? (settings.localNames ?? {}) : {};
+  const conn = settings.connection;
+  const localNames = settings.localNames ?? {};
   const linksOf = (id: string) => state.links.filter((l) => l.id === id);
   const nativeOf = (id: string) => native.filter((n) => n.id === id);
   const items: InventoryItem[] = [];
@@ -100,33 +98,6 @@ export async function inventory(home = homedir()): Promise<Inventory> {
   for (const link of state.links) {
     const actual = await linkTarget(link.target);
     if (actual !== null && actual !== link.source) modified.add(link.id);
-  }
-
-  for (const local of settings.skills) {
-    if (!("source" in local)) continue;
-    seen.add(local.id);
-    const links = linksOf(local.id);
-    let name = basename(local.source);
-    try {
-      name = (await validateSkillSource(await realpath(local.source))).name;
-    } catch {
-      /* the folder may be temporarily unavailable */
-    }
-    items.push({
-      id: local.id,
-      kind: "skill",
-      name,
-      installedName: name,
-      origin: "local",
-      via: ["config"],
-      state: !local.enabled
-        ? "disabled"
-        : links.length
-          ? "installed"
-          : "pending",
-      harnesses: links.map((l) => l.harness),
-      paths: [local.source, ...links.map((l) => l.target)],
-    });
   }
 
   let offline: string | null = null;
@@ -287,9 +258,7 @@ export async function inventory(home = homedir()): Promise<Inventory> {
   return {
     harnesses: settings.harnesses,
     server: conn?.server ?? repo?.label ?? null,
-    knowledge:
-      !!(conn || repo) &&
-      (settings.version !== 2 || settings.knowledge !== false),
+    knowledge: !!(conn || repo) && settings.knowledge !== false,
     offline,
     items,
   };

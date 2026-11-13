@@ -1,14 +1,5 @@
 import { expect, test } from "vitest";
-import {
-  mkdtemp,
-  mkdir,
-  readFile,
-  writeFile,
-  rm,
-  symlink,
-  readlink,
-  realpath,
-} from "node:fs/promises";
+import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parse as parseToml } from "smol-toml";
@@ -23,9 +14,7 @@ import {
   transact,
   fileText,
 } from "../features/environment/transaction.js";
-import { synchronize } from "../features/environment/sync.js";
 import { mcpEntry, hookCommand } from "../features/native/adapters.js";
-import { selectionState, withSelection } from "../config/environment.js";
 import { createProgram } from "../program.js";
 import { spawnSync } from "node:child_process";
 
@@ -202,33 +191,6 @@ test("Hook root binding preserves author quoting and paths containing spaces and
   expect(result.stdout).toBe(`${root}/scripts/check.sh`);
 });
 
-test("selection migration preserves independent choices and local sources", () => {
-  const previous = {
-    version: 2 as const,
-    harnesses: ["claude" as const],
-    connection: {
-      server: "https://example.org",
-      organizationId: id,
-      developerId: id,
-    },
-    skills: [
-      { kind: "api" as const, id, enabled: false },
-      {
-        kind: "local" as const,
-        id: "829b9d5a-4a8c-4aa7-9b8d-975a55ac373e",
-        source: "/my/skill",
-        enabled: true,
-      },
-    ],
-  };
-  const state = selectionState(previous),
-    migrated = withSelection(previous, state);
-  expect(state.individualAssetIds).toStrictEqual([id]);
-  expect(state.disabledAssetIds).toStrictEqual([id]);
-  expect(migrated.skills).toStrictEqual(previous.skills.slice(1));
-  expect(migrated.connection).toStrictEqual(previous.connection);
-});
-
 test("interrupted native writes roll forward and refuse to overwrite later user changes", async (t) => {
   const home = await mkdtemp(join(tmpdir(), "barndog-transaction-"));
   t.onTestFinished(() => rm(home, { recursive: true, force: true }));
@@ -261,32 +223,6 @@ test("interrupted native writes roll forward and refuse to overwrite later user 
   await locked(home, async () => undefined);
   expect(await fileText(b)).toBe('{"mcpServers":{}}');
   expect(await fileText(join(home, ".barndog/pending-sync.json"))).toBe(null);
-});
-
-test("unified delivery refuses unmanaged links and only unlinks managed Skills", async (t) => {
-  const home = await mkdtemp(join(tmpdir(), "barndog-unified-"));
-  t.onTestFinished(() => rm(home, { recursive: true, force: true }));
-  const source = join(home, "source/example");
-  await mkdir(source, { recursive: true });
-  await writeFile(
-    join(source, "SKILL.md"),
-    "---\nname: example\ndescription: Example\n---\nInstructions\n",
-  );
-  const settings = {
-    version: 1 as const,
-    harnesses: ["claude" as const],
-    skills: [{ id, source, enabled: true }],
-  };
-  await synchronize(undefined, home, settings);
-  expect(await readlink(join(home, ".claude/skills/example"))).toBe(
-    await realpath(source),
-  );
-  await synchronize(undefined, home, { ...settings, skills: [] });
-  expect(await readFile(join(source, "SKILL.md"), "utf8")).toBeTruthy();
-  await symlink(source, join(home, ".claude/skills/example"));
-  await expect(synchronize(undefined, home, settings)).rejects.toThrow(
-    /unmanaged Skill/,
-  );
 });
 
 test("command parsing delegates scope, native and mirror operations", async () => {

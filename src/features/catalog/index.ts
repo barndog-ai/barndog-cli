@@ -81,7 +81,7 @@ async function sharedCatalog(
           label: asset.publishedVersion.slice(0, 7),
         },
       }));
-  if (!settings || settings.version !== 2 || !settings.connection)
+  if (!settings || !settings.connection)
     throw new CliError(
       "This machine isn't connected to a BarnDog workspace.",
       "barndog init",

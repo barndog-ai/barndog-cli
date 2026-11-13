@@ -39,7 +39,7 @@ import { synchronize } from "../features/environment/sync.js";
 import {
   readSettings,
   saveSettings,
-  type SettingsV2,
+  type Settings,
 } from "../config/settings.js";
 import { updateCredentials } from "../features/auth/credentials.js";
 import { renderSyncOutput } from "../ui/output.js";
@@ -385,10 +385,8 @@ test("sync resolves MCP name clashes, persists renames and restores the plain na
       context,
     };
   });
-  const settings: SettingsV2 = {
-    version: 2,
+  const settings: Settings = {
     harnesses: ["claude"],
-    skills: [],
     knowledge: false,
     connection: { server: url, organizationId: org, developerId: developer },
     environment: {
@@ -412,7 +410,7 @@ test("sync resolves MCP name clashes, persists renames and restores the plain na
   // The team is the closer scope, so it keeps the name.
   expect(clash.skipped.origin).toBe("org");
   expect(await servers()).toStrictEqual(["docs"]);
-  expect(((await readSettings(home)) as SettingsV2).localNames).toBe(undefined);
+  expect(((await readSettings(home)) as Settings).localNames).toBe(undefined);
   const text = stripVTControlCharacters(renderSyncOutput(skipped).join("\n"));
   expect(text).toMatch(
     /barndog mcp rename docs --origin org --as org-acme-docs/,
@@ -422,7 +420,7 @@ test("sync resolves MCP name clashes, persists renames and restores the plain na
     resolveClash: async () => "rename-incoming",
   });
   expect((await servers()).sort()).toStrictEqual(["docs", "org-acme-docs"]);
-  expect(((await readSettings(home)) as SettingsV2).localNames).toStrictEqual({
+  expect(((await readSettings(home)) as Settings).localNames).toStrictEqual({
     [orgDocs.id]: "org-acme-docs",
   });
 
@@ -430,7 +428,7 @@ test("sync resolves MCP name clashes, persists renames and restores the plain na
   published = [orgDocs];
   await saveSettings(
     {
-      ...((await readSettings(home)) as SettingsV2),
+      ...((await readSettings(home)) as Settings),
       environment: {
         ...settings.environment!,
         individualAssetIds: [orgDocs.id],
@@ -447,7 +445,7 @@ test("sync resolves MCP name clashes, persists renames and restores the plain na
     restored.some((e) => e.type === "native" && e.kind === "knowledge"),
   ).toBeFalsy();
   await saveSettings(
-    { ...((await readSettings(home)) as SettingsV2), knowledge: true },
+    { ...((await readSettings(home)) as Settings), knowledge: true },
     home,
   );
   const withKnowledge = await synchronize(undefined, home, undefined, {
@@ -464,7 +462,7 @@ test("sync resolves MCP name clashes, persists renames and restores the plain na
   expect(
     await readFile(join(home, ".claude", "settings.json"), "utf8"),
   ).toMatch(/knowledge\/startup\.js/);
-  expect(((await readSettings(home)) as SettingsV2).localNames).toBe(undefined);
+  expect(((await readSettings(home)) as Settings).localNames).toBe(undefined);
 });
 
 test("installed folders are journaled and an interrupted copy is completed on recovery", async (t) => {

@@ -7,7 +7,7 @@ import { collaborationClient, responseData } from "./domain.js";
 import type { PackageKind } from "../asset-kinds/index.js";
 import { connection, download, getChange, selectSkill } from "./remote.js";
 import { readSettings, type GitWorkspace } from "../../config/settings.js";
-import type { SyncEvent } from "../skills/sync.js";
+import type { SyncEvent } from "../environment/events.js";
 import { CliError } from "../../errors.js";
 import { developers } from "../discovery/index.js";
 import { LOCAL_ORIGIN } from "../git-workspace/overlay.js";
@@ -111,10 +111,10 @@ type Backend =
 
 async function backend(home: string, origin?: string): Promise<Backend> {
   const settings = await readSettings(home);
-  if (settings?.version === 2 && settings.gitWorkspace)
+  if (settings?.gitWorkspace)
     return { type: "git", workspace: settings.gitWorkspace };
   if (
-    settings?.version === 2 &&
+    settings &&
     settings.localWorkspace &&
     (!settings.connection || origin === LOCAL_ORIGIN)
   )
