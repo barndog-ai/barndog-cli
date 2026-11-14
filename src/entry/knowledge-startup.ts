@@ -1,5 +1,8 @@
-import { adapters, isHarness } from "../../harnesses/registry.js";
-import { knowledgeList, knowledgeIndexText } from "./index.js";
+import { adapters, isHarness } from "../harnesses/registry.js";
+import {
+  knowledgeList,
+  knowledgeIndexText,
+} from "../features/knowledge/index.js";
 
 /** Keep knowledge delivery from blocking harness startup beyond five seconds. */
 const STARTUP_KNOWLEDGE_TIMEOUT_MS = 5000;

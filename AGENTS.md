@@ -27,7 +27,7 @@ The command reference at [barndog.dev/docs/cli](https://barndog.dev/docs/cli) is
 
 `BARNDOG_DEFAULT_SERVER`, set in `.env` (see `.env.example`) or the shell when running `pnpm build`, replaces the server the setup prompt offers (`src/config/build.ts`, default `https://barndog.dev`). `scripts/finish-build.mjs` writes it into `dist/config/build.js` and restores the executable bit on `dist/cli.js`.
 
-`pnpm knip` runs [knip](https://knip.dev) twice: once over everything, then with `--production`, which leaves `src/tests/` out (`knip.json` marks the production files with `!`). So an export only a test imports is reported: delete it, stop exporting it, or test it through the code that calls it. Export a name only when another module imports it. The exceptions are a regex constant or parser that `src/tests/patterns.test.ts` table-tests (see Code style) and an error-code list that `src/tests/errors.test.ts` checks for completeness: mark it `@internal` in its doc comment and the production run skips it. A new entry script (one started by path, like `features/knowledge/startup.ts`) goes in `knip.json` `entry`.
+`pnpm knip` runs [knip](https://knip.dev) twice: once over everything, then with `--production`, which leaves `src/tests/` out (`knip.json` marks the production files with `!`). So an export only a test imports is reported: delete it, stop exporting it, or test it through the code that calls it. Export a name only when another module imports it. The exceptions are a regex constant or parser that `src/tests/patterns.test.ts` table-tests (see Code style) and an error-code list that `src/tests/errors.test.ts` checks for completeness: mark it `@internal` in its doc comment and the production run skips it. A new entry script (one started by path, like `entry/knowledge-startup.ts`) goes in `knip.json` `entry`.
 
 ## Releases
 
@@ -109,6 +109,7 @@ Commander.js owns command parsing, argument validation, and generated help. Inqu
 ```text
 src/
 ├── cli.ts                  # Executable entry point, exit codes and process errors
+├── entry/                  # Harness-executed scripts, process arguments, output and exit codes
 ├── program.ts              # Commander composition and dependencies
 ├── version.ts              # `barndog --version` report
 ├── commands/               # Thin command handlers and availability checks
@@ -122,7 +123,7 @@ src/
 
 - Imports point down the layers: `commands/` → `ui/` → `features/` → `config/` → `harnesses/` → `shared/`. `config/` imports no feature (the persisted selection, the asset kinds and their folders live in `config/selection.ts`), `ui/` imports no command (a prompt declares the members it needs rather than taking `CommandContext`), and features import no UI or command. ESLint enforces the direction (`no-restricted-imports` per layer) and rejects any import cycle between files (`import-x/no-cycle`). When two modules need each other, move what they share into a lower module, often a type into a file of its own, rather than importing back up or hiding the cycle behind a dynamic `import()`.
 - Feature folders are ordered too, from the bottom up, and a feature imports only features below it, never one beside or above it:
-  1. Foundations: `asset-kinds/`, `asset-selection/`, `auth/`, `native/`, `git-workspace/` (only `startup.ts`, an entry script)
+  1. Foundations: `asset-kinds/`, `asset-selection/`, `auth/`, `native/`
   2. `server/`: the verified connection, requests, origins, paging and the environment catalog
   3. Where assets come from, and read-only server features: `workspace/`, `discovery/`, `github/`, `repositories/`, `skills/`
   4. `imports/`, `knowledge/`, `inspection/`
@@ -136,6 +137,7 @@ src/
 - Talk to the server through `src/features/server/`: `connection()` (the saved, verified Cloud connection), `request()` and `RetryKey`, `matchesOrigin()` and `selectOrigin()`, `allPages()` for cursor-paginated lists, and the environment catalog (`environmentCatalog()`, `getAsset()`, `selectAsset()`). It depends only on `config/`, `auth/` and `asset-kinds/`, so every feature can use it.
 - `src/cli.ts` is the executable entry point and handles process exit codes and errors. `src/program.ts` constructs a fresh Commander program and wires dependencies.
 - Register commands under `src/commands/` and in `createProgram()`. Keep handlers thin: parse arguments, call a workflow, and present its results. The program factory accepts injected operations and output callbacks, so parsing and help can be tested without installing anything or opening prompts. Handlers reach features through `CommandContext` (`src/commands/context.ts`), one typed member per operation; see [Lessons learned](#lessons-learned).
+- Put harness-executed scripts under `src/entry/`; keep reusable logic in features and process arguments, output and exit handling in entries. Sync must rewrite owned harness registrations when entry paths change.
 - Put reusable operations under `src/features/`, grouped by feature. Return structured results; do not import Commander, Inquirer, terminal styling, or UI modules into feature operations.
 - Keep native tool definitions and detection under `src/harnesses/`; reuse the registered adapters for discovery and installation destinations. Features never branch on a harness ID: a difference between tools (a settings file, an event name, an entry shape, a login command) becomes a field on `HarnessAdapter` (`src/harnesses/types.ts`), read as `adapters[harness]`, and a shape two tools share is a helper in `src/harnesses/formats.ts`. Loop over `harnesses` from `registry.ts` instead of listing the IDs, and print `adapters[id].name` instead of writing a tool's name. A plain `if (harness === "cursor")` is fine for a real one-off; a ternary that picks a value by harness ID, or a `Record<Harness, …>` of facts in a feature, belongs on the adapter. Adding a harness should mostly touch `src/harnesses/`.
 - Keep what differs between asset kinds (display words, command group, API route, workspace and installed folder, schema, package manifest, scaffold) in `assetKinds` in `src/features/asset-kinds/`. A per-kind fact only one module needs, or a per-kind function that would import a network module, goes in a `Record<AssetKind, …>` or `Record<PackageKind, …>` beside that code (`addArguments`, `packageCatalogs`, `catalogFetchers`), never in an `if`/ternary chain, so a new kind fails to compile until every map has an entry. Loop or validate over `assetKindList` or `packageKindList` instead of spelling out the kinds. Comparing `kind` to narrow a type or run kind-specific behavior is fine.

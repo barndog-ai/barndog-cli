@@ -89,7 +89,7 @@ export function mcpEntry(
     key: asset.name,
     value: adapters[harness].mcp.server(
       definition,
-      fileURLToPath(new URL("./mcp-launch.js", import.meta.url)),
+      fileURLToPath(new URL("../../entry/mcp-launch.js", import.meta.url)),
     ),
   };
 }

@@ -210,7 +210,57 @@ test("syncing a cloud workspace registers the session-start sync", async (t) => 
   expect(
     settings.hooks.SessionStart.some(
       (entry: { hooks: { command: string }[] }) =>
-        entry.hooks[0]!.command.includes("git-workspace/startup.js"),
+        entry.hooks[0]!.command.includes("entry/workspace-startup.js"),
     ),
   ).toBeTruthy();
+});
+
+test("sync rewrites legacy harness entry paths and stays idempotent", async (t) => {
+  const { home } = await connectedHome(t, {
+    harnesses: ["claude", "codex", "cursor"],
+  });
+
+  await synchronize(undefined, home);
+
+  const stateFile = join(home, ".barndog/state.json");
+  const state = JSON.parse(await readFile(stateFile, "utf8"));
+  const legacyPaths = (text: string) =>
+    text
+      .replaceAll(
+        "entry/workspace-startup.js",
+        "features/git-workspace/startup.js",
+      )
+      .replaceAll(
+        "entry/knowledge-startup.js",
+        "features/knowledge/startup.js",
+      );
+
+  const files = new Set<string>(
+    state.native.map((entry: { file: string }) => entry.file),
+  );
+
+  for (const file of [...files, stateFile]) {
+    await writeFile(file, legacyPaths(await readFile(file, "utf8")));
+  }
+
+  await synchronize(undefined, home);
+
+  for (const file of files) {
+    const text = await readFile(file, "utf8");
+    expect(text).toContain("entry/workspace-startup.js");
+    expect(text).toContain("entry/knowledge-startup.js");
+    expect(text).not.toContain("features/git-workspace/startup.js");
+    expect(text).not.toContain("features/knowledge/startup.js");
+  }
+
+  const before = await Promise.all(
+    [...files, stateFile].map((file) => readFile(file, "utf8")),
+  );
+
+  await synchronize(undefined, home);
+  expect(
+    await Promise.all(
+      [...files, stateFile].map((file) => readFile(file, "utf8")),
+    ),
+  ).toEqual(before);
 });

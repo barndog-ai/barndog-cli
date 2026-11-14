@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { mcpDefinitionSchema } from "@barndog-ai/api-contract";
-import { CliError } from "../../errors.js";
+import { CliError } from "../errors.js";
 
 /** Allow two seconds for the MCP child to exit before forcing shutdown. */
 const MCP_SHUTDOWN_GRACE_MS = 2000;

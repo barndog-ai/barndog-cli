@@ -535,7 +535,7 @@ test("sync resolves MCP name clashes, persists renames and restores the plain na
 
   expect(
     await readFile(join(home, ".claude", "settings.json"), "utf8"),
-  ).toMatch(/knowledge\/startup\.js/);
+  ).toMatch(/entry\/knowledge-startup\.js/);
 
   expect(((await readSettings(home)) as Settings).localNames).toBe(undefined);
 });

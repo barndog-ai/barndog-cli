@@ -542,7 +542,7 @@ export async function synchronize(
 
     if (source && settings.knowledge !== false) {
       const script = fileURLToPath(
-        new URL("../knowledge/startup.js", import.meta.url),
+        new URL("../../entry/knowledge-startup.js", import.meta.url),
       );
 
       for (const harness of settings.harnesses) {
@@ -564,7 +564,7 @@ export async function synchronize(
       settings.localWorkspace
     ) {
       const script = fileURLToPath(
-        new URL("../git-workspace/startup.js", import.meta.url),
+        new URL("../../entry/workspace-startup.js", import.meta.url),
       );
 
       for (const harness of settings.harnesses) {

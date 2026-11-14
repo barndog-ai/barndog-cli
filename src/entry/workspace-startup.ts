@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 try {
   const child = spawn(
     process.execPath,
-    [fileURLToPath(new URL("../../cli.js", import.meta.url)), "sync", "--auto"],
+    [fileURLToPath(new URL("../cli.js", import.meta.url)), "sync", "--auto"],
     {
       detached: true,
       stdio: "ignore",

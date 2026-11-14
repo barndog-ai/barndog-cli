@@ -349,7 +349,7 @@ test("an admin creates a workspace and a member installs every asset kind", asyn
   const hooks = (await claudeSettings(member)).hooks.SessionStart;
   expect(
     hooks.some((h: { hooks: { command: string }[] }) =>
-      h.hooks[0]!.command.includes("git-workspace/startup.js"),
+      h.hooks[0]!.command.includes("entry/workspace-startup.js"),
     ),
   ).toBeTruthy();
 
@@ -825,7 +825,7 @@ test("the session-start entry syncs in a detached process", async (t) => {
   }[];
 
   const command = hooks
-    .find((h) => h.hooks[0]!.command.includes("git-workspace/startup.js"))!
+    .find((h) => h.hooks[0]!.command.includes("entry/workspace-startup.js"))!
     .hooks[0]!.command // Sync registers the hook next to the running code; run the built copy.
     .replaceAll(sourceRoot, builtRoot);
 
