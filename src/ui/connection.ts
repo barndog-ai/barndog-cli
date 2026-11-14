@@ -2,7 +2,7 @@ import input from "@inquirer/input";
 import select from "@inquirer/select";
 import { defaultServer } from "../config/build.js";
 import { normalizeServer } from "../features/auth/transport.js";
-import { checkRepositoryUrl } from "../features/git-workspace/git.js";
+import { checkRepositoryUrl } from "../features/workspace/git.js";
 import { promptTheme } from "./theme.js";
 
 /**

@@ -23,24 +23,28 @@ import { CliError, friendlyMessage } from "../../errors.js";
 import { matchesOrigin, selectOrigin } from "../server/origin.js";
 import { connection } from "../server/connection.js";
 import { selectScope } from "../collaboration/workspace-git.js";
-import { renameSkillEntries } from "../environment/installed.js";
-import { originLabel } from "../environment/names.js";
+import { renameSkillEntries } from "../workspace/installed.js";
+import { originLabel } from "../server/origin.js";
 import { environmentCatalog } from "../server/catalog.js";
 import { request } from "../server/request.js";
 import { synchronize } from "../environment/sync.js";
 import { locked } from "../environment/transaction.js";
-import { assetPath, stableId, type RepoAsset } from "./format.js";
-import { checkRepositoryUrl, cloneOrigin, git } from "./git.js";
+import { assetPath, stableId, type RepoAsset } from "../workspace/format.js";
+import { checkRepositoryUrl, cloneOrigin, git } from "../workspace/git.js";
 import {
   connectGitWorkspace,
   createGitWorkspace,
   inspectRepository,
-} from "./setup.js";
+} from "../workspace/setup.js";
 import { LoginRequiredError, normalizeServer } from "../auth/transport.js";
 import { connectionContext } from "../auth/session.js";
 import { publishKnowledge, publishMcp, publishPackage } from "./migrate.js";
-import { readMoved, recordMoved } from "./overlay.js";
-import { commitFiles, openPullRequest, pushCommit } from "./publish.js";
+import { readMoved, recordMoved } from "../workspace/overlay.js";
+import {
+  commitFiles,
+  openPullRequest,
+  pushCommit,
+} from "../workspace/publish.js";
 import {
   acceptedCommit,
   gitDirectory,
@@ -49,7 +53,7 @@ import {
   recordFetch,
   trackingRef,
   type RepoSource,
-} from "./source.js";
+} from "../workspace/repo-source.js";
 import { defined } from "../../shared/lookup.js";
 import { setYamlName } from "../../shared/patterns.js";
 

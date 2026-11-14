@@ -14,24 +14,27 @@ import {
 } from "../../config/settings.js";
 import { packageFingerprint } from "@barndog-ai/api-contract/package";
 import { CliError } from "../../errors.js";
-import { desiredEntries, installedPath } from "./installed.js";
+import { desiredEntries, installedPath } from "../workspace/installed.js";
 import { treeFingerprint } from "../../shared/tree.js";
 import {
   installedName,
-  originLabel,
   hookFolders,
   resolveClashes,
   type ClashResolver,
 } from "./names.js";
+import { originLabel } from "../server/origin.js";
 import { selectionState, withSelection } from "../../config/environment.js";
 import { skillDirectory, nativeFile } from "../../harnesses/registry.js";
 import type { SyncEvent } from "./events.js";
 import { resolveAssets } from "../asset-selection/index.js";
-import { pruneCache } from "./packages.js";
+import { pruneCache } from "../workspace/packages.js";
 import { followImports } from "../imports/local.js";
-import { adoptMoved, localOverlay } from "../git-workspace/overlay.js";
-import { openWorkspaceSource } from "./workspace-source.js";
-import { type RefreshPolicy, type WorkspaceSource } from "./source.js";
+import { adoptMoved, localOverlay } from "../workspace/overlay.js";
+import { openWorkspaceSource } from "../workspace/workspace-source.js";
+import {
+  type RefreshPolicy,
+  type WorkspaceSource,
+} from "../workspace/source.js";
 import { patchNative, type NativeEntry } from "../native/configuration.js";
 import {
   hookEntries,

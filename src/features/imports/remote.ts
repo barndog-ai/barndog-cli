@@ -12,13 +12,9 @@ import {
   gitReason,
   gitText,
   parseLsRemote,
-} from "../git-workspace/git.js";
+} from "../workspace/git.js";
 import { GIT_OBJECT_ID } from "../../shared/patterns.js";
-import {
-  gitSnapshot,
-  isBlob,
-  type Snapshot,
-} from "../git-workspace/snapshot.js";
+import { gitSnapshot, isBlob, type Snapshot } from "../workspace/snapshot.js";
 
 /**
  * Parsed repository URL and unresolved tree/blob suffix; branch names may

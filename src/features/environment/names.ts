@@ -29,22 +29,6 @@ export type NamedAsset = {
   renamable?: boolean;
 };
 
-/** Human scope label such as local, org, team/engineering, repo/web or dev/john. */
-export function originLabel(origin: {
-  type: string;
-  slug?: string | null;
-  id?: string;
-  localOnly?: boolean;
-}): string {
-  if (origin.localOnly || origin.type === "local") {
-    return "local";
-  }
-
-  return origin.type === "org"
-    ? "org"
-    : `${origin.type}/${origin.slug ?? origin.id ?? "unknown"}`;
-}
-
 /**
  * Two assets competing for an installed name, with suggested renames built from
  * origin type, slug (or ID) and asset name.

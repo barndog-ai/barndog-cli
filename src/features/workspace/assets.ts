@@ -1,9 +1,8 @@
-import { runtimeRequirements } from "../native/adapters.js";
 import type { AssetKind } from "../../config/selection.js";
 import { hookMetadata } from "@barndog-ai/api-contract/package";
 import { CliError } from "../../errors.js";
 import { matchesOrigin } from "../server/origin.js";
-import { originLabel } from "../environment/names.js";
+import { originLabel } from "../server/origin.js";
 import {
   type RepoAsset,
   type WorkspaceModel,
@@ -12,12 +11,11 @@ import {
 import { folderSnapshot } from "./snapshot.js";
 import { resolve } from "node:path";
 import type { Settings } from "../../config/settings.js";
-import { openRepoSource } from "../environment/workspace-source.js";
+import { openRepoSource } from "./workspace-source.js";
 import { LOCAL_ORIGIN, localOverlay } from "./overlay.js";
 import { assetNotFound } from "../asset-kinds/index.js";
 import { only } from "../../shared/lookup.js";
 import type { HookManifest, McpDefinition } from "@barndog-ai/api-contract";
-import type { HookCompatibility } from "../hooks/types.js";
 
 /** The repo-backed source that answers for an origin, if any. */
 export function repoForOrigin(
@@ -83,31 +81,6 @@ export function showRepoAsset(asset: RepoAsset): RepoAssetView {
     description: asset.description,
     ...(asset.definition ? { definition: asset.definition } : {}),
     ...(asset.kind === "hook" ? { manifest: hookMetadata(asset.entries) } : {}),
-  };
-}
-
-export async function repoHookCompatibility(
-  asset: RepoAsset,
-): Promise<HookCompatibility> {
-  const manifest = hookMetadata(asset.entries);
-
-  return {
-    version: asset.publishedVersion,
-    compatibility: await Promise.all(
-      (["claude", "codex", "cursor"] as const).map(async (harness) => {
-        const implementation = manifest.implementations[harness] ?? null;
-
-        return {
-          harness,
-          status: implementation?.compatibility ?? ("unsupported" as const),
-          declared: true,
-          implementation,
-          runtimeIssue: implementation
-            ? await runtimeRequirements(harness, implementation.requirements)
-            : "No implementation for this harness",
-        };
-      }),
-    ),
   };
 }
 

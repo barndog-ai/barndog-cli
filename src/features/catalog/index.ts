@@ -6,8 +6,8 @@ import { CliError } from "../../errors.js";
 import { hookCatalog } from "../hooks/catalog.js";
 import { mcpCatalog } from "../mcps/catalog.js";
 import { skillCatalog } from "../skills/catalog.js";
-import { openRepoSource } from "../environment/workspace-source.js";
-import { activeLocal, localOverlay } from "../git-workspace/overlay.js";
+import { openRepoSource } from "../workspace/workspace-source.js";
+import { activeLocal, localOverlay } from "../workspace/overlay.js";
 import type { AssetKind } from "../../config/selection.js";
 import type { CatalogAsset } from "../asset-kinds/index.js";
 

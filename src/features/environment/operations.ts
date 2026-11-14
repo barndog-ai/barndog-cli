@@ -33,15 +33,16 @@ import { request } from "../server/request.js";
 import { matchesOrigin } from "../server/origin.js";
 import { locked } from "./transaction.js";
 import { installedNames, synchronize } from "./sync.js";
-import type { WorkspaceSource } from "./source.js";
-import { openRepoSource } from "./workspace-source.js";
+import type { WorkspaceSource } from "../workspace/source.js";
+import { openRepoSource } from "../workspace/workspace-source.js";
 import {
   localOverlay,
   mergeLocalCatalog,
   withOverlay,
-} from "../git-workspace/overlay.js";
+} from "../workspace/overlay.js";
 import { CliError } from "../../errors.js";
-import { originLabel, validInstalledName } from "./names.js";
+import { validInstalledName } from "./names.js";
+import { originLabel } from "../server/origin.js";
 import { assetKinds } from "../asset-kinds/index.js";
 import { only } from "../../shared/lookup.js";
 import { splitOrigin } from "../../shared/patterns.js";

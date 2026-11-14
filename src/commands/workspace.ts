@@ -12,7 +12,7 @@ import {
 } from "../ui/format.js";
 import { renderMove } from "../ui/move.js";
 import type { CommandContext } from "./context.js";
-import type { MigrationRow } from "../features/git-workspace/migrate.js";
+import type { MigrationRow } from "../features/migration/migrate.js";
 
 const migrationActionStyles: Record<
   MigrationRow["action"],

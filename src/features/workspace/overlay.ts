@@ -5,9 +5,9 @@ import type { Settings } from "../../config/settings.js";
 import type { AssetCatalog, AssetReference } from "../asset-selection/types.js";
 import type { SelectionState } from "../../config/selection.js";
 import { resolveAssets } from "../asset-selection/index.js";
-import type { WorkspaceSource } from "../environment/source.js";
+import type { WorkspaceSource } from "./source.js";
 import type { WorkspaceModel } from "./format.js";
-import { localRepoSource, type RepoSource } from "./source.js";
+import { localRepoSource, type RepoSource } from "./repo-source.js";
 import { errorCode } from "../../shared/values.js";
 import { z } from "zod";
 

@@ -7,11 +7,11 @@ import {
 } from "@barndog-ai/api-contract";
 import { connection } from "../server/connection.js";
 import { request } from "../server/request.js";
-import { openRepoSource } from "../environment/workspace-source.js";
-import { activeLocal, localOverlay } from "../git-workspace/overlay.js";
+import { openRepoSource } from "../workspace/workspace-source.js";
+import { activeLocal, localOverlay } from "../workspace/overlay.js";
 import { readSettings } from "../../config/settings.js";
 import { CliError } from "../../errors.js";
-import type { InvalidKnowledge } from "../git-workspace/format.js";
+import type { InvalidKnowledge } from "../workspace/format.js";
 import { allPages } from "../server/pages.js";
 
 type KnowledgeIndex = z.infer<typeof knowledgeIndexSchema>;

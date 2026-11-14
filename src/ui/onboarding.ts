@@ -10,15 +10,15 @@ import {
 import {
   cloudMoveTargets,
   moveLocalAssets,
-} from "../features/git-workspace/move.js";
-import { localRepoSource } from "../features/git-workspace/source.js";
+} from "../features/migration/move.js";
+import { localRepoSource } from "../features/workspace/repo-source.js";
 import { renderMove } from "./move.js";
 import {
   checkRepositoryUrl,
   cloneOrigin,
   RepositoryAccessError,
   type RemoteHead,
-} from "../features/git-workspace/git.js";
+} from "../features/workspace/git.js";
 import {
   cloneGitWorkspace,
   connectGitWorkspace,
@@ -26,7 +26,7 @@ import {
   defaultLocalPath,
   inspectRepository,
   localWorkspace,
-} from "../features/git-workspace/setup.js";
+} from "../features/workspace/setup.js";
 import { CliError } from "../errors.js";
 import { selectionState } from "../config/environment.js";
 import { LoginRequiredError } from "../features/auth/transport.js";

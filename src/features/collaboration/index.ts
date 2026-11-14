@@ -12,7 +12,7 @@ import { readSettings, type GitWorkspace } from "../../config/settings.js";
 import type { SyncEvent } from "../environment/events.js";
 import { CliError } from "../../errors.js";
 import { developers } from "../discovery/index.js";
-import { LOCAL_ORIGIN } from "../git-workspace/overlay.js";
+import { LOCAL_ORIGIN } from "../workspace/overlay.js";
 import {
   createGitAsset,
   gitVersionDiff,

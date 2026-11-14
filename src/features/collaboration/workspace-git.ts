@@ -27,22 +27,22 @@ import {
   type RepoAsset,
   type RepoScope,
   type WorkspaceModel,
-} from "../git-workspace/format.js";
-import { git, gitText } from "../git-workspace/git.js";
+} from "../workspace/format.js";
+import { git, gitText } from "../workspace/git.js";
 import {
   commitFiles,
   openPullRequest,
   pushCommit,
   remoteBranch,
-} from "../git-workspace/publish.js";
-import { isBlob, gitSnapshot, GIT_MODE } from "../git-workspace/snapshot.js";
+} from "../workspace/publish.js";
+import { isBlob, gitSnapshot, GIT_MODE } from "../workspace/snapshot.js";
 import {
   acceptedCommit,
   gitDirectory,
   gitRepoSource,
   recordFetch,
   trackingRef,
-} from "../git-workspace/source.js";
+} from "../workspace/repo-source.js";
 import {
   metadata as packageMetadataFor,
   assetKinds,

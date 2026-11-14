@@ -1,10 +1,10 @@
 import { homedir } from "node:os";
 import { normalizeRepositoryRemote } from "@barndog-ai/api-contract";
-import type { WorkspaceModel } from "../git-workspace/format.js";
+import type { WorkspaceModel } from "../workspace/format.js";
 import { authStatus } from "../auth/session.js";
 import { readSettings } from "../../config/settings.js";
 import { repositoryContext, localRepository } from "../repositories/context.js";
-import { openRepoSource } from "../environment/workspace-source.js";
+import { openRepoSource } from "../workspace/workspace-source.js";
 import { only } from "../../shared/lookup.js";
 
 type NamedScope = { id: string; slug: string; name: string };

@@ -8,15 +8,12 @@ import { treeFingerprint } from "../../shared/tree.js";
 import { linkTarget } from "../environment/transaction.js";
 import { environmentCatalog } from "../server/catalog.js";
 import { request } from "../server/request.js";
-import { openRepoSource } from "../environment/workspace-source.js";
-import { localOverlay, mergeLocalCatalog } from "../git-workspace/overlay.js";
+import { openRepoSource } from "../workspace/workspace-source.js";
+import { localOverlay, mergeLocalCatalog } from "../workspace/overlay.js";
 import { scopeSchema } from "@barndog-ai/api-contract";
 import { resolveAssets } from "../asset-selection/index.js";
-import {
-  installedName,
-  originLabel,
-  resolveClashes,
-} from "../environment/names.js";
+import { installedName, resolveClashes } from "../environment/names.js";
+import { originLabel } from "../server/origin.js";
 import type { Harness } from "../../harnesses/types.js";
 import type { AssetKind } from "../../config/selection.js";
 import { isAssetKind } from "../asset-kinds/index.js";

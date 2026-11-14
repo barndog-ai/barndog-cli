@@ -1,6 +1,6 @@
 import { InvalidArgumentError, type Command } from "commander";
 
-import { originLabel } from "../features/environment/names.js";
+import { originLabel } from "../features/server/origin.js";
 import { positiveInteger } from "./options.js";
 import { CliError } from "../errors.js";
 

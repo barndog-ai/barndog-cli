@@ -23,15 +23,15 @@ import {
 } from "../../config/settings.js";
 import { CliError } from "../../errors.js";
 import { errorCode } from "../../shared/values.js";
-import { renameSkillEntries } from "../environment/installed.js";
+import { renameSkillEntries } from "../workspace/installed.js";
 import {
   assertAssetName,
   assetPath,
   validAssetName,
-} from "../git-workspace/format.js";
-import { withLocalSubscription } from "../git-workspace/overlay.js";
-import { localWorkspace } from "../git-workspace/setup.js";
-import { localRepoSource } from "../git-workspace/source.js";
+} from "../workspace/format.js";
+import { withLocalSubscription } from "../workspace/overlay.js";
+import { localWorkspace } from "../workspace/setup.js";
+import { localRepoSource } from "../workspace/repo-source.js";
 import { folderEntries, type SkillCandidate } from "./discover.js";
 import { fetchRemote, type RemoteRepo } from "./remote.js";
 import { assetKinds } from "../asset-kinds/index.js";

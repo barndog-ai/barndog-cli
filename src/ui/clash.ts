@@ -1,10 +1,10 @@
 import select from "@inquirer/select";
 import {
-  originLabel,
   validInstalledName,
   type Clash,
   type ClashChoice,
 } from "../features/environment/names.js";
+import { originLabel } from "../features/server/origin.js";
 import { bold, dim, fields, warn } from "./format.js";
 import { promptTheme } from "./theme.js";
 import { assetKinds } from "../features/asset-kinds/index.js";

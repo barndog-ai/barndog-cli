@@ -58,16 +58,16 @@ import type { RepositoryStatus } from "../features/inspection/index.js";
 import type {
   FolderSummary,
   RepoAssetView,
-} from "../features/git-workspace/assets.js";
+} from "../features/workspace/assets.js";
 import type {
   MigrateOptions,
   MigrationReport,
-} from "../features/git-workspace/migrate.js";
+} from "../features/migration/migrate.js";
 import type {
   LocalAssets,
   MoveOptions,
   MoveResult,
-} from "../features/git-workspace/move.js";
+} from "../features/migration/move.js";
 import type { ImportUpdate } from "../features/imports/local.js";
 import type {
   McpAuthentication,
@@ -85,14 +85,14 @@ import type {
   KnowledgeDocument,
   KnowledgeListing,
 } from "../features/knowledge/index.js";
-import type { InvalidKnowledge } from "../features/git-workspace/format.js";
+import type { InvalidKnowledge } from "../features/workspace/format.js";
 import type {
   Developer,
   DeveloperAssets,
   Promotion,
   PromoteInput,
-  PromoteResult,
 } from "../features/discovery/index.js";
+import type { PromoteResult } from "../features/migration/promote.js";
 import type {
   GithubInstallation,
   GithubPage,

@@ -13,8 +13,8 @@ import type { GitWorkspace, LocalWorkspace } from "../../config/settings.js";
 import { CliError } from "../../errors.js";
 import { errorCode } from "../../shared/values.js";
 import type { AssetReference } from "../asset-selection/types.js";
-import { storePackage } from "../environment/packages.js";
-import type { WorkspaceSource, SourceOptions } from "../environment/source.js";
+import { storePackage } from "./packages.js";
+import type { WorkspaceSource, SourceOptions } from "./source.js";
 import {
   loadWorkspace,
   type RepoAsset,

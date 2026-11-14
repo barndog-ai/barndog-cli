@@ -1,4 +1,4 @@
-import type { MoveResult } from "../features/git-workspace/move.js";
+import type { MoveResult } from "../features/migration/move.js";
 import { bold, dim, hint, ok, table, warn } from "./format.js";
 
 export function renderMove(result: MoveResult): string[] {

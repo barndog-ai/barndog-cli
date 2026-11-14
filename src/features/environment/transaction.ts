@@ -13,9 +13,9 @@ import {
 } from "../../harnesses/registry.js";
 import { z } from "zod";
 import { connectionContext } from "../auth/session.js";
-import type { JournalIdentity } from "./source.js";
+import type { JournalIdentity } from "../workspace/source.js";
 import { NAME } from "../../shared/patterns.js";
-import { desiredEntries, mirrorTree } from "./installed.js";
+import { desiredEntries, mirrorTree } from "../workspace/installed.js";
 import { installedRoot } from "../../config/state.js";
 import { treeFingerprint } from "../../shared/tree.js";
 import { errorCode } from "../../shared/values.js";

@@ -8,9 +8,9 @@ import {
   selectionState,
   withSelection,
 } from "../../config/environment.js";
-import { withLocalSubscription } from "../git-workspace/overlay.js";
-import { localRepoSource } from "../git-workspace/source.js";
-import { openRepoSource } from "../environment/workspace-source.js";
+import { withLocalSubscription } from "../workspace/overlay.js";
+import { localRepoSource } from "../workspace/repo-source.js";
+import { openRepoSource } from "../workspace/workspace-source.js";
 import { locked } from "../environment/transaction.js";
 import {
   type GitWorkspace,

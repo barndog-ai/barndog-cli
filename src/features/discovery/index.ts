@@ -13,8 +13,6 @@ import { selectAsset } from "../server/catalog.js";
 import { type RetryKey, request } from "../server/request.js";
 import type { AssetKind } from "../../config/selection.js";
 import { randomUUID } from "node:crypto";
-import { moveLocalAssets, type MoveResult } from "../git-workspace/move.js";
-import { LOCAL_ORIGIN } from "../git-workspace/overlay.js";
 import { assetKindList } from "../asset-kinds/index.js";
 import { only } from "../../shared/lookup.js";
 import { allPages } from "../server/pages.js";
@@ -126,15 +124,7 @@ const promotionSchema = z.object({
 
 export type Promotion = z.infer<typeof promotionSchema>;
 
-/**
- * Distinguishes a server promotion from a local asset move so callers can
- * render either outcome.
- */
-export type PromoteResult =
-  | { outcome: "promoted"; promotion: Promotion }
-  | { outcome: "moved"; move: MoveResult };
-
-async function copyToScope(
+export async function copyToScope(
   action: "promote" | "fork",
   input: PromoteInput,
   home: string,
@@ -161,35 +151,6 @@ async function copyToScope(
     promotionSchema,
     { home, method: "POST", body },
   );
-}
-
-/**
- * Proposes an asset for another scope. A local asset has no server copy to
- * propose from, so it is moved there instead and the result is that move.
- */
-export async function promote(
-  input: PromoteInput,
-  home = homedir(),
-): Promise<PromoteResult> {
-  if (input.origin === LOCAL_ORIGIN) {
-    return {
-      outcome: "moved",
-      move: await moveLocalAssets(
-        {
-          names: [input.name],
-          kind: input.kind,
-          to: input.target,
-          as: input.newName === input.name ? undefined : input.newName,
-        },
-        home,
-      ),
-    };
-  }
-
-  return {
-    outcome: "promoted",
-    promotion: await copyToScope("promote", input, home),
-  };
 }
 
 /** Copies an asset into a scope the developer owns; a change ID means it needs review. */

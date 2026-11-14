@@ -22,7 +22,7 @@ import {
   selectRepoAsset,
   showRepoAsset,
   type RepoAssetView,
-} from "../git-workspace/assets.js";
+} from "../workspace/assets.js";
 import { gitVersions } from "../collaboration/workspace-git.js";
 import type { PackageVersion } from "../collaboration/results.js";
 import type { Harness } from "../../harnesses/types.js";

@@ -28,10 +28,10 @@ import {
   desiredEntries,
   mirrorTree,
   renameSkillEntries,
-} from "../features/environment/installed.js";
+} from "../features/workspace/installed.js";
 import { installedRoot } from "../config/state.js";
 import { locked, transact } from "../features/environment/transaction.js";
-import { cacheKey, pruneCache } from "../features/environment/packages.js";
+import { cacheKey, pruneCache } from "../features/workspace/packages.js";
 import { packageFingerprint } from "@barndog-ai/api-contract/package";
 import { synchronize } from "../features/environment/sync.js";
 import {

@@ -216,7 +216,7 @@ export function badge(state: string, label: string = state): string {
   }
 }
 
-export { originLabel } from "../features/environment/names.js";
+export { originLabel } from "../features/server/origin.js";
 
 /** `1 skill`, `2 skills`; pass `many` for irregular plurals. */
 export function plural(count: number, noun: string, many = `${noun}s`) {

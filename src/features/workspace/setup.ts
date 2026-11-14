@@ -21,7 +21,7 @@ import {
   gitDirectory,
   recordFetch,
   trackingRef,
-} from "./source.js";
+} from "./repo-source.js";
 
 /**
  * Branch name used when creating the first commit of an empty Git workspace.

@@ -2,12 +2,10 @@ import { homedir } from "node:os";
 import { hookSchema } from "@barndog-ai/api-contract";
 import { readSettings } from "../../config/settings.js";
 import { selectAsset } from "../server/catalog.js";
-import {
-  repoForOrigin,
-  repoHookCompatibility,
-  selectRepoAsset,
-} from "../git-workspace/assets.js";
+import { repoForOrigin, selectRepoAsset } from "../workspace/assets.js";
 import { runtimeRequirements } from "../native/adapters.js";
+import { hookMetadata } from "@barndog-ai/api-contract/package";
+import type { RepoAsset } from "../workspace/format.js";
 import type { HookCompatibility } from "./types.js";
 
 /**
@@ -42,6 +40,32 @@ export async function hookCompatibility(
             )
           : "No implementation for this harness",
       })),
+    ),
+  };
+}
+
+/** What a Git or local workspace Hook declares for each coding tool, and what this machine lacks. */
+async function repoHookCompatibility(
+  asset: RepoAsset,
+): Promise<HookCompatibility> {
+  const manifest = hookMetadata(asset.entries);
+
+  return {
+    version: asset.publishedVersion,
+    compatibility: await Promise.all(
+      (["claude", "codex", "cursor"] as const).map(async (harness) => {
+        const implementation = manifest.implementations[harness] ?? null;
+
+        return {
+          harness,
+          status: implementation?.compatibility ?? ("unsupported" as const),
+          declared: true,
+          implementation,
+          runtimeIssue: implementation
+            ? await runtimeRequirements(harness, implementation.requirements)
+            : "No implementation for this harness",
+        };
+      }),
     ),
   };
 }

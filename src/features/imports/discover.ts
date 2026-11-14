@@ -1,8 +1,4 @@
-import {
-  GIT_MODE,
-  isBlob,
-  type SnapshotEntry,
-} from "../git-workspace/snapshot.js";
+import { GIT_MODE, isBlob, type SnapshotEntry } from "../workspace/snapshot.js";
 import {
   hookImplementationSchema,
   type HookManifest,

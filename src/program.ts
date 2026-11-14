@@ -44,12 +44,9 @@ import {
 } from "./features/environment/operations.js";
 import { doctor } from "./features/doctor/index.js";
 import { repoStatus, workspaceUrl } from "./features/inspection/index.js";
-import { validateFolder } from "./features/git-workspace/assets.js";
-import { migrate } from "./features/git-workspace/migrate.js";
-import {
-  listLocalAssets,
-  moveLocalAssets,
-} from "./features/git-workspace/move.js";
+import { validateFolder } from "./features/workspace/assets.js";
+import { migrate } from "./features/migration/migrate.js";
+import { listLocalAssets, moveLocalAssets } from "./features/migration/move.js";
 import { updateImported } from "./features/imports/local.js";
 import {
   authenticateMcp,
@@ -70,8 +67,8 @@ import {
   developerAssets,
   developers,
   fork,
-  promote,
 } from "./features/discovery/index.js";
+import { promote } from "./features/migration/promote.js";
 import {
   githubAuth,
   githubInstall,

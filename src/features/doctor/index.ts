@@ -4,9 +4,9 @@ import {
   settingsPath,
   type GitWorkspace,
 } from "../../config/settings.js";
-import { remoteHead } from "../git-workspace/git.js";
-import { branchProtected } from "../git-workspace/publish.js";
-import { readFetchState } from "../git-workspace/source.js";
+import { remoteHead } from "../workspace/git.js";
+import { branchProtected } from "../workspace/publish.js";
+import { readFetchState } from "../workspace/repo-source.js";
 import { CliError } from "../../errors.js";
 import { detectHarnesses } from "../../harnesses/detect.js";
 import { adapters } from "../../harnesses/registry.js";

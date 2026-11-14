@@ -41,14 +41,15 @@ import {
   updateWorkingCopy,
   workingStatus,
 } from "../features/collaboration/index.js";
-import { developers, promote } from "../features/discovery/index.js";
+import { developers } from "../features/discovery/index.js";
+import { promote } from "../features/migration/promote.js";
 import { doctor } from "../features/doctor/index.js";
-import { validateFolder } from "../features/git-workspace/assets.js";
-import { migrate } from "../features/git-workspace/migrate.js";
+import { validateFolder } from "../features/workspace/assets.js";
+import { migrate } from "../features/migration/migrate.js";
 import {
   listLocalAssets,
   moveLocalAssets,
-} from "../features/git-workspace/move.js";
+} from "../features/migration/move.js";
 import { updateImported, saveImported } from "../features/imports/local.js";
 import { repoStatus } from "../features/inspection/index.js";
 import {
@@ -57,12 +58,12 @@ import {
   renameAsset,
 } from "../features/environment/operations.js";
 import { synchronize } from "../features/environment/sync.js";
-import { loadWorkspace, stableId } from "../features/git-workspace/format.js";
-import { checkRepositoryUrl } from "../features/git-workspace/git.js";
-import { cloneGitWorkspace } from "../features/git-workspace/setup.js";
-import { openPullRequest } from "../features/git-workspace/publish.js";
-import { folderSnapshot } from "../features/git-workspace/snapshot.js";
-import { originLabel } from "../features/environment/names.js";
+import { loadWorkspace, stableId } from "../features/workspace/format.js";
+import { checkRepositoryUrl } from "../features/workspace/git.js";
+import { cloneGitWorkspace } from "../features/workspace/setup.js";
+import { openPullRequest } from "../features/workspace/publish.js";
+import { folderSnapshot } from "../features/workspace/snapshot.js";
+import { originLabel } from "../features/server/origin.js";
 import { environmentChooser } from "../ui/environment-onboarding.js";
 import { knowledgeGet, knowledgeList } from "../features/knowledge/index.js";
 import { inventory } from "../features/inventory/index.js";
@@ -87,7 +88,7 @@ import {
   convertServer,
   harnessServers,
   parseMcpText,
-} from "../features/imports/mcp.js";
+} from "../features/mcps/import.js";
 import { parse } from "yaml";
 
 import { adaptHook } from "../features/hooks/adapt.js";

@@ -24,20 +24,20 @@ import { normalizeServer } from "../auth/transport.js";
 import { collaborationClient } from "../collaboration/domain.js";
 import { archive } from "../collaboration/workspace.js";
 import { encodeFiles } from "../collaboration/workspace-store.js";
-import { originLabel } from "../environment/names.js";
+import { originLabel } from "../server/origin.js";
 import { environmentCatalog, type ApiScope } from "../server/catalog.js";
 import { request } from "../server/request.js";
 import { synchronize } from "../environment/sync.js";
 import { locked } from "../environment/transaction.js";
-import { openRepoSource } from "../environment/workspace-source.js";
+import { openRepoSource } from "../workspace/workspace-source.js";
 import { connectionContext } from "../auth/session.js";
 import type {
   RepoAsset,
   RepoKnowledge,
   RepoScope,
   WorkspaceModel,
-} from "./format.js";
-import { localOverlay } from "./overlay.js";
+} from "../workspace/format.js";
+import { localOverlay } from "../workspace/overlay.js";
 
 /**
  * What `migrate` does with one asset or knowledge document: publish it, leave

@@ -1,4 +1,4 @@
-import { GIT_MODE } from "../features/git-workspace/snapshot.js";
+import { GIT_MODE } from "../features/workspace/snapshot.js";
 import checkbox from "@inquirer/checkbox";
 import confirm from "@inquirer/confirm";
 import input from "@inquirer/input";
@@ -25,7 +25,7 @@ import {
 } from "../features/imports/discover.js";
 import { adaptHook, toolNames } from "../features/hooks/adapt.js";
 import { folderDivergence } from "../features/hooks/divergence.js";
-import { LOCAL_ORIGIN } from "../features/git-workspace/overlay.js";
+import { LOCAL_ORIGIN } from "../features/workspace/overlay.js";
 import {
   renamedSkill,
   saveImported,
@@ -38,7 +38,7 @@ import {
   harnessServers,
   parseMcpText,
   type ImportedServer,
-} from "../features/imports/mcp.js";
+} from "../features/mcps/import.js";
 import {
   assertSourceExists,
   plainFolder,

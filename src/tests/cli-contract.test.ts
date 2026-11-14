@@ -26,7 +26,7 @@ import { updateCredentials } from "../features/auth/credentials.js";
 import { saveSettings, readSettings } from "../config/settings.js";
 import { synchronize } from "../features/environment/sync.js";
 import { assertSourceExists } from "../features/imports/folder.js";
-import { convertServer } from "../features/imports/mcp.js";
+import { convertServer } from "../features/mcps/import.js";
 import { inventory } from "../features/inventory/index.js";
 import {
   knowledgeList,

@@ -8,10 +8,10 @@ import { parse } from "yaml";
 import { hookManifestSchema, hookSchema } from "@barndog-ai/api-contract";
 import type { Harness } from "../../harnesses/types.js";
 import { selectAsset } from "../server/catalog.js";
-import { cachedPackage } from "../environment/packages.js";
+import { cachedPackage } from "../workspace/packages.js";
 import { hookCommand, runtimeRequirements } from "../native/adapters.js";
 import { readSettings } from "../../config/settings.js";
-import { repoForOrigin, selectRepoAsset } from "../git-workspace/assets.js";
+import { repoForOrigin, selectRepoAsset } from "../workspace/assets.js";
 import { CliError } from "../../errors.js";
 
 /** CLI hook test policy caps each input/output stream at one MiB. */

@@ -23,9 +23,9 @@ import { locked } from "../environment/transaction.js";
 import { fileText, writeAtomic } from "../../shared/files.js";
 import { synchronize } from "../environment/sync.js";
 import { patchNative } from "../native/configuration.js";
-import { NAME_RULE, validAssetName } from "../git-workspace/format.js";
-import { LOCAL_ORIGIN } from "../git-workspace/overlay.js";
-import { ensureLocalWorkspace } from "./local.js";
+import { NAME_RULE, validAssetName } from "../workspace/format.js";
+import { LOCAL_ORIGIN } from "../workspace/overlay.js";
+import { ensureLocalWorkspace } from "../imports/local.js";
 import { asRecord, asStrings, isRecord } from "../../shared/values.js";
 
 /**

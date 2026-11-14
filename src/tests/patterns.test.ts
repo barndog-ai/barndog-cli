@@ -15,8 +15,8 @@ import {
   parseLsRemote,
   parseRemoteHead,
   UNKNOWN_IDENTITY,
-} from "../features/git-workspace/git.js";
-import { firstUrl } from "../features/git-workspace/publish.js";
+} from "../features/workspace/git.js";
+import { firstUrl } from "../features/workspace/publish.js";
 import {
   plainCommand,
   scriptLike,
@@ -28,7 +28,7 @@ import {
   envName,
   looksSecret,
   variableName,
-} from "../features/imports/mcp.js";
+} from "../features/mcps/import.js";
 import { parseLocation } from "../features/imports/remote.js";
 import { hookSettingsOwner } from "../harnesses/registry.js";
 import {

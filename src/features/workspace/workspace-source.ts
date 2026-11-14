@@ -1,12 +1,12 @@
 import type { Settings } from "../../config/settings.js";
 import { cloudSource } from "./cloud-source.js";
 import type { SourceOptions, WorkspaceSource } from "./source.js";
-import { localOverlay, withOverlay } from "../git-workspace/overlay.js";
+import { localOverlay, withOverlay } from "./overlay.js";
 import {
   gitRepoSource,
   localRepoSource,
   type RepoSource,
-} from "../git-workspace/source.js";
+} from "./repo-source.js";
 
 /**
  * Builds a lazy Git or local-folder source from settings; returns undefined for

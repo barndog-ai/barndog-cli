@@ -97,3 +97,19 @@ export async function selectOrigin(
 
   return match;
 }
+
+/** Human scope label such as local, org, team/engineering, repo/web or dev/john. */
+export function originLabel(origin: {
+  type: string;
+  slug?: string | null;
+  id?: string;
+  localOnly?: boolean;
+}): string {
+  if (origin.localOnly || origin.type === "local") {
+    return "local";
+  }
+
+  return origin.type === "org"
+    ? "org"
+    : `${origin.type}/${origin.slug ?? origin.id ?? "unknown"}`;
+}

@@ -11,10 +11,10 @@ import tseslint from "typescript-eslint";
 // Literals defined by an outside format, grouped by the one module that names
 // them. Every other file, scripts and tests included, must use that name.
 const ownedLiterals = {
-  "src/features/git-workspace/snapshot.ts": [
+  "src/features/workspace/snapshot.ts": [
     {
       selector: "Literal[value=/^(100644|100755|120000|160000|040000)$/]",
-      message: "Use GIT_MODE from features/git-workspace/snapshot.ts.",
+      message: "Use GIT_MODE from features/workspace/snapshot.ts.",
     },
   ],
   "src/shared/constants.ts": [

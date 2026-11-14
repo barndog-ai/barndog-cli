@@ -6,7 +6,7 @@ import {
   type ApiScope,
 } from "../server/catalog.js";
 import { request } from "../server/request.js";
-import { openRepoSource } from "../environment/workspace-source.js";
+import { openRepoSource } from "../workspace/workspace-source.js";
 import { selectionState, withSelection } from "../../config/environment.js";
 import {
   selectionStateSchema,

@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { readSettings } from "../config/settings.js";
 import { CliError } from "../errors.js";
 import { readCredentials } from "../features/auth/credentials.js";
-import { LOCAL_ORIGIN } from "../features/git-workspace/overlay.js";
+import { LOCAL_ORIGIN } from "../features/workspace/overlay.js";
 
 /** Every `barndog changes …`, `skills changes …` and `hooks changes …` command. */
 const CHANGES_COMMANDS = /^(?:skills |hooks )?changes(?: |$)/;

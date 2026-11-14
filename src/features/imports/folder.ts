@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { dirname, join, parse, resolve } from "node:path";
 
 import { CliError } from "../../errors.js";
-import { folderSnapshot, isBlob } from "../git-workspace/snapshot.js";
+import { folderSnapshot, isBlob } from "../workspace/snapshot.js";
 import type { RemoteRepo } from "./remote.js";
 
 /** `~` or `~/…` at the start of a path, which a shell would expand to the home folder. */
