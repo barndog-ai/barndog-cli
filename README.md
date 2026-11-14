@@ -1,6 +1,6 @@
 # BarnDog CLI
 
-Set up your team's AI coding environment once, and have it show up in every developer's Claude Code, Codex, or any other coding harness.
+Set up your and your team's AI coding environment once, and have it show up in every developer's Claude Code, Codex, or any other coding harness.
 
 `barndog` is the command-line tool for [BarnDog](https://barndog.dev). It installs your organization's shared Skills, MCP servers, Hooks, and knowledge into the coding agents your developers already use, keeps them up to date, and lets the team improve them together with review, like code.
 
@@ -20,13 +20,13 @@ BarnDog keeps one shared setup and writes it into each tool in that tool's own f
 
 ```mermaid
 flowchart LR
-  W["Your workspace<br/>BarnDog server, a Git repo,<br/>or a local folder"] -->|barndog sync| C["barndog CLI"]
+  W["Your workspace<br/>BarnDog Cloud, a Git repo,<br/>or a local folder"] -->|barndog sync| C["barndog CLI"]
   C --> CC[Claude Code]
   C --> CX[Codex]
   C --> CU[Other harnesses]
 ```
 
-1. **Connect to a workspace.** `barndog init` signs you in to a BarnDog server, or points at a Git repository or local folder that holds your team's assets.
+1. **Connect to a workspace.** `barndog init` signs you in to a BarnDog server, or points at a Git repository or local folder that holds your or your team's assets.
 2. **Choose what you want.** Pick your coding tools, then the sets you need: the whole organization, your team, the repositories you work in, plus any individual assets.
 3. **Sync.** `barndog sync` writes everything into each tool's native location. It runs again automatically when a coding session starts, so updates arrive without anyone thinking about it.
 4. **Improve together.** Pull an asset into a folder, edit it, and `barndog push` a Suggested Change. Teammates review it line by line, and once it's merged everyone gets the new version on their next sync.
@@ -51,7 +51,7 @@ npm install -g barndog
 ## Quick start
 
 ```sh
-barndog init                       # connect, sign in, choose tools and sets
+barndog init                       # connect, optionally sign in, choose tools and sets
 barndog status                     # what's installed on this machine, and where
 barndog skills search review       # browse the shared catalog
 barndog skills install code-review # add one asset on top of your sets
@@ -69,7 +69,7 @@ You can share assets through any Git repository, using your own Git credentials.
 barndog init --repo git@github.com:acme/ai-setup.git
 ```
 
-Or keep them in a folder on your machine with `barndog init --local`. See [Git workspaces](https://barndog.dev/docs/cli/git-workspaces) for the layout.
+Or keep them in a folder on your machine with `barndog init --local`. See [Git workspaces](https://barndog.dev/docs/cli/git-workspaces#local-workspaces) for the layout.
 
 ### Suggest a change
 
@@ -81,7 +81,7 @@ barndog diff
 barndog push --title "Add a security checklist"
 ```
 
-Reviewers use `barndog changes list`, `changes diff`, and `changes approve` from the terminal, or the BarnDog web workspace.
+Reviewers use `barndog changes list`, `changes diff`, and `changes approve` from the terminal, or GitHub repo, or the BarnDog web workspace.
 
 ## What it changes on your machine
 
