@@ -57,7 +57,7 @@ export async function developers(
 
     people.push(...page.developers);
     if (page.nextCursor && seen.has(page.nextCursor)) {
-      throw new Error("Invalid developer pagination");
+      throw new Error("The server sent an invalid page of results");
     }
 
     if (page.nextCursor) {
@@ -112,7 +112,7 @@ export async function developerAssets(
 
     assets.push(...page.assets);
     if (page.nextCursor && seen.has(page.nextCursor)) {
-      throw new Error("Invalid discovery pagination");
+      throw new Error("The server sent an invalid page of results");
     }
 
     if (page.nextCursor) {

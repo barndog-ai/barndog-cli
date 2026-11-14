@@ -33,7 +33,7 @@ test("sync needs setup and refuses invalid settings before writing anything", as
   await mkdir(join(home, ".barndog"), { recursive: true });
   await writeFile(settingsPath(home), "harnesses: [typo]\n");
   await expect(synchronize(undefined, home)).rejects.toThrow(
-    /Invalid user settings/,
+    /config\.yaml isn't valid/,
   );
 
   await expect(lstat(join(home, ".barndog/state.json"))).rejects.toMatchObject({

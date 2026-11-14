@@ -11,6 +11,7 @@ import { isHarness, type Harness } from "../harnesses/registry.js";
 import { errorCode } from "../shared/values.js";
 import { NAME, UUID_V4 } from "../shared/patterns.js";
 import { writeAtomic } from "../shared/files.js";
+import { CliError } from "../errors.js";
 
 export class SetupRequiredError extends Error {
   constructor() {
@@ -101,20 +102,19 @@ const settingsSchema = z.looseObject({
 });
 
 const invalidSettings =
-  "Invalid user settings: expected a unique harnesses list (claude, codex, cursor)";
+  "harnesses must list each of claude, codex and cursor at most once";
 
 type SettingsField = keyof z.infer<typeof settingsSchema>;
 
 /** What to say about an invalid part, keyed by the field Zod reports it under. */
 const invalidPart: Partial<Record<SettingsField, string>> = {
   harnesses: invalidSettings,
-  connection: "Invalid user settings: invalid server connection",
-  gitWorkspace: "Invalid user settings: invalid Git workspace",
-  localWorkspace: "Invalid user settings: invalid local workspace",
-  environment: "Invalid user settings: invalid asset selection",
-  knowledge: "Invalid knowledge integration setting",
-  localNames:
-    "Invalid user settings: localNames maps asset IDs to lowercase hyphenated names",
+  connection: "the server connection is invalid",
+  gitWorkspace: "gitWorkspace is invalid",
+  localWorkspace: "localWorkspace is invalid",
+  environment: "the asset selection is invalid",
+  knowledge: "knowledge must be true or false",
+  localNames: "localNames must map asset IDs to lowercase hyphenated names",
 };
 
 const isInvalidPart = (key: unknown): key is SettingsField =>
@@ -136,9 +136,7 @@ function validate(value: unknown): Settings {
   void skills;
   const { connection, gitWorkspace, localWorkspace, environment } = settings;
   if (connection && gitWorkspace) {
-    throw new Error(
-      "Invalid user settings: use only one of connection and gitWorkspace",
-    );
+    throw new Error("use only one of connection and gitWorkspace");
   }
 
   const selectsRemoteAssets =
@@ -149,9 +147,7 @@ function validate(value: unknown): Settings {
     !localWorkspace;
 
   if (selectsRemoteAssets && !connection) {
-    throw new Error(
-      "Invalid user settings: API selections require a connection",
-    );
+    throw new Error("assets selected from a server need a connection");
   }
 
   return settings;
@@ -165,14 +161,26 @@ export async function readSettings(
   home = homedir(),
   path = settingsPath(home),
 ): Promise<Settings | null> {
+  let text: string;
   try {
-    return validate(parse(await readFile(path, "utf8")));
+    text = await readFile(path, "utf8");
   } catch (error) {
     if (errorCode(error) === "ENOENT") {
       return null;
     }
 
     throw error;
+  }
+
+  try {
+    return validate(parse(text));
+  } catch (error) {
+    // Someone edited the file by hand; saving runs the same checks as a guard.
+    throw new CliError(
+      `${path} isn't valid: ${error instanceof Error ? error.message : String(error)}. Fix it, or move it aside and set up again.`,
+      `mv ${path} ${path}.bak && barndog init`,
+      { cause: error },
+    );
   }
 }
 

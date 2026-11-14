@@ -137,7 +137,9 @@ test("empty selection persists and invalid settings never default to all harness
     "skills: []\n",
   ]) {
     await writeFile(settingsPath(home), content);
-    await expect(readSettings(home)).rejects.toThrow(/Invalid user settings/);
+    await expect(readSettings(home)).rejects.toThrow(
+      /isn't valid: harnesses must list/,
+    );
   }
 });
 

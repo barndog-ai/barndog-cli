@@ -28,6 +28,7 @@ import {
 
 import { connectionContext } from "../auth/session.js";
 import { defined } from "../../shared/lookup.js";
+import { CliError } from "../../errors.js";
 
 export type HarnessChoice = {
   value: Harness;
@@ -142,8 +143,9 @@ export async function initialize(options: {
           next.connection.organizationId !== connection.organizationId ||
           next.connection.developerId !== connection.developerId)
       ) {
-        throw new Error(
-          "Remove API selections before switching server, organization, or developer",
+        throw new CliError(
+          "You have assets selected from the current server. Remove them before switching server, organization or developer.",
+          "barndog status",
         );
       }
 

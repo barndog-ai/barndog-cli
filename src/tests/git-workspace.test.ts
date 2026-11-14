@@ -1211,7 +1211,7 @@ test("pull merges upstream, conflicts block push, and resolve clears them", asyn
 
   expect(result.conflicts).toStrictEqual(["SKILL.md"]);
   await expect(pushWorkingCopy({}, work, member)).rejects.toThrow(
-    /Resolve conflicts/,
+    /Resolve the conflicts/,
   );
 
   await expect(resolveFile("SKILL.md", work, member)).rejects.toThrow(
@@ -1410,7 +1410,7 @@ test("sync unlinks removed Skills and refuses to replace a link it doesn't own",
   await expect(lstat(link)).rejects.toMatchObject({ code: "ENOENT" });
   await write(folder, "org/skills/example/SKILL.md", skill("example"));
   await symlink(root, link);
-  await expect(synchronize(undefined, home)).rejects.toThrow(/unmanaged/);
+  await expect(synchronize(undefined, home)).rejects.toThrow(/didn't install/);
   expect(await readlink(link)).toBe(root);
 });
 
@@ -3130,19 +3130,7 @@ test("a moved asset is used from its new scope once it exists there, and removin
   ).toBe(0);
 });
 
-test("internal codes and validation errors read as sentences", () => {
-  expect(friendlyMessage(new Error("INVALID_SKILL_MD"))).toBe(
-    "SKILL.md needs front matter with a lowercase hyphenated name and a description",
-  );
-
-  expect(friendlyMessage(new Error("MISSING_HOOK_SCRIPT: a.sh"))).toBe(
-    "hook.yaml declares a script that isn't in the folder: a.sh",
-  );
-
-  expect(friendlyMessage(new Error("KNOWLEDGE_NOT_FOUND"))).toBe(
-    "Knowledge not found.",
-  );
-
+test("file system and validation errors read as sentences", () => {
   expect(
     friendlyMessage(
       Object.assign(new Error("x"), { code: "ENOENT", path: "/a" }),

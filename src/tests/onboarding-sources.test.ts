@@ -143,7 +143,7 @@ test("setup replaces the environment with exactly the chosen sources", () => {
     selectOnboardingSources([
       { source: sources[0]!, mode: "custom", assetIds: [outside] },
     ]),
-  ).toThrow(/outside this source/);
+  ).toThrow(/isn't in this workspace/);
 });
 
 test("own assets offer all, recommended, and custom without including other developers", () => {

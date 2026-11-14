@@ -7,6 +7,7 @@ import { contextSchema } from "@barndog-ai/api-contract";
 import { z } from "zod";
 import { errorCode } from "../../shared/values.js";
 import { writeAtomic } from "../../shared/files.js";
+import { CliError } from "../../errors.js";
 
 /**
  * A BarnDog session token: 32 random bytes in unpadded base64url, 43 characters.
@@ -44,8 +45,9 @@ export async function readCredentials(home = homedir()): Promise<Credentials> {
       !info.isFile() ||
       (process.platform !== "win32" && info.mode & POSIX_MODE.groupAndOtherBits)
     ) {
-      throw new Error(
-        "Credentials file must be a regular file accessible only to its owner",
+      throw new CliError(
+        `${path} must be a regular file only you can read.`,
+        `chmod 600 ${path}`,
       );
     }
 
@@ -54,7 +56,10 @@ export async function readCredentials(home = homedir()): Promise<Credentials> {
     );
 
     if (!parsed.success) {
-      throw new Error("Invalid credentials file");
+      throw new CliError(
+        `${path} is damaged, so BarnDog can't read your sign-ins.`,
+        `rm ${path} && barndog login`,
+      );
     }
 
     return parsed.data;
@@ -79,7 +84,7 @@ export async function updateCredentials(
   await mkdir(root, { recursive: true, mode: POSIX_MODE.privateDirectory });
   const info = await lstat(root);
   if (!info.isDirectory()) {
-    throw new Error("Credentials directory must be a regular directory");
+    throw new CliError(`${root} must be a folder.`);
   }
 
   await chmod(root, POSIX_MODE.privateDirectory);
@@ -87,7 +92,9 @@ export async function updateCredentials(
   await mkdir(lock, { mode: POSIX_MODE.privateDirectory }).catch(
     (error: unknown) => {
       if (errorCode(error) === "EEXIST") {
-        throw new Error("Another login or logout is running");
+        throw new CliError(
+          "Another sign-in or sign-out is running. Wait for it to finish, then try again.",
+        );
       }
 
       throw error;

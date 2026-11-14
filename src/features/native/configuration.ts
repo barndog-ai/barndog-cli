@@ -17,6 +17,7 @@ import { isDeepStrictEqual } from "node:util";
 import { join } from "node:path";
 import type { Harness } from "../../harnesses/types.js";
 import { isRecord } from "../../shared/values.js";
+import { CliError } from "../../errors.js";
 
 /**
  * One owned native configuration entry, including its destination file and
@@ -55,9 +56,12 @@ export const nativeFile = (
   home: string,
 ) => join(home, (kind === "mcp" ? mcpFiles : hookFiles)[harness]);
 
-function object(value: unknown): Record<string, unknown> {
+function object(value: unknown, file: string): Record<string, unknown> {
   if (!isRecord(value)) {
-    throw new Error("Native configuration must contain an object");
+    throw new CliError(
+      `${file} doesn't hold the settings object BarnDog expects, so it was left unchanged. Fix it, then sync again.`,
+      "barndog sync",
+    );
   }
 
   return value;
@@ -74,19 +78,20 @@ function same(left: unknown, right: unknown): boolean {
   );
 }
 
-function json(text: string) {
+function json(text: string, file: string) {
   const errors: ParseError[] = [];
   const value: unknown = parseJson(text || "{}", errors, {
     allowTrailingComma: true,
   });
 
   if (errors.length) {
-    throw new Error(
-      "Invalid native JSON configuration; installation preserved",
+    throw new CliError(
+      `${file} isn't valid JSON, so BarnDog left it unchanged. Fix it, then sync again.`,
+      "barndog sync",
     );
   }
 
-  return object(value);
+  return object(value, file);
 }
 
 /**
@@ -123,8 +128,9 @@ function tomlEdit(
     } else {
       const path = node.key.keys.map((k) => ("name" in k ? k.name : k.value));
       if (path[0] === "mcp_servers" && path.length === 1) {
-        throw new Error(
-          "Codex inline mcp_servers layout cannot be edited safely; installation preserved",
+        throw new CliError(
+          "~/.codex/config.toml lists MCP servers inline (mcp_servers = { ... }), which BarnDog can't edit safely, so it was left unchanged. Give each server its own [mcp_servers.<name>] table, then sync again.",
+          "barndog sync",
         );
       }
 
@@ -158,7 +164,9 @@ export function patchNative(
 ): string {
   const sample = after[0] ?? before[0];
   if (!sample) {
-    throw new Error("Missing native configuration entries");
+    throw new Error(
+      "patchNative needs at least one entry to know which file it edits",
+    );
   }
 
   const toml = sample.file.endsWith(".toml");
@@ -169,7 +177,9 @@ export function patchNative(
       : "{}\n");
 
   const read = () =>
-    toml ? object(parseToml(text === null ? "" : output)) : json(output);
+    toml
+      ? object(parseToml(text === null ? "" : output), sample.file)
+      : json(output, sample.file);
 
   let data = read();
   if (toml && text === null) {
@@ -184,7 +194,10 @@ export function patchNative(
       const nodes = parent?.children;
       const node = nodes?.[index];
       if (!parent || !nodes || !node) {
-        throw new Error("Native configuration changed while editing it");
+        throw new CliError(
+          `${sample.file} changed while BarnDog was editing it. Try again.`,
+          "barndog sync",
+        );
       }
 
       const previous = nodes[index - 1];
@@ -217,11 +230,11 @@ export function patchNative(
       output = applyEdits(output, modify(output, path, value, {}));
     }
 
-    data = json(output);
+    data = json(output, sample.file);
   };
 
   const table = (key: string) =>
-    data[key] === undefined ? {} : object(data[key]);
+    data[key] === undefined ? {} : object(data[key], sample.file);
 
   /** The handlers registered for one hook event. */
   const list = (event: string): unknown[] => {
@@ -234,7 +247,10 @@ export function patchNative(
     if (old.kind === "mcp") {
       const parent = toml ? "mcp_servers" : "mcpServers";
       if (!same(table(parent)[old.key], old.value)) {
-        throw new Error(`Managed MCP was changed externally: ${old.key}`);
+        throw new CliError(
+          `The MCP server ${old.key} that BarnDog installed in ${sample.file} was changed by hand. Undo that edit or remove the entry, then sync again.`,
+          "barndog sync",
+        );
       }
     } else {
       const list = table("hooks")[old.key];
@@ -242,7 +258,10 @@ export function patchNative(
         !Array.isArray(list) ||
         list.filter((v) => same(v, old.value)).length !== 1
       ) {
-        throw new Error(`Managed Hook was changed externally: ${old.key}`);
+        throw new CliError(
+          `The ${old.key} Hook that BarnDog installed in ${sample.file} was changed by hand. Undo that edit or remove the entry, then sync again.`,
+          "barndog sync",
+        );
       }
     }
   }
@@ -255,13 +274,19 @@ export function patchNative(
         Object.hasOwn(table(parent), next.key) &&
         !before.some((old) => old.kind === "mcp" && old.key === next.key)
       ) {
-        throw new Error(`Existing unmanaged MCP: ${next.key}`);
+        throw new CliError(
+          `${sample.file} already has an MCP server named ${next.key} that BarnDog didn't add. Remove it, or install BarnDog's under another name.`,
+          `barndog mcp rename ${next.key}`,
+        );
       }
 
       if (
         after.filter((e) => e.kind === "mcp" && e.key === next.key).length > 1
       ) {
-        throw new Error(`Conflicting MCP name: ${next.key}`);
+        throw new CliError(
+          `Two MCP servers would both be installed as ${next.key}.`,
+          `barndog mcp rename ${next.key}`,
+        );
       }
     } else {
       if (
@@ -270,12 +295,15 @@ export function patchNative(
             e.kind !== "mcp" && e.key === next.key && same(e.value, next.value),
         ).length > 1
       ) {
-        throw new Error(`Duplicate Hook registration: ${next.key}`);
+        throw new Error(`The same ${next.key} Hook handler was planned twice`);
       }
 
       const list = table("hooks")[next.key];
       if (list !== undefined && !Array.isArray(list)) {
-        throw new Error(`Invalid native Hook list: ${next.key}`);
+        throw new CliError(
+          `hooks.${next.key} in ${sample.file} isn't a list, so BarnDog left the file unchanged. Fix it, then sync again.`,
+          "barndog sync",
+        );
       }
 
       if (
@@ -285,7 +313,10 @@ export function patchNative(
           (old) => old.key === next.key && same(old.value, next.value),
         )
       ) {
-        throw new Error(`Existing unmanaged Hook: ${next.key}`);
+        throw new CliError(
+          `${sample.file} already runs this ${next.key} Hook, but BarnDog didn't add it. Remove your copy, then sync again.`,
+          "barndog sync",
+        );
       }
     }
   }
@@ -306,7 +337,7 @@ export function patchNative(
     if (old.kind === "mcp") {
       if (toml) {
         output = tomlEdit(output, old.key, undefined);
-        data = object(parseToml(output));
+        data = object(parseToml(output), sample.file);
       } else {
         change(["mcpServers", old.key], undefined);
       }
@@ -335,7 +366,7 @@ export function patchNative(
     if (next.kind === "mcp") {
       if (toml) {
         output = tomlEdit(output, next.key, next.value);
-        data = object(parseToml(output));
+        data = object(parseToml(output), sample.file);
       } else {
         change(["mcpServers", next.key], next.value);
       }
@@ -355,7 +386,9 @@ export function patchNative(
     sample.kind !== "mcp" &&
     data.version !== 1
   ) {
-    throw new Error("Unsupported Cursor Hook configuration version");
+    throw new CliError(
+      `${sample.file} has a version BarnDog doesn't support (it expects "version": 1), so it was left unchanged.`,
+    );
   }
 
   return output;

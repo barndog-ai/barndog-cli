@@ -8,6 +8,7 @@ import { serverFetch, normalizeServer } from "../auth/transport.js";
 import { homedir } from "node:os";
 import { assetKinds, type PackageKind } from "../asset-kinds/index.js";
 import { defined } from "../../shared/lookup.js";
+import { PackageError } from "../../errors.js";
 
 /** The typed client speaks Skill routes; other package kinds swap in their own. */
 export function packagePath(path: string, kind: PackageKind) {
@@ -143,7 +144,7 @@ export function metadata(entries: PackageEntry[], kind: PackageKind = "skill") {
   }
 
   if (!entries.some((e) => e.path === "hook.yaml")) {
-    throw new Error("MISSING_PACKAGE_MANIFEST: hook.yaml");
+    throw new PackageError("MISSING_PACKAGE_MANIFEST", "hook.yaml");
   }
 
   const manifest = hookManifestSchema.parse(
@@ -156,7 +157,7 @@ export function metadata(entries: PackageEntry[], kind: PackageKind = "skill") {
     if (implementation) {
       for (const script of implementation.scripts) {
         if (!entries.some((e) => e.path === script)) {
-          throw new Error(`Missing Hook script: ${script}`);
+          throw new PackageError("MISSING_HOOK_SCRIPT", script);
         }
       }
     }

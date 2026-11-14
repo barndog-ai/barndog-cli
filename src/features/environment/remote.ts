@@ -16,6 +16,7 @@ import {
   type PublishedAsset,
 } from "../asset-kinds/index.js";
 import { only } from "../../shared/lookup.js";
+import { CliError } from "../../errors.js";
 
 /** Every asset this developer can install, as the server lists them. */
 export type EnvironmentCatalog = z.infer<typeof environmentCatalogSchema>;
@@ -117,8 +118,9 @@ export async function environmentCatalog(
     (conn.organizationId !== expected.organizationId ||
       conn.developerId !== expected.developerId)
   ) {
-    throw new Error(
-      "Authenticated identity does not match the selected environment",
+    throw new CliError(
+      "You're signed in as a different organization or developer than this machine was set up with.",
+      "barndog login",
     );
   }
 

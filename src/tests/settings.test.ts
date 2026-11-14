@@ -28,24 +28,30 @@ describe("readSettings", () => {
   };
 
   test.each([
-    [{ harnesses: ["claude", "claude"] }, "unique harnesses list"],
-    [{ harnesses: ["unknown"] }, "unique harnesses list"],
-    [{ connection: { server: "ftp://x" } }, "invalid server connection"],
+    [
+      { harnesses: ["claude", "claude"] },
+      "each of claude, codex and cursor at most once",
+    ],
+    [
+      { harnesses: ["unknown"] },
+      "each of claude, codex and cursor at most once",
+    ],
+    [{ connection: { server: "ftp://x" } }, "server connection is invalid"],
     [
       { gitWorkspace: { url: "-x", branch: "main", workspaceId } },
-      "invalid Git workspace",
+      "gitWorkspace is invalid",
     ],
     [
       { localWorkspace: { path: "relative", workspaceId } },
-      "invalid local workspace",
+      "localWorkspace is invalid",
     ],
-    [{ environment: {} }, "invalid asset selection"],
-    [{ knowledge: "yes" }, "Invalid knowledge integration setting"],
-    [{ knowledge: null }, "Invalid knowledge integration setting"],
-    [{ localNames: { "not-a-uuid": "x" } }, "localNames maps asset IDs"],
+    [{ environment: {} }, "asset selection is invalid"],
+    [{ knowledge: "yes" }, "knowledge must be true or false"],
+    [{ knowledge: null }, "knowledge must be true or false"],
+    [{ localNames: { "not-a-uuid": "x" } }, "localNames must map asset IDs"],
     [
       { localNames: { [workspaceId]: "Bad Name" } },
-      "localNames maps asset IDs",
+      "localNames must map asset IDs",
     ],
   ])("rejects %j", async (settings, message) => {
     await expect(read(settings)).rejects.toThrow(message);

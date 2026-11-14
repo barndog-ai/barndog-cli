@@ -206,7 +206,7 @@ test("API selections prevent account switches without changing saved credentials
   const before = await readCredentials(f.home);
   await expect(
     login({ server: f.origin, home: f.home, verification: async () => {} }),
-  ).rejects.toThrow(/Remove API selections/);
+  ).rejects.toThrow(/Remove them before switching server/);
 
   expect(await readCredentials(f.home)).toStrictEqual(before);
   expect(f.revoked()).toBe(true);
@@ -214,8 +214,11 @@ test("API selections prevent account switches without changing saved credentials
 
 test("authenticated transport rejects insecure origins, redirects, cross-server requests and missing credentials", async (t) => {
   const f = await fixture(t);
-  expect(() => normalizeServer("http://example.com")).toThrow(/HTTPS/);
-  expect(() => normalizeServer("https://example.com/path")).toThrow(/origin/);
+  expect(() => normalizeServer("http://example.com")).toThrow(/must use https/);
+  expect(() => normalizeServer("https://example.com/path")).toThrow(
+    /isn't a server address/,
+  );
+
   for (const origin of [
     "http://127.0.0.1:3000",
     "http://[::1]:3000",
@@ -243,7 +246,9 @@ test("authenticated transport rejects insecure origins, redirects, cross-server 
     POSIX_MODE.regularFile,
   );
 
-  await expect(readCredentials(f.home)).rejects.toThrow(/only to its owner/);
+  await expect(readCredentials(f.home)).rejects.toThrow(
+    /must be a regular file only you can read/,
+  );
 });
 
 test("cancelling login never creates a credential", async (t) => {

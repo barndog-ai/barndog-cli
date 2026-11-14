@@ -11,6 +11,7 @@ import { selectionState, withSelection } from "../../config/environment.js";
 import {
   applySelectionAction,
   resolveAssets,
+  ScopeNotSelectedError,
 } from "../asset-selection/index.js";
 import type {
   AssetCatalog,
@@ -268,10 +269,7 @@ async function applyChange(
         resolution,
       );
     } catch (error) {
-      if (
-        error instanceof Error &&
-        error.message.startsWith("Scope is not selected")
-      ) {
+      if (error instanceof ScopeNotSelectedError) {
         throw new CliError(
           `${origin} isn't in your sets yet.`,
           `barndog sets install ${origin}`,
@@ -549,8 +547,9 @@ export function installSetAssets(
       new Set(ids).size !== ids.length ||
       ids.some((id) => !available.some((asset) => asset.id === id))
     ) {
-      throw new Error(
-        "Custom selection contains duplicate or unavailable assets",
+      throw new CliError(
+        `Some chosen assets are listed twice or aren't in ${options.origin}.`,
+        `barndog sets show ${options.origin}`,
       );
     }
 
@@ -572,7 +571,9 @@ export function installSetAssets(
       });
 
       if (result.status !== "applied") {
-        throw new Error("Individual installation needs a decision");
+        throw new Error(
+          "Installing a set's assets one by one asked for a decision",
+        );
       }
 
       state = result.state;
@@ -645,7 +646,7 @@ export function setKnowledge(
       !settings.gitWorkspace &&
       !settings.localWorkspace
     ) {
-      throw new Error("Set up a workspace with barndog init first");
+      throw new CliError("Set up a workspace first.", "barndog init");
     }
 
     return {

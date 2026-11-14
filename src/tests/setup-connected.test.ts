@@ -229,7 +229,7 @@ for (const state of ["missing", "expired", "valid", "revoked"] as const) {
       const original = await readFile(settingsPath(home), "utf8");
       await expect(
         installSetAssets({ origin: "org", assetIds: [randomUUID()] }, home),
-      ).rejects.toThrow(/unavailable assets/);
+      ).rejects.toThrow(/listed twice or aren't in/);
 
       expect(await readFile(settingsPath(home), "utf8")).toBe(original);
       await installSetAssets({ origin: "org", assetIds: [] }, home);

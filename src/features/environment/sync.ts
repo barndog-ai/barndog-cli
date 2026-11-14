@@ -144,8 +144,9 @@ export async function synchronize(
         settings.harnesses.includes("claude") &&
         process.env.CLAUDE_CONFIG_DIR
       ) {
-        throw new Error(
-          "Custom CLAUDE_CONFIG_DIR is not supported by this delivery adapter; use the standard user configuration location",
+        throw new CliError(
+          "BarnDog can't install into a custom CLAUDE_CONFIG_DIR yet; it uses ~/.claude.",
+          "unset CLAUDE_CONFIG_DIR",
         );
       }
 
@@ -154,8 +155,9 @@ export async function synchronize(
         process.env.CODEX_HOME &&
         resolve(process.env.CODEX_HOME) !== join(home, ".codex")
       ) {
-        throw new Error(
-          "Custom CODEX_HOME is not supported by this delivery adapter; use ~/.codex",
+        throw new CliError(
+          "BarnDog can't install into a custom CODEX_HOME yet; it uses ~/.codex.",
+          "unset CODEX_HOME",
         );
       }
     }
@@ -185,7 +187,10 @@ export async function synchronize(
       !source &&
       (selection.subscriptions.length || selection.individualAssetIds.length)
     ) {
-      throw new Error("Remote selections require a connection");
+      throw new CliError(
+        "Your selection includes assets from a BarnDog server, but this machine isn't connected to one.",
+        "barndog init",
+      );
     }
 
     const catalog = source
@@ -349,7 +354,9 @@ export async function synchronize(
       for (const harness of settings.harnesses) {
         const target = resolve(skillDirectory(harness, home), name);
         if (isInside(source, target) || isInside(target, source)) {
-          throw new Error(`Source overlaps installation: ${source}`);
+          throw new CliError(
+            `${source} is inside a folder BarnDog installs into. Keep your workspace somewhere else.`,
+          );
         }
 
         desired.push({ id, harness, source, target });
@@ -413,7 +420,7 @@ export async function synchronize(
     for (const chosen of effective.assets) {
       const ref = chosen.asset;
       if (ids.has(ref.id)) {
-        throw new Error("Remote asset ID conflicts with a local selection");
+        throw new Error("A catalog asset has the same ID as a local one");
       }
 
       ids.add(ref.id);
@@ -656,7 +663,10 @@ export async function synchronize(
     for (const link of before.links) {
       const actual = await linkTarget(link.target);
       if (actual !== null && actual !== link.source) {
-        throw new Error(`Managed link was changed externally: ${link.target}`);
+        throw new CliError(
+          `${link.target} was changed outside BarnDog. Restore or remove it, then sync again.`,
+          "barndog sync",
+        );
       }
     }
 
@@ -665,7 +675,10 @@ export async function synchronize(
       const old = before.links.find((l) => l.target === link.target);
 
       if (actual !== null && !old) {
-        throw new Error(`Existing unmanaged Skill: ${link.target}`);
+        throw new CliError(
+          `${link.target} is a Skill BarnDog didn't install, so it won't replace it. Move or rename it, then sync again.`,
+          "barndog sync",
+        );
       }
     }
 

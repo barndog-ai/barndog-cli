@@ -113,7 +113,9 @@ export async function runLogin(
     write(hint("barndog init"));
   } catch (error) {
     if (controller.signal.aborted) {
-      throw new Error("Sign-in cancelled", { cause: error });
+      throw new CliError("Sign-in cancelled.", "barndog login", {
+        cause: error,
+      });
     }
 
     if (

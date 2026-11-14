@@ -18,6 +18,7 @@ import { assetKinds, type PackageKind } from "../asset-kinds/index.js";
 import { errorCode } from "../../shared/values.js";
 import { setYamlName, splitFrontMatter } from "../../shared/patterns.js";
 import { writeAtomic } from "../../shared/files.js";
+import { CliError } from "../../errors.js";
 
 /** Readable, stable folders that harnesses resolve; the commit-pinned cache stays internal. */
 export function installedRoot(home: string, kind: PackageKind) {
@@ -50,7 +51,9 @@ async function readTree(directory: string): Promise<PackageEntry[]> {
           executable: !!(info.mode & POSIX_MODE.executableBits),
         });
       } else {
-        throw new Error(`Unexpected file type in ${join(directory, path)}`);
+        throw new CliError(
+          `${join(directory, path)} isn't a regular file or folder, so BarnDog can't read it.`,
+        );
       }
     }
   }

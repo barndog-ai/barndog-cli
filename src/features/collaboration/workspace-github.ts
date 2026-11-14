@@ -32,6 +32,7 @@ import {
 import { defined } from "../../shared/lookup.js";
 
 import type { CloudPushResult, UpdatedCloudWorkingCopy } from "./results.js";
+import { CliError } from "../../errors.js";
 
 const publishedId = (work: { skillId?: string | null }) =>
   defined(work.skillId, "This working copy isn't published yet");
@@ -61,20 +62,23 @@ export async function externalSource(work: Workspace, home: string) {
   );
 
   if (work.external && (!source || source.id !== work.external.id)) {
-    throw new Error(
-      "External content authority changed; preserve this working copy and pull a new one",
+    throw new CliError(
+      "This asset's GitHub connection changed on the server. Save your edits elsewhere, then pull a fresh working copy.",
+      "barndog pull",
     );
   }
 
   if (source && source.status !== "active") {
-    throw new Error(
-      `GitHub synchronization requires attention: ${source.lastError ?? source.status}`,
+    throw new CliError(
+      `GitHub sync needs attention: ${source.lastError ?? source.status}.`,
+      "barndog github list",
     );
   }
 
   if (source && work.pending) {
-    throw new Error(
-      "An internal submission is pending; resolve it before using GitHub",
+    throw new CliError(
+      "A push to BarnDog is still waiting for confirmation. Retry it before using GitHub.",
+      "barndog push",
     );
   }
 
@@ -141,7 +145,9 @@ export async function pullExternal(
   );
 
   if (!("commit" in asset.version)) {
-    throw new Error("Expected a Git-backed package version");
+    throw new Error(
+      "The server returned a GitHub-connected version without its Git commit",
+    );
   }
 
   if (asset.version.id !== work.baseVersionId) {
@@ -196,8 +202,9 @@ export async function pushExternal(
     );
 
     if (asset.version.id !== work.baseVersionId) {
-      throw new Error(
-        "Published GitHub content changed; run barndog pull before pushing",
+      throw new CliError(
+        "The published content on GitHub changed since your last pull.",
+        "barndog pull",
       );
     }
 
@@ -213,14 +220,16 @@ export async function pushExternal(
       : undefined;
 
     if (pull?.state === "closed" && !options.new) {
-      throw new Error(
-        "Pull request is closed; run barndog pull, then push --new to contribute again",
+      throw new CliError(
+        "The pull request is closed. Pull, then push a new one.",
+        "barndog pull && barndog push --new",
       );
     }
 
     if (pull && pull.head !== external.pull?.head) {
-      throw new Error(
-        "Pull request changed remotely; run barndog pull before pushing",
+      throw new CliError(
+        "The pull request changed on GitHub since your last pull.",
+        "barndog pull",
       );
     }
 
@@ -230,7 +239,9 @@ export async function pushExternal(
 
     const files = await readDirectory(work.root);
     if (packageMetadataFor(files, work.kind).name !== work.name) {
-      throw new Error("Package name cannot change in this working copy");
+      throw new CliError(
+        `This working copy's name must stay ${work.name}. Change it back, then push again.`,
+      );
     }
 
     const previous = (pull && external.pull?.files) || work.base;

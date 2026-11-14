@@ -20,7 +20,7 @@ import {
   type PackageKind,
 } from "../asset-kinds/index.js";
 import { readSettings, type Connection } from "../../config/settings.js";
-import { CliError } from "../../errors.js";
+import { CliError, PackageError } from "../../errors.js";
 import { only } from "../../shared/lookup.js";
 import { splitOrigin } from "../../shared/patterns.js";
 
@@ -62,8 +62,9 @@ export async function connection(home = homedir(), expected?: Connection) {
       expected.organizationId !== saved.organizationId ||
       expected.developerId !== saved.developerId)
   ) {
-    throw new Error(
-      "Working copy belongs to another server, organization, or developer",
+    throw new CliError(
+      "This working copy belongs to another server, organization or developer than the one you're signed in to.",
+      "barndog whoami",
     );
   }
 
@@ -75,8 +76,9 @@ export async function connection(home = homedir(), expected?: Connection) {
     actor.organization.id !== saved.organizationId ||
     actor.developer.id !== saved.developerId
   ) {
-    throw new Error(
-      "Authenticated identity does not match the saved connection",
+    throw new CliError(
+      "You're signed in as a different organization or developer than this machine was set up with.",
+      "barndog login",
     );
   }
 
@@ -215,15 +217,19 @@ export async function download(
   );
 
   if (!response.ok) {
-    throw new Error(`Package download failed (${response.status})`);
+    throw new CliError(
+      `Downloading the package failed (${response.status}). Try again.`,
+    );
   }
 
   if (commit && response.headers.get("etag") !== `"${commit}"`) {
-    throw new Error("Package revision does not match metadata");
+    throw new CliError(
+      "The package changed on the server while it was downloading. Try again.",
+    );
   }
 
   if (!response.body) {
-    throw new Error("Missing package body");
+    throw new Error("The server sent a package download with no body");
   }
 
   let size = 0;
@@ -231,7 +237,7 @@ export async function download(
   for await (const chunk of response.body) {
     size += chunk.length;
     if (size > defaultLimits.compressed) {
-      throw new Error("PACKAGE_TOO_LARGE");
+      throw new PackageError("PACKAGE_TOO_LARGE");
     }
 
     chunks.push(chunk);

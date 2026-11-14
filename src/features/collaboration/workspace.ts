@@ -66,6 +66,7 @@ import type {
   PulledPackage,
   UpdatedCloudWorkingCopy,
 } from "./results.js";
+import { CliError, PackageError } from "../../errors.js";
 
 const publishedId = (work: { skillId?: string | null }) =>
   defined(work.skillId, "This working copy isn't published yet");
@@ -199,13 +200,17 @@ export async function updateWorkspace(
     const previous = structuredClone(work);
     await connection(home, work.connection);
     if (work.pending || work.external?.pending) {
-      throw new Error(
-        "Retry barndog push before pulling; a submission is awaiting confirmation",
+      throw new CliError(
+        "Your last push is still waiting for the server to confirm it. Retry it before pulling.",
+        "barndog push",
       );
     }
 
     if (work.conflicts.length) {
-      throw new Error("Resolve existing conflicts before pulling again");
+      throw new CliError(
+        "Resolve the existing conflicts before pulling again.",
+        "barndog resolve <path>",
+      );
     }
 
     let entries = await readDirectory(work.root);
@@ -256,7 +261,9 @@ export async function updateWorkspace(
             );
 
             if (!version) {
-              throw new Error("Proposal base version is unavailable");
+              throw new Error(
+                "The server didn't return the version this Suggested Change is based on",
+              );
             }
 
             work.base = encodeFiles(
@@ -385,20 +392,29 @@ export async function markResolved(
   const absolute = resolve(await realpath(cwd), path);
   const conflict = work.conflicts.find((p) => join(work.root, p) === absolute);
   if (!conflict) {
-    throw new Error("Path is not an unresolved conflict");
+    throw new CliError(
+      `${path} isn't an unresolved conflict.`,
+      "barndog status",
+    );
   }
 
   const files = await readDirectory(work.root);
   const file = files.find((e) => e.path === conflict);
 
   if (file && hasConflictMarkers(textContent(file.data) ?? "")) {
-    throw new Error("Remove conflict markers before resolving this file");
+    throw new CliError(
+      `${conflict} still has conflict markers. Edit them out, then resolve it again.`,
+      `barndog resolve ${path}`,
+    );
   }
 
   const paths = new Set(files.map((e) => e.path));
   for (const p of paths) {
     if ([...paths].some((other) => p.startsWith(other + "/"))) {
-      throw new Error("File/directory collision remains");
+      throw new CliError(
+        `A file and a folder share the path ${p}. Keep one, then resolve again.`,
+        `barndog resolve ${path}`,
+      );
     }
   }
 
@@ -426,7 +442,7 @@ export async function archive(files: Files, home: string) {
 
     const bytes = await readFile(tar);
     if (bytes.length > defaultLimits.compressed) {
-      throw new Error("PACKAGE_TOO_LARGE");
+      throw new PackageError("PACKAGE_TOO_LARGE");
     }
 
     return new Blob([bytes]);
@@ -490,11 +506,17 @@ export async function pushWorkspace(
     }
 
     if (options.kind && work.kind !== options.kind) {
-      throw new Error("Working copy belongs to a different asset kind");
+      throw new CliError(
+        `This working copy holds a ${work.kind}, not a ${options.kind}.`,
+        "barndog status",
+      );
     }
 
     if (options.name && work.name !== options.name) {
-      throw new Error("Working-copy name does not match the requested asset");
+      throw new CliError(
+        `This working copy is ${work.name}, not ${options.name}.`,
+        "barndog status",
+      );
     }
 
     await connection(home, work.connection);
@@ -510,7 +532,10 @@ export async function pushWorkspace(
         selected.id !== work.origin.id
       ) {
         if (work.skillId || work.proposal || work.pending) {
-          throw new Error("A submitted working copy cannot change its origin");
+          throw new CliError(
+            "This working copy was already submitted, so its origin can't change. Push without --origin.",
+            "barndog push",
+          );
         }
 
         work.origin = { type: selected.type, id: selected.id };
@@ -519,8 +544,9 @@ export async function pushWorkspace(
     }
 
     if (work.conflicts.length) {
-      throw new Error(
-        "Resolve conflicts with barndog resolve <path> before pushing",
+      throw new CliError(
+        "Resolve the conflicts before pushing.",
+        "barndog resolve <path>",
       );
     }
 
@@ -538,8 +564,9 @@ export async function pushWorkspace(
       );
 
       if (!scope.canPublish) {
-        throw new Error(
-          "Direct publication requires a scope admin, organization admin, or personal owner; use barndog changes merge after review",
+        throw new CliError(
+          "Only a scope admin, an organization admin or the personal owner can publish directly. Propose it for review instead, then merge it with barndog changes merge.",
+          "barndog push",
         );
       }
     }
@@ -566,8 +593,9 @@ export async function pushWorkspace(
 
     if (!work.pending) {
       if (proposal?.status === "rejected" && !options.new) {
-        throw new Error(
-          "Suggested Change was rejected; use barndog push --new for a new proposal",
+        throw new CliError(
+          "This Suggested Change was rejected.",
+          "barndog push --new",
         );
       }
 
@@ -575,8 +603,9 @@ export async function pushWorkspace(
         proposal?.status === "merged" &&
         proposal.publishedVersion?.id !== work.baseVersionId
       ) {
-        throw new Error(
-          "Run barndog pull before starting another Suggested Change",
+        throw new CliError(
+          "Your last Suggested Change was merged. Pull it before starting another.",
+          "barndog pull",
         );
       }
 
@@ -584,14 +613,17 @@ export async function pushWorkspace(
         proposal?.status === "open" &&
         proposal.revision !== linkedProposal(work).revision
       ) {
-        throw new Error(
-          "Suggested Change changed remotely; run barndog pull before pushing",
+        throw new CliError(
+          "The Suggested Change changed on the server since your last pull.",
+          "barndog pull",
         );
       }
 
       const files = await readDirectory(work.root);
       if (packageMetadataFor(files, work.kind).name !== work.name) {
-        throw new Error("Package name cannot change in this working copy");
+        throw new CliError(
+          `This working copy's name must stay ${work.name}. Change it back, then push again.`,
+        );
       }
 
       const previous =
@@ -721,7 +753,9 @@ export async function createWorkspace(
 ): Promise<CreatedPackage> {
   return locked(home, async () => {
     if (!NAME.test(name)) {
-      throw new Error("Use a lowercase hyphenated package name");
+      throw new CliError(
+        `${name} isn't a valid name. Use lowercase letters, digits and hyphens, such as my-skill.`,
+      );
     }
 
     const conn = await connection(home);

@@ -59,7 +59,7 @@ function repoSource(
   const find = async (reference: AssetReference): Promise<RepoAsset> => {
     const asset = (await model()).assets.find((a) => a.id === reference.id);
     if (!asset || asset.publishedVersion !== reference.publishedVersion) {
-      throw new Error("Catalog changed during staging; retry sync");
+      throw new CliError("The catalog changed while syncing.", "barndog sync");
     }
 
     if (asset.invalid) {

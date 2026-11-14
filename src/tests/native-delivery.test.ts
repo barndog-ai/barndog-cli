@@ -57,7 +57,7 @@ test("native MCP changes preserve unmanaged entries, credentials, settings and c
 
   const removed = patchNative(changed, [updated], []);
   expect(parseJson(removed)).toStrictEqual(parseJson(original));
-  expect(() => patchNative(installed, [], [managed])).toThrow(/unmanaged MCP/);
+  expect(() => patchNative(installed, [], [managed])).toThrow(/didn't add/);
   expect(() =>
     patchNative(
       installed.replace(
@@ -67,11 +67,9 @@ test("native MCP changes preserve unmanaged entries, credentials, settings and c
       [managed],
       [updated],
     ),
-  ).toThrow(/changed externally/);
+  ).toThrow(/changed by hand/);
 
-  expect(() => patchNative(original, [managed], [])).toThrow(
-    /changed externally/,
-  );
+  expect(() => patchNative(original, [managed], [])).toThrow(/changed by hand/);
 });
 
 test("TOML edits preserve unrelated sections, header references, comments and multiline strings", () => {
@@ -108,14 +106,14 @@ test("TOML edits preserve unrelated sections, header references, comments and mu
     parseToml(original),
   );
 
-  expect(() => patchNative(installed, [], [managed])).toThrow(/unmanaged MCP/);
+  expect(() => patchNative(installed, [], [managed])).toThrow(/didn't add/);
   expect(() =>
     patchNative(
       installed.replace('"a script.js"', '"edited.js"'),
       [managed],
       [],
     ),
-  ).toThrow(/changed externally/);
+  ).toThrow(/changed by hand/);
 
   expect(
     JSON.parse(
@@ -158,9 +156,11 @@ test("Hook array reconciliation preserves unmanaged registrations and detects ed
       [first, second],
       [],
     ),
-  ).toThrow(/changed externally/);
+  ).toThrow(/changed by hand/);
 
-  expect(() => patchNative(installed, [], [first])).toThrow(/unmanaged Hook/);
+  expect(() => patchNative(installed, [], [first])).toThrow(
+    /BarnDog didn't add it/,
+  );
 });
 
 test("MCP adapters retain secret references and support Codex environment aliases", () => {
@@ -238,7 +238,7 @@ test("interrupted native writes roll forward and refuse to overwrite later user 
   expect(await fileText(b)).toBe(null);
   await writeFile(a, '{"mcpServers":{},"userSetting":true}');
   await expect(locked(home, async () => undefined)).rejects.toThrow(
-    /changed.*recovery/,
+    /changed after a sync was interrupted/,
   );
 
   expect(await fileText(a)).toBe('{"mcpServers":{},"userSetting":true}');

@@ -6,6 +6,7 @@ import type { AssetKind, AssetReference } from "../asset-selection/types.js";
 import { cacheKey, cachedPackage } from "./packages.js";
 import { environmentCatalog, getAsset } from "./remote.js";
 import type { WorkspaceSource } from "./source.js";
+import { CliError } from "../../errors.js";
 
 async function currentAsset(
   kind: AssetKind,
@@ -20,7 +21,7 @@ async function currentAsset(
     data.name !== reference.name ||
     data.organizationId !== conn.organizationId
   ) {
-    throw new Error("Catalog changed during staging; retry sync");
+    throw new CliError("The catalog changed while syncing.", "barndog sync");
   }
 
   return data;

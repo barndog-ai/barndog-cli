@@ -77,7 +77,7 @@ async function sharedKnowledge(
 
     documents.push(...page.documents);
     if (page.nextCursor && seen.has(page.nextCursor)) {
-      throw new Error("Invalid knowledge pagination");
+      throw new Error("The server sent an invalid page of results");
     }
 
     if (page.nextCursor) {

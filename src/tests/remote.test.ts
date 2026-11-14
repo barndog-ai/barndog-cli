@@ -155,7 +155,7 @@ test("publishedSkills retrieves every page before selection; rejects malformed a
   expect((await publishedSkills(f.connection, f.home)).length).toBe(105);
   f.repeat();
   await expect(publishedSkills(f.connection, f.home)).rejects.toThrow(
-    /pagination/,
+    /invalid page of results/,
   );
 
   f.malformed();

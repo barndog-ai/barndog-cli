@@ -12,6 +12,7 @@ import { cachedPackage } from "../environment/packages.js";
 import { hookCommand, runtimeRequirements } from "../native/adapters.js";
 import { readSettings } from "../../config/settings.js";
 import { repoForOrigin, selectRepoAsset } from "../git-workspace/assets.js";
+import { CliError } from "../../errors.js";
 
 /** CLI hook test policy caps each input/output stream at one MiB. */
 const HOOK_IO_LIMIT_BYTES = 1048576;
@@ -71,7 +72,9 @@ export async function testHook(
   }: { home?: string; cwd?: string } = {},
 ): Promise<HookTestResult> {
   if (process.platform === "win32") {
-    throw new Error("Command Hook testing currently requires a POSIX shell");
+    throw new CliError(
+      "Testing command Hooks needs a POSIX shell, so it doesn't work on Windows yet.",
+    );
   }
 
   const root = await hookPackage(name, origin, home);
@@ -81,7 +84,10 @@ export async function testHook(
 
   const implementation = manifest.implementations[options.harness];
   if (!implementation) {
-    throw new Error(`No ${options.harness} implementation`);
+    throw new CliError(
+      `${name} has no ${options.harness} implementation.`,
+      `barndog hooks test ${name} --harness <claude|codex|cursor>`,
+    );
   }
 
   const unmet = await runtimeRequirements(
@@ -90,7 +96,7 @@ export async function testHook(
   );
 
   if (unmet) {
-    throw new Error(unmet);
+    throw new CliError(unmet);
   }
 
   const event =
@@ -100,8 +106,8 @@ export async function testHook(
       : undefined);
 
   if (!event || !implementation.events[event]) {
-    throw new Error(
-      `Choose --event from: ${Object.keys(implementation.events).join(", ")}`,
+    throw new CliError(
+      `Choose an event with --event: ${Object.keys(implementation.events).join(", ")}.`,
     );
   }
 
@@ -110,17 +116,21 @@ export async function testHook(
   );
 
   if (handlers.length > 1 && options.handler === undefined) {
-    throw new Error("Choose --handler <number> to explicitly select a command");
+    throw new CliError(
+      "This event runs several commands. Choose one with --handler <number>.",
+    );
   }
 
   const handler = handlers[(options.handler ?? 1) - 1];
   if (!handler) {
-    throw new Error("Unknown Hook handler");
+    throw new CliError(
+      `This event has no command ${options.handler}. Choose 1 to ${handlers.length}.`,
+    );
   }
 
   const input = await readFile(options.input);
   if (input.length > HOOK_IO_LIMIT_BYTES) {
-    throw new Error("Hook input exceeds 1 MiB");
+    throw new CliError("The --input file is over 1 MiB.");
   }
 
   JSON.parse(input.toString("utf8"));
@@ -132,7 +142,9 @@ export async function testHook(
     timeout <= 0 ||
     timeout > MAX_HOOK_TIMEOUT_SECONDS
   ) {
-    throw new Error("Hook test timeout must be between 0 and 600 seconds");
+    throw new CliError(
+      "--timeout must be more than 0 and at most 600 seconds.",
+    );
   }
 
   const child = spawn(
@@ -198,7 +210,7 @@ export async function testHook(
     });
 
     if (length > HOOK_IO_LIMIT_BYTES) {
-      throw new Error("Hook test output exceeds 1 MiB");
+      throw new CliError("The Hook printed more than 1 MiB.");
     }
 
     return {

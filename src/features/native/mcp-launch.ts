@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { mcpDefinitionSchema } from "@barndog-ai/api-contract";
+import { CliError } from "../../errors.js";
 
 /** Allow two seconds for the MCP child to exit before forcing shutdown. */
 const MCP_SHUTDOWN_GRACE_MS = 2000;
@@ -20,8 +21,8 @@ try {
   const env = { ...process.env };
   for (const [name, reference] of Object.entries(definition.environment)) {
     if (!process.env[reference.secretRef]) {
-      throw new Error(
-        `Missing local environment variable: ${reference.secretRef}`,
+      throw new CliError(
+        `${reference.secretRef} isn't set in your environment. Set it, then restart your coding tool.`,
       );
     }
 
@@ -77,7 +78,7 @@ try {
   });
 } catch (error) {
   console.error(
-    error instanceof Error ? error.message : "Invalid MCP configuration",
+    error instanceof Error ? error.message : "Invalid MCP configuration.",
   );
 
   process.exitCode = 1;

@@ -338,5 +338,5 @@ export async function resolveClashes(
     }
   }
 
-  throw new Error("Unable to resolve installed name clashes");
+  throw new Error("Installed names still clash after renaming");
 }

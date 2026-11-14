@@ -270,13 +270,6 @@ function describeError(error: unknown): { message: string; fix?: string } {
     };
   }
 
-  if (error instanceof TypeError && error.message === "fetch failed") {
-    return {
-      message:
-        "Can't reach the BarnDog server. Check your connection and that the server is running.",
-    };
-  }
-
   return { message: friendlyMessage(error), fix: friendlyHint(error) };
 }
 

@@ -1,5 +1,5 @@
 import { POSIX_MODE } from "../../shared/constants.js";
-import { CliError } from "../../errors.js";
+import { CliError, PackageError } from "../../errors.js";
 import { errorCode } from "../../shared/values.js";
 import { randomUUID, createHash } from "node:crypto";
 
@@ -237,7 +237,9 @@ async function findRecord<T extends StoredRecord>(
       );
 
       if (work.root !== path) {
-        throw new Error("Invalid workspace identity");
+        throw new Error(
+          `The working-copy record for ${path} names a different folder`,
+        );
       }
 
       if (work.pendingWrite) {
@@ -247,7 +249,7 @@ async function findRecord<T extends StoredRecord>(
           )
         ) {
           throw new Error(
-            "Interrupted workspace update has no recovery snapshot",
+            "An interrupted working-copy update has no recovery snapshot",
           );
         }
 
@@ -269,8 +271,8 @@ async function findRecord<T extends StoredRecord>(
                 old.executable === file.executable,
             )
           ) {
-            throw new Error(
-              `Interrupted update contains additional local edits: ${file.path}. Preserve them before retrying; recovery snapshot: ${work.pendingSnapshot}`,
+            throw new CliError(
+              `An interrupted update left edits it didn't make in ${file.path}. Save them elsewhere, then retry. The recovery snapshot is ${work.pendingSnapshot}.`,
             );
           }
         }
@@ -314,7 +316,7 @@ async function replaceFiles(root: string, entries: PackageEntry[]) {
         ) ||
       path.includes("\\")
     ) {
-      throw new Error("UNSAFE_PACKAGE_ENTRY");
+      throw new PackageError("UNSAFE_PACKAGE_ENTRY", path);
     }
 
     for (const parent of path
@@ -322,8 +324,8 @@ async function replaceFiles(root: string, entries: PackageEntry[]) {
       .slice(0, -1)
       .map((_, i, a) => a.slice(0, i + 1).join("/"))) {
       if (paths.has(parent)) {
-        throw new Error(
-          "Resolve the file/directory collision before updating this working copy",
+        throw new CliError(
+          `A file and a folder share the path ${parent}. Keep one, then retry.`,
         );
       }
     }

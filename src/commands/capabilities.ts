@@ -40,6 +40,7 @@ import type { Harness } from "../harnesses/types.js";
 import { packageKindList } from "../features/asset-kinds/index.js";
 import { defined } from "../shared/lookup.js";
 import { positiveInteger } from "../ui/options.js";
+import { CliError } from "../errors.js";
 
 /** Shell timeout utility convention for a timed-out command. */
 const TIMEOUT_EXIT_CODE = 124;
@@ -771,7 +772,9 @@ export function registerCapabilities(
         }
 
         if (!key) {
-          throw new Error("Use --key <key> and retain it for exact retries");
+          throw new CliError(
+            "Add --key <key>, and reuse the same key to retry exactly.",
+          );
         }
 
         print(await context.githubImportCopy({ ...target, name, key }));

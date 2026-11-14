@@ -25,6 +25,7 @@ import { assetKinds, type PackageKind } from "../asset-kinds/index.js";
 import { metadata } from "../collaboration/domain.js";
 import { errorCode } from "../../shared/values.js";
 import { GIT_OBJECT_ID } from "../../shared/patterns.js";
+import { CliError, PackageError } from "../../errors.js";
 
 /** One identity's cache partition: server, organization and developer never mix. */
 export function cacheKey(conn: Connection) {
@@ -118,7 +119,10 @@ export async function storePackage(
       (await directoryFingerprint(join(root, asset.name))) !==
         saved.data.fingerprint
     ) {
-      throw new Error(`Cached ${kind} was modified locally: ${asset.name}`);
+      throw new CliError(
+        `The downloaded copy of ${asset.name} in ${root} was changed on this machine, so BarnDog won't use it.`,
+        `rm -r ${root} && barndog sync`,
+      );
     }
   };
 
@@ -185,17 +189,21 @@ export async function cachedPackage(
       );
 
       if (!response.ok) {
-        throw new Error(
-          `Package download failed (${response.status}): ${asset.name}`,
+        throw new CliError(
+          `Downloading ${asset.name} failed (${response.status}). Try again.`,
+          "barndog sync",
         );
       }
 
       if (response.headers.get("etag") !== `"${asset.version.commit}"`) {
-        throw new Error("Package revision does not match catalog");
+        throw new CliError(
+          `${asset.name} changed on the server while it was downloading. Try again.`,
+          "barndog sync",
+        );
       }
 
       if (!response.body) {
-        throw new Error("Missing package body");
+        throw new Error("The server sent a package download with no body");
       }
 
       let size = 0;
@@ -203,7 +211,7 @@ export async function cachedPackage(
       for await (const chunk of response.body) {
         size += chunk.length;
         if (size > defaultLimits.compressed) {
-          throw new Error("PACKAGE_TOO_LARGE");
+          throw new PackageError("PACKAGE_TOO_LARGE");
         }
 
         chunks.push(chunk);
@@ -216,7 +224,9 @@ export async function cachedPackage(
       );
 
       if (metadata(entries, kind).name !== asset.name) {
-        throw new Error("Package name does not match catalog");
+        throw new Error(
+          `The server sent a package whose name isn't ${asset.name}`,
+        );
       }
 
       return entries;

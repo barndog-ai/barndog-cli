@@ -18,6 +18,7 @@ import type {
   SelectionState,
   Subscription,
 } from "../asset-selection/types.js";
+import { CliError } from "../../errors.js";
 
 /** Limit onboarding team requests to six concurrent operations. */
 const TEAM_FETCH_CONCURRENCY = 6;
@@ -295,7 +296,9 @@ export function selectOnboardingSources(
       }[mode];
 
       if (ids.some((id) => !source.assets.some((a) => a.id === id))) {
-        throw new Error("Selection contains an asset outside this source");
+        throw new CliError(
+          "The selection includes an asset that isn't in this workspace.",
+        );
       }
 
       ids.forEach((id) => individualAssetIds.add(id));
@@ -331,14 +334,16 @@ export function selectedEnvironment(
       (id) => !choices.catalog.assets.some((asset) => asset.id === id),
     )
   ) {
-    throw new Error("Selection contains an unavailable scope or asset");
+    throw new CliError(
+      "The selection includes a set or asset that isn't available.",
+    );
   }
 
   if (
     new Set(parsed.subscriptions.map((s) => `${s.scope.type}:${s.scope.id}`))
       .size !== parsed.subscriptions.length
   ) {
-    throw new Error("Duplicate scope selection");
+    throw new CliError("The selection lists the same set twice.");
   }
 
   return withSelection(settings, parsed);

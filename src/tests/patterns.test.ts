@@ -6,7 +6,6 @@ import {
   commandNeeds,
   reviewCommands,
 } from "../commands/availability.js";
-import { friendlyMessage } from "../errors.js";
 import { SESSION_TOKEN } from "../features/auth/credentials.js";
 import { hasConflictMarkers } from "../features/collaboration/workspace.js";
 import { withoutCopyNumber } from "../features/environment/names.js";
@@ -498,18 +497,6 @@ describe("package content", () => {
     ["c1\x9b", "c1\\u009b"],
   ])("safe %j", (value, expected) => {
     expect(safe(value)).toBe(expected);
-  });
-
-  test.each([
-    [new Error("KNOWLEDGE_NOT_FOUND"), "Knowledge not found."],
-    [
-      new Error("MISSING_PACKAGE_MANIFEST: hook.yaml"),
-      "This folder has no hook.yaml",
-    ],
-    [new Error("UNSAFE_PACKAGE_ENTRY: a: b"), "a: b"],
-    [new Error("Plain sentence"), "Plain sentence"],
-  ])("friendlyMessage %s", (error, expected) => {
-    expect(friendlyMessage(error)).toBe(expected);
   });
 });
 

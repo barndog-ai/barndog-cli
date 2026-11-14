@@ -21,6 +21,7 @@ import {
 import { errorCode } from "../../shared/values.js";
 import { fileText, writeAtomic } from "../../shared/files.js";
 import { withPidLock } from "../../shared/lock.js";
+import { CliError } from "../../errors.js";
 
 /**
  * One journaled sync change. File values are text, link values are targets and
@@ -91,8 +92,9 @@ export async function linkTarget(path: string): Promise<string | null> {
   try {
     const info = await lstat(path);
     if (!info.isSymbolicLink()) {
-      throw new Error(
-        `Existing unmanaged or externally changed Skill: ${path}`,
+      throw new CliError(
+        `${path} is a Skill folder BarnDog didn't install, so it won't replace it. Move or rename it, then sync again.`,
+        "barndog sync",
       );
     }
 
@@ -119,7 +121,7 @@ function validateWrites(writes: Write[], home: string) {
   const paths = new Set<string>();
   for (const write of writes) {
     if (paths.has(write.path) || resolve(write.path) !== write.path) {
-      throw new Error("Invalid or duplicate sync destination");
+      throw new Error("A sync planned an invalid or duplicate destination");
     }
 
     paths.add(write.path);
@@ -178,8 +180,9 @@ async function applyTree(write: Extract<Write, { kind: "tree" }>) {
 
   const entries = await desiredEntries(write.source, write.rename);
   if (packageFingerprint(entries) !== write.after) {
-    throw new Error(
-      `Cached package changed before installation: ${write.source}`,
+    throw new CliError(
+      `The downloaded copy in ${write.source} changed before it was installed.`,
+      "barndog sync",
     );
   }
 
@@ -211,8 +214,9 @@ async function apply(
         write.after !== null
       )
     ) {
-      throw new Error(
-        `Sync destination changed; preserve your edits before recovery: ${write.path}`,
+      throw new CliError(
+        `${write.path} changed after a sync was interrupted. Save your edits elsewhere, then sync again.`,
+        "barndog sync",
       );
     }
   }
@@ -225,7 +229,10 @@ async function apply(
 
     if (write.kind === "tree") {
       if (value !== write.before && !recovering) {
-        throw new Error(`Sync destination changed: ${write.path}`);
+        throw new CliError(
+          `${write.path} changed while syncing.`,
+          "barndog sync",
+        );
       }
 
       await applyTree(write);
@@ -242,7 +249,10 @@ async function apply(
         write.after !== null
       )
     ) {
-      throw new Error(`Sync destination changed: ${write.path}`);
+      throw new CliError(
+        `${write.path} changed while syncing.`,
+        "barndog sync",
+      );
     }
 
     await mkdir(dirname(write.path), {
@@ -290,7 +300,10 @@ async function recover(home: string) {
       actual.organizationId !== journal.connection.organizationId ||
       actual.developerId !== journal.connection.developerId
     ) {
-      throw new Error("Sync recovery belongs to another identity");
+      throw new CliError(
+        "An interrupted sync belongs to another organization or developer. Sign in as them to finish it.",
+        "barndog login",
+      );
     }
   }
 

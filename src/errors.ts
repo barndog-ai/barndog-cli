@@ -1,19 +1,11 @@
 import { ApiError } from "@barndog-ai/api-contract";
 import { z } from "zod";
 
+import { CliError } from "./shared/cli-error.js";
 import { CONSTANT_CASE } from "./shared/patterns.js";
 import { errorCode } from "./shared/values.js";
 
-/** A user-facing failure with an optional command that fixes it. */
-export class CliError extends Error {
-  readonly hint?: string;
-
-  constructor(message: string, hint?: string, options?: ErrorOptions) {
-    super(message, options);
-    this.name = "CliError";
-    this.hint = hint;
-  }
-}
+export { CliError };
 
 /** Ends a command early when there is nothing to choose; not a failure. */
 export class NothingToDoError extends CliError {
@@ -23,30 +15,181 @@ export class NothingToDoError extends CliError {
   }
 }
 
-const packageMessages: Record<string, string> = {
-  INVALID_SKILL_MD:
-    "SKILL.md needs front matter with a lowercase hyphenated name and a description",
-  MISSING_SKILL_MD: "This folder has no SKILL.md",
-  GITHUB_APP_NOT_CONFIGURED: "GitHub isn't set up on this BarnDog server",
-  GITHUB_USER_AUTHORIZATION_REQUIRED:
-    "Link your GitHub account first with barndog github auth",
-  IDEMPOTENCY_KEY_REUSED:
-    "That retry key was already used for different content. Use a new --key",
-  ORGANIZATION_ADMIN_REQUIRED: "Only organization admins can do that",
-  UNSAFE_PACKAGE_ENTRY: "It contains a link or an unsafe file path",
-  CONFLICTING_PACKAGE_PATHS: "A file and a folder share the same path",
-  PACKAGE_TOO_LARGE: "It's too large to package",
-  EMPTY_HOOK_EVENTS: "hook.yaml lists no events for one of its coding tools",
-  CURSOR_COMMAND_HANDLER_REQUIRED:
-    "Cursor events in hook.yaml list commands directly, without a nested hooks list",
-  NATIVE_MATCHER_GROUP_REQUIRED:
-    "Claude Code and Codex events in hook.yaml need a nested hooks list",
-  HOOK_COMMAND_MUST_REFERENCE_DECLARED_SCRIPT:
-    "Each command in hook.yaml must run a declared script through ${BARNDOG_HOOK_ROOT}/",
-};
+/**
+ * Why a folder or archive can't be a package. The CLI throws these as
+ * `PackageError`; `@barndog-ai/api-contract`'s package helpers throw the same
+ * codes as plain `Error` messages, and the server returns them as `ApiError`s,
+ * so `packageError()` translates both at that boundary.
+ *
+ * @internal Exported for the completeness test in `src/tests/errors.test.ts`.
+ */
+export const packageProblemCodes = [
+  "CONFLICTING_PACKAGE_PATHS",
+  "CURSOR_COMMAND_HANDLER_REQUIRED",
+  "EMPTY_HOOK_EVENTS",
+  "HOOK_COMMAND_MUST_REFERENCE_DECLARED_SCRIPT",
+  "INVALID_SKILL_MD",
+  "MISSING_HOOK_SCRIPT",
+  "MISSING_PACKAGE_MANIFEST",
+  "MISSING_SKILL_MD",
+  "MODIFIED_CACHED_PACKAGE",
+  "NATIVE_MATCHER_GROUP_REQUIRED",
+  "PACKAGE_TOO_LARGE",
+  "UNSAFE_PACKAGE_ENTRY",
+] as const;
+
+export type PackageProblemCode = (typeof packageProblemCodes)[number];
+
+function isPackageProblemCode(value: string): value is PackageProblemCode {
+  return packageProblemCodes.some((code) => code === value);
+}
+
+/**
+ * A package the CLI can't read, write or submit. `detail` names the file
+ * involved, such as the missing manifest or the unsafe path.
+ */
+export class PackageError extends Error {
+  readonly code: PackageProblemCode;
+
+  readonly detail?: string;
+
+  constructor(
+    code: PackageProblemCode,
+    detail?: string,
+    options?: ErrorOptions,
+  ) {
+    super(detail ? `${code}: ${detail}` : code, options);
+    this.name = "PackageError";
+    this.code = code;
+    this.detail = detail;
+  }
+}
+
+/**
+ * `error` as a `PackageError`: itself, or a package code from the contract's
+ * helpers (`Error("MISSING_HOOK_SCRIPT: run.sh")`) or the server. Those two
+ * report codes only as message text; this is the one place that reads it.
+ */
+function packageError(error: unknown): PackageError | undefined {
+  if (error instanceof PackageError) {
+    return error;
+  }
+
+  if (!(error instanceof Error) || error instanceof CliError) {
+    return undefined;
+  }
+
+  const separator = error.message.indexOf(": ");
+  const code =
+    separator < 0 ? error.message : error.message.slice(0, separator);
+
+  if (!isPackageProblemCode(code)) {
+    return undefined;
+  }
+
+  const detail = separator < 0 ? undefined : error.message.slice(separator + 2);
+
+  return new PackageError(code, detail, { cause: error });
+}
+
+/** `text`, followed by the file it's about when there is one. */
+const about = (text: string, detail?: string) =>
+  detail ? `${text}: ${detail}` : text;
+
+/** What a package problem means to the person whose folder it is. */
+function packageProblem({ code, detail }: PackageError): string {
+  switch (code) {
+    case "CONFLICTING_PACKAGE_PATHS":
+      return "A file and a folder share the same path";
+    case "CURSOR_COMMAND_HANDLER_REQUIRED":
+      return "Cursor events in hook.yaml list commands directly, without a nested hooks list";
+    case "EMPTY_HOOK_EVENTS":
+      return "hook.yaml lists no events for one of its coding tools";
+    case "HOOK_COMMAND_MUST_REFERENCE_DECLARED_SCRIPT":
+      return "Each command in hook.yaml must run a declared script through ${BARNDOG_HOOK_ROOT}/";
+    case "INVALID_SKILL_MD":
+      return "SKILL.md needs front matter with a lowercase hyphenated name and a description";
+    case "MISSING_HOOK_SCRIPT":
+      return about(
+        "hook.yaml declares a script that isn't in the folder",
+        detail,
+      );
+    case "MISSING_PACKAGE_MANIFEST":
+      return `This folder has no ${detail || "manifest file"}`;
+    case "MISSING_SKILL_MD":
+      return "This folder has no SKILL.md";
+    case "MODIFIED_CACHED_PACKAGE":
+      return "A downloaded copy was changed on this machine, so BarnDog won't reuse it";
+    case "NATIVE_MATCHER_GROUP_REQUIRED":
+      return "Claude Code and Codex events in hook.yaml need a nested hooks list";
+    case "PACKAGE_TOO_LARGE":
+      return "It's too large to package";
+    case "UNSAFE_PACKAGE_ENTRY":
+      return about("It contains a link or an unsafe file path", detail);
+  }
+}
+
+/**
+ * Server refusal codes the CLI explains; others read as a sentence (see
+ * `friendlyMessage`).
+ *
+ * @internal Exported for the completeness test in `src/tests/errors.test.ts`.
+ */
+export const serverProblemCodes = [
+  "APPROVALS_REQUIRED",
+  "CHANGE_AUTHOR_REQUIRED",
+  "CHANGE_CLOSED",
+  "CHANGE_CLOSE_FORBIDDEN",
+  "CHANGES_REQUESTED",
+  "GITHUB_APP_NOT_CONFIGURED",
+  "GITHUB_USER_AUTHORIZATION_REQUIRED",
+  "IDEMPOTENCY_KEY_REUSED",
+  "MCP_NOT_FOUND",
+  "MERGE_ADMIN_REQUIRED",
+  "MERGE_MEMBERSHIP_REQUIRED",
+  "NO_CHANGES",
+  "ORGANIZATION_ADMIN_REQUIRED",
+  "OUTDATED_SUGGESTION",
+  "PERSONAL_OWNER_REQUIRED",
+  "PUBLICATION_FORBIDDEN",
+  "REVIEW_MEMBERSHIP_REQUIRED",
+  "SCOPE_ADMIN_REQUIRED",
+  "SCOPE_MEMBERSHIP_REQUIRED",
+  "SCOPE_NOT_FOUND",
+  "SELF_REVIEW_FORBIDDEN",
+  "SKILL_NOT_FOUND",
+  "STALE_CHANGE_REVISION",
+  "STALE_SKILL_VERSION",
+  "SUGGESTION_CONTENT_MISMATCH",
+  "THREAD_ACTION_FORBIDDEN",
+] as const;
+
+type ServerProblemCode = (typeof serverProblemCodes)[number];
+
+/**
+ * The server's specific refusal code, such as `STALE_SKILL_VERSION`. The API
+ * sends it in the body's `message` field (its `code` field holds only the HTTP
+ * category, such as `CONFLICT`), so `ApiError.message` carries it.
+ */
+function serverCode(error: ApiError): string {
+  return error.message;
+}
+
+function serverProblemCode(error: unknown): ServerProblemCode | undefined {
+  if (!(error instanceof ApiError)) {
+    return undefined;
+  }
+
+  const code = serverCode(error);
+
+  return serverProblemCodes.find((known) => known === code);
+}
 
 /** Server refusals people run into, with what to do next when there is something to do. */
-const serverProblems: Record<string, { message: string; fix?: string }> = {
+const serverProblems: Record<
+  ServerProblemCode,
+  { message: string; fix?: string }
+> = {
   APPROVALS_REQUIRED: {
     message: "This change needs more approvals before it can merge",
     fix: "barndog changes list",
@@ -66,6 +209,17 @@ const serverProblems: Record<string, { message: string; fix?: string }> = {
     message: "A reviewer requested changes, so this can't merge yet",
     fix: "barndog changes list",
   },
+  GITHUB_APP_NOT_CONFIGURED: {
+    message: "GitHub isn't set up on this BarnDog server",
+  },
+  GITHUB_USER_AUTHORIZATION_REQUIRED: {
+    message: "Link your GitHub account first",
+    fix: "barndog github auth",
+  },
+  IDEMPOTENCY_KEY_REUSED: {
+    message:
+      "That retry key was already used for different content. Use a new --key",
+  },
   MCP_NOT_FOUND: {
     message: "No MCP server matches that name and origin",
     fix: "barndog mcp search",
@@ -77,6 +231,9 @@ const serverProblems: Record<string, { message: string; fix?: string }> = {
   NO_CHANGES: {
     message: "Nothing differs from the published version",
     fix: "barndog status",
+  },
+  ORGANIZATION_ADMIN_REQUIRED: {
+    message: "Only organization admins can do that",
   },
   OUTDATED_SUGGESTION: {
     message: "That suggestion no longer applies to the current revision",
@@ -127,11 +284,9 @@ export function friendlyHint(error: unknown): string | undefined {
     return error.hint;
   }
 
-  if (error instanceof ApiError) {
-    return serverProblems[error.message]?.fix;
-  }
+  const code = serverProblemCode(error);
 
-  return undefined;
+  return code ? serverProblems[code].fix : undefined;
 }
 
 /** Turns internal codes and validation errors into something a person can act on. */
@@ -153,11 +308,21 @@ export function friendlyMessage(error: unknown): string {
       .join("; ");
   }
 
-  const problem =
-    error instanceof ApiError ? serverProblems[error.message] : undefined;
+  const packaged = packageError(error);
+  if (packaged) {
+    return packageProblem(packaged);
+  }
 
-  if (problem) {
-    return `${problem.message}.`;
+  const server = serverProblemCode(error);
+  if (server) {
+    return `${serverProblems[server].message}.`;
+  }
+
+  // Other server codes, such as KNOWLEDGE_NOT_FOUND, still read as a sentence.
+  if (error instanceof ApiError && CONSTANT_CASE.test(serverCode(error))) {
+    const code = serverCode(error);
+
+    return `${code[0]}${code.slice(1).toLowerCase().replaceAll("_", " ")}.`;
   }
 
   const code = errorCode(error);
@@ -178,34 +343,6 @@ export function friendlyMessage(error: unknown): string {
 
   if (code === "EEXIST" && path) {
     return `${path} already exists. Choose another folder or remove it first.`;
-  }
-
-  const separator = error.message.indexOf(": ");
-  const [prefix, detail] =
-    separator < 0
-      ? [error.message, undefined]
-      : [error.message.slice(0, separator), error.message.slice(separator + 2)];
-
-  if (prefix === "MISSING_HOOK_SCRIPT") {
-    return `hook.yaml declares a script that isn't in the folder: ${detail}`;
-  }
-
-  if (prefix === "MISSING_PACKAGE_MANIFEST") {
-    return `This folder has no ${detail}`;
-  }
-
-  if (prefix === "UNSAFE_PACKAGE_ENTRY" && detail) {
-    return detail;
-  }
-
-  const packaged = packageMessages[prefix];
-  if (packaged) {
-    return packaged;
-  }
-
-  // Server codes such as KNOWLEDGE_NOT_FOUND still read as a sentence.
-  if (CONSTANT_CASE.test(error.message)) {
-    return `${error.message[0]}${error.message.slice(1).toLowerCase().replaceAll("_", " ")}.`;
   }
 
   return error.message;

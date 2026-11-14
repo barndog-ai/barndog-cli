@@ -7,6 +7,7 @@ import { homedir } from "node:os";
 import type { Connection } from "../../config/settings.js";
 import { apiClient } from "../auth/transport.js";
 import type { CatalogAsset } from "../catalog/index.js";
+import { CliError } from "../../errors.js";
 
 /**
  * Every published Skill the developer can see, page by page. Throws when the
@@ -23,8 +24,9 @@ export async function publishedSkills(
     context.organization.id !== connection.organizationId ||
     context.developer.id !== connection.developerId
   ) {
-    throw new Error(
-      "Server organization or developer changed; run initialization again",
+    throw new CliError(
+      "The server's organization or developer changed since this machine was set up.",
+      "barndog init",
     );
   }
 
@@ -45,12 +47,14 @@ export async function publishedSkills(
         (skill) => skill.organizationId !== connection.organizationId,
       )
     ) {
-      throw new Error("Invalid catalog organization");
+      throw new Error(
+        "The server sent a catalog page for another organization",
+      );
     }
 
     skills.push(...page.skills);
     if (page.nextCursor && cursors.has(page.nextCursor)) {
-      throw new Error("Invalid catalog pagination");
+      throw new Error("The server sent an invalid page of results");
     }
 
     if (page.nextCursor) {
@@ -61,7 +65,7 @@ export async function publishedSkills(
   } while (cursor);
 
   if (new Set(skills.map((skill) => skill.id)).size !== skills.length) {
-    throw new Error("Duplicate catalog Skill");
+    throw new Error("The server sent the same Skill twice in its catalog");
   }
 
   return skills;

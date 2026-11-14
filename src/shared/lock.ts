@@ -2,6 +2,7 @@ import { POSIX_MODE } from "./constants.js";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { errorCode } from "./values.js";
+import { CliError } from "./cli-error.js";
 
 /** What to tell a process that finds the lock taken. */
 export type LockMessages = {
@@ -38,7 +39,7 @@ export async function withPidLock<T>(
     );
 
     if (!pid) {
-      throw new Error(messages.starting, { cause: error });
+      throw new CliError(messages.starting, undefined, { cause: error });
     }
 
     try {
@@ -53,7 +54,7 @@ export async function withPidLock<T>(
       return withPidLock(path, messages, run);
     }
 
-    throw new Error(messages.running, { cause: error });
+    throw new CliError(messages.running, undefined, { cause: error });
   }
 
   try {

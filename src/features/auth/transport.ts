@@ -3,9 +3,27 @@ import { HTTP_STATUS } from "../../shared/constants.js";
 import { createApiClient } from "@barndog-ai/api-contract";
 import { homedir } from "node:os";
 import { readCredentials } from "./credentials.js";
+import { CliError } from "../../errors.js";
 
 /** CLI policy: stop an API request after thirty seconds. */
 const API_REQUEST_TIMEOUT_MS = 30000;
+
+/**
+ * The request never got an HTTP response: DNS, refused connection, TLS, or the
+ * thirty-second timeout. Fetch reports these as a `TypeError` or a
+ * `TimeoutError`; this names them once, at the one place the CLI calls the API.
+ */
+class ServerUnreachableError extends CliError {
+  constructor(server: string, options?: ErrorOptions) {
+    super(
+      `Can't reach the BarnDog server at ${server}. Check your connection and that the server is running.`,
+      "barndog doctor",
+      options,
+    );
+
+    this.name = "ServerUnreachableError";
+  }
+}
 
 export class LoginRequiredError extends Error {
   constructor() {
@@ -27,14 +45,18 @@ export function normalizeServer(value: string) {
     url.hash ||
     url.pathname !== "/"
   ) {
-    throw new Error("Server must be an HTTP(S) origin");
+    throw new CliError(
+      `${value} isn't a server address. Use one like https://barndog.dev.`,
+    );
   }
 
   if (
     url.protocol !== "https:" &&
     !["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)
   ) {
-    throw new Error("Server must use HTTPS outside loopback");
+    throw new CliError(
+      `${value} must use https://. Plain http:// works only for localhost.`,
+    );
   }
 
   return url.origin;
@@ -67,14 +89,24 @@ export function serverFetch(
       headers.set("Authorization", `Bearer ${credential.token}`);
     }
 
-    const response = await fetch(request, {
-      headers,
-      redirect: "error",
-      signal: AbortSignal.any([
-        request.signal,
-        AbortSignal.timeout(API_REQUEST_TIMEOUT_MS),
-      ]),
-    });
+    let response: Response;
+    try {
+      response = await fetch(request, {
+        headers,
+        redirect: "error",
+        signal: AbortSignal.any([
+          request.signal,
+          AbortSignal.timeout(API_REQUEST_TIMEOUT_MS),
+        ]),
+      });
+    } catch (error) {
+      // A caller's own abort (such as a cancelled sign-in) stays an abort.
+      if (request.signal.aborted) {
+        throw error;
+      }
+
+      throw new ServerUnreachableError(origin, { cause: error });
+    }
 
     if (response.status === HTTP_STATUS.unauthorized && authenticated) {
       throw new LoginRequiredError();

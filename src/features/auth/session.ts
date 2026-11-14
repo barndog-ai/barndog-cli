@@ -18,6 +18,7 @@ import {
   normalizeServer,
   serverFetch,
 } from "./transport.js";
+import { CliError } from "../../errors.js";
 
 /** Bound each device authorization request to ten seconds. */
 const AUTH_REQUEST_TIMEOUT_MS = 10000;
@@ -54,8 +55,9 @@ export async function configuredServer(
 async function selectedServer(server: string | undefined, home: string) {
   const value = server ?? (await configuredServer(home));
   if (!value) {
-    throw new Error(
-      "Specify the server for your first login with barndog login --server <url>",
+    throw new CliError(
+      "Choose a server for your first sign-in.",
+      "barndog login --server <url>",
     );
   }
 
@@ -127,8 +129,9 @@ export async function login(options: LoginOptions) {
             result.context.organization.id ||
           settings.connection.developerId !== result.context.developer.id)
       ) {
-        throw new Error(
-          "Remove API selections before switching server, organization, or developer",
+        throw new CliError(
+          "You have assets selected from the current server. Remove them before switching server, organization or developer.",
+          "barndog status",
         );
       }
 

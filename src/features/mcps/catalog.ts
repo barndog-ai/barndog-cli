@@ -24,7 +24,9 @@ export async function mcpCatalog(
 
     for (const mcp of page.mcps) {
       if (mcp.organizationId !== conn.organizationId) {
-        throw new Error("Invalid catalog organization");
+        throw new Error(
+          "The server sent a catalog page for another organization",
+        );
       }
 
       rows.push({
@@ -40,7 +42,7 @@ export async function mcpCatalog(
     }
 
     if (page.nextCursor && seen.has(page.nextCursor)) {
-      throw new Error("Invalid catalog pagination");
+      throw new Error("The server sent an invalid page of results");
     }
 
     if (page.nextCursor) {

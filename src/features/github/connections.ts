@@ -20,6 +20,7 @@ import {
 } from "@barndog-ai/api-contract";
 import { connection, selectOrigin } from "../collaboration/remote.js";
 import { request, selectAsset, type RetryKey } from "../environment/remote.js";
+import { CliError } from "../../errors.js";
 
 /** A BarnDog-owned copy of a repository, with no connection left behind. */
 export type GitCopyImportResult = z.infer<typeof gitCopyImportResultSchema>;
@@ -90,7 +91,7 @@ export const connectionPath = (connectionId: string) =>
 function repositoryTarget(options: GithubRepositoryOptions) {
   const [owner, repository, ...rest] = options.repository.split("/");
   if (!owner || !repository || rest.length) {
-    throw new Error("Use --repository <owner/name>");
+    throw new CliError("Choose the repository with --repository <owner/name>.");
   }
 
   return {

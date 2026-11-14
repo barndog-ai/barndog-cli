@@ -172,8 +172,9 @@ export async function runSetup(
     options.interactive ?? Boolean(process.stdin.isTTY && process.stdout.isTTY);
 
   if (!interactive) {
-    throw new Error(
-      `Onboarding requires an interactive terminal. Run ${styleText("bold", "barndog init", { stream: process.stderr })} in your terminal.`,
+    throw new CliError(
+      "Setup needs an interactive terminal. Run it in your terminal, not from a script or pipe.",
+      "barndog init",
     );
   }
 
@@ -200,7 +201,10 @@ export async function runSetup(
   if (
     [options.local, options.server, options.repo].filter(Boolean).length > 1
   ) {
-    throw new Error("--local, --repo and --server cannot be combined");
+    throw new CliError(
+      "--local, --repo and --server can't be combined. Choose one.",
+      "barndog init --help",
+    );
   }
 
   const choice: SetupChoice =

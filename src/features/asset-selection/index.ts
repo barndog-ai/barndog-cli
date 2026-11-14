@@ -17,6 +17,21 @@ import type {
 import { defined } from "../../shared/lookup.js";
 import { UUID_V4 } from "../../shared/patterns.js";
 
+/**
+ * Enabling or disabling a set that isn't in the selection. Callers that know
+ * the origin the person typed turn it into a `CliError` with the install
+ * command.
+ */
+export class ScopeNotSelectedError extends Error {
+  readonly scope: string;
+
+  constructor(scope: string) {
+    super(`Scope is not selected: ${scope}`);
+    this.name = "ScopeNotSelectedError";
+    this.scope = scope;
+  }
+}
+
 export type * from "./types.js";
 
 function id(value: string): string {
@@ -287,7 +302,7 @@ export function applySelectionAction(
           (subscription) => scopeKey(subscription.scope) === key,
         )
       ) {
-        throw new Error(`Scope is not selected: ${key}`);
+        throw new ScopeNotSelectedError(key);
       }
 
       subscriptions = subscriptions.map((subscription) =>

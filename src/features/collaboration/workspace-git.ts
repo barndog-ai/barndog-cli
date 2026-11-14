@@ -249,7 +249,9 @@ export function createGitAsset(
 
   return locked(home, async () => {
     if (!NAME.test(options.name)) {
-      throw new Error("Use a lowercase hyphenated package name");
+      throw new CliError(
+        `${options.name} isn't a valid name. Use lowercase letters, digits and hyphens, such as my-skill.`,
+      );
     }
 
     const { model, commit } = await latest(workspace, home);
@@ -342,7 +344,10 @@ export function updateGitWorkingCopy(
     const work = await findGit(cwd, home);
     const previous = structuredClone(work);
     if (work.conflicts.length) {
-      throw new Error("Resolve existing conflicts before pulling again");
+      throw new CliError(
+        "Resolve the existing conflicts before pulling again.",
+        "barndog resolve <path>",
+      );
     }
 
     const repo = gitDirectory(work.git.workspaceId, home);
@@ -460,11 +465,17 @@ export function pushGitWorkingCopy(
     }
 
     if (options.kind && work.kind !== options.kind) {
-      throw new Error("Working copy belongs to a different asset kind");
+      throw new CliError(
+        `This working copy holds a ${work.kind}, not a ${options.kind}.`,
+        "barndog status",
+      );
     }
 
     if (options.name && work.name !== options.name) {
-      throw new Error("Working-copy name does not match the requested asset");
+      throw new CliError(
+        `This working copy is ${work.name}, not ${options.name}.`,
+        "barndog status",
+      );
     }
 
     if (work.git.workspaceId !== workspace.workspaceId) {
@@ -474,8 +485,9 @@ export function pushGitWorkingCopy(
     }
 
     if (work.conflicts.length) {
-      throw new Error(
-        "Resolve conflicts with barndog resolve <path> before pushing",
+      throw new CliError(
+        "Resolve the conflicts before pushing.",
+        "barndog resolve <path>",
       );
     }
 
@@ -486,7 +498,9 @@ export function pushGitWorkingCopy(
     );
 
     if (packageMetadataFor(files, work.kind).name !== work.name) {
-      throw new Error("Package name cannot change in this working copy");
+      throw new CliError(
+        `This working copy's name must stay ${work.name}. Change it back, then push again.`,
+      );
     }
 
     const repo = gitDirectory(workspace.workspaceId, home);

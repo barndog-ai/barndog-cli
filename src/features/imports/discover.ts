@@ -13,7 +13,7 @@ import { parse as parseJsonc } from "jsonc-parser";
 import { parse as parseToml } from "smol-toml";
 import { stringify } from "yaml";
 
-import { friendlyMessage } from "../../errors.js";
+import { CliError, friendlyMessage } from "../../errors.js";
 import { harnesses, hookSettingsOwner } from "../../harnesses/registry.js";
 import type { Harness } from "../../harnesses/types.js";
 import { isBlob, type SnapshotEntry } from "../git-workspace/snapshot.js";
@@ -94,7 +94,7 @@ export function discoverSkills(remote: RemoteRepo) {
 
     try {
       if (hasLink(remote, root)) {
-        throw new Error("It contains a symbolic link");
+        throw new CliError("It contains a symbolic link");
       }
 
       const entries = validatePackageEntries(folderEntries(remote, root));
@@ -291,7 +291,7 @@ export function discoverHooks(remote: RemoteRepo, fallbackName: string) {
 
     try {
       if (hasLink(remote, root)) {
-        throw new Error("It contains a symbolic link");
+        throw new CliError("It contains a symbolic link");
       }
 
       const entries = validatePackageEntries(

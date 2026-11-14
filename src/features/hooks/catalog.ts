@@ -28,12 +28,14 @@ export async function publishedHooks(
     if (
       page.hooks.some((hook) => hook.organizationId !== conn.organizationId)
     ) {
-      throw new Error("Invalid catalog organization");
+      throw new Error(
+        "The server sent a catalog page for another organization",
+      );
     }
 
     hooks.push(...page.hooks);
     if (page.nextCursor && seen.has(page.nextCursor)) {
-      throw new Error("Invalid catalog pagination");
+      throw new Error("The server sent an invalid page of results");
     }
 
     if (page.nextCursor) {

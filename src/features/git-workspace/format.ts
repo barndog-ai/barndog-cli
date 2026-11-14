@@ -17,7 +17,7 @@ import {
 import { parse, stringify } from "yaml";
 import { z } from "zod";
 
-import { CliError, friendlyMessage } from "../../errors.js";
+import { CliError, friendlyMessage, PackageError } from "../../errors.js";
 import type { AssetKind, AssetReference } from "../asset-selection/types.js";
 import {
   isBlob,
@@ -230,7 +230,7 @@ const hidden = (name: string) => name.startsWith(".");
 function frontMatter(text: string) {
   const parts = splitFrontMatter(text);
   if (!parts) {
-    throw new Error("Missing front matter");
+    throw new CliError("It has no front matter");
   }
 
   return { metadata: parse(parts.yaml) as unknown, body: parts.body };
@@ -249,7 +249,7 @@ function knowledgeContent(name: string, text: string): KnowledgeContent {
     .parse(metadata);
 
   if (fields.name !== undefined && fields.name !== name) {
-    throw new Error(`name must match the file name (${name})`);
+    throw new CliError(`name must match the file name (${name})`);
   }
 
   return knowledgeContentSchema.parse({ ...fields, name, markdown: body });
@@ -361,8 +361,9 @@ export async function loadWorkspace(
       }
 
       if (!isBlob(entry.mode)) {
-        throw new Error(
-          `UNSAFE_PACKAGE_ENTRY: ${entry.path.slice(root.length + 1)} is a link`,
+        throw new PackageError(
+          "UNSAFE_PACKAGE_ENTRY",
+          entry.path.slice(root.length + 1),
         );
       }
 
@@ -410,7 +411,9 @@ export async function loadWorkspace(
         const entries = validatePackageEntries(packageEntries(entry.path));
         const metadata = packageMetadata(entries);
         if (metadata.name !== name) {
-          throw new Error(`SKILL.md name must match the folder name (${name})`);
+          throw new CliError(
+            `SKILL.md name must match the folder name (${name})`,
+          );
         }
 
         return { description: metadata.description, entries };
@@ -431,7 +434,7 @@ export async function loadWorkspace(
 
         const manifest = hookMetadata(entries);
         if (manifest.name !== name) {
-          throw new Error(
+          throw new CliError(
             `hook.yaml name must match the folder name (${name})`,
           );
         }

@@ -7,7 +7,7 @@ import {
 import { createProgram } from "./program.js";
 import { renderError, renderJsonError } from "./ui/output.js";
 import { json } from "./ui/format.js";
-import { NothingToDoError } from "./errors.js";
+import { CliError, NothingToDoError } from "./errors.js";
 
 // Parsing errors happen before any action runs, so read the flag directly.
 const words = process.argv.slice(2);
@@ -30,7 +30,7 @@ try {
     if (asJson && error.exitCode) {
       console.error(
         renderJsonError(
-          new Error(
+          new CliError(
             error.code === "commander.help"
               ? "Choose a subcommand. Add --help to see them."
               : error.message.replace(/^error: /, ""),

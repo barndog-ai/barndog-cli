@@ -10,6 +10,7 @@ import {
 } from "node:fs/promises";
 import { dirname, isAbsolute, relative, sep } from "node:path";
 import { errorCode } from "./values.js";
+import { CliError } from "./cli-error.js";
 
 export type AtomicWriteOptions = {
   /** The file's permissions; private to the user by default. */
@@ -49,7 +50,9 @@ export async function fileText(path: string): Promise<string | null> {
   try {
     const info = await lstat(path);
     if (!info.isFile() || info.isSymbolicLink()) {
-      throw new Error(`Refusing non-regular configuration file: ${path}`);
+      throw new CliError(
+        `${path} is a link or not a regular file, so BarnDog won't edit it.`,
+      );
     }
 
     return await readFile(path, "utf8");

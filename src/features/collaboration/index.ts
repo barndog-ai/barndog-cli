@@ -487,7 +487,7 @@ export async function listChanges(
 
     result.push(...page.changes.map((c) => changeSchema.parse(c)));
     if (page.nextCursor && seen.has(page.nextCursor)) {
-      throw new Error("Invalid pagination");
+      throw new Error("The server sent an invalid page of results");
     }
 
     if (page.nextCursor) {
@@ -658,7 +658,9 @@ export async function commentOnChange(
     : options.body;
 
   if (!text?.trim()) {
-    throw new Error("Supply --body <text> or --body-file <path>");
+    throw new CliError(
+      "Add the comment with --body <text> or --body-file <path>.",
+    );
   }
 
   if (options.thread) {

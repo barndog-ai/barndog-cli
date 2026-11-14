@@ -2,6 +2,7 @@ import { InvalidArgumentError, type Command } from "commander";
 
 import { originLabel } from "../features/environment/names.js";
 import { positiveInteger } from "./options.js";
+import { CliError } from "../errors.js";
 
 /** BarnDog catalog pagination permits at most one hundred results. */
 const MAX_PAGE_SIZE = 100;
@@ -109,7 +110,7 @@ export function assetPage<T extends ListAsset>(
   const filtered = filterAssets(rows, options);
   const start = (options.page - 1) * options.limit;
   if (!Number.isSafeInteger(start)) {
-    throw new Error("Page number is too large");
+    throw new CliError("That --page number is too large. Use a smaller one.");
   }
 
   return {

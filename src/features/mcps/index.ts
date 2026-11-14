@@ -27,6 +27,7 @@ import type { Harness } from "../../harnesses/types.js";
 import { patchNative, type NativeEntry } from "../native/configuration.js";
 import { fileText } from "../../shared/files.js";
 import { defined } from "../../shared/lookup.js";
+import { CliError } from "../../errors.js";
 
 export type McpWriteInput = {
   name: string;
@@ -204,8 +205,9 @@ export async function authenticateMcp(
   );
 
   if (!installed) {
-    throw new Error(
-      "Install and enable this MCP for the selected harness before authenticating",
+    throw new CliError(
+      `${asset.name} isn't installed and enabled for ${harness}.`,
+      `barndog mcp install ${asset.name}`,
     );
   }
 
@@ -232,8 +234,9 @@ export async function authenticateMcp(
   });
 
   if (code) {
-    throw new Error(
-      `Native ${harness} authentication did not complete (${code})`,
+    throw new CliError(
+      `${command} mcp login exited with code ${code}, so sign-in didn't finish.`,
+      `${command} mcp login ${asset.name}`,
     );
   }
 
