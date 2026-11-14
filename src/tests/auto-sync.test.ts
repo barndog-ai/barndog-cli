@@ -1,3 +1,5 @@
+import { HTTP_STATUS } from "../shared/constants.js";
+
 import { expect, test } from "vitest";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -52,7 +54,8 @@ async function connectedHome(t: TestContext, extra: Partial<Settings> = {}) {
       backend.requests += 1;
 
       if (backend.status !== 200 || backend.revision === null) {
-        res.statusCode = backend.revision === null ? 404 : backend.status;
+        res.statusCode =
+          backend.revision === null ? HTTP_STATUS.notFound : backend.status;
 
         return send({ code: "UNAVAILABLE", message: "unavailable" });
       }
@@ -60,7 +63,7 @@ async function connectedHome(t: TestContext, extra: Partial<Settings> = {}) {
       return send({ revision: backend.revision });
     }
 
-    res.statusCode = 404;
+    res.statusCode = HTTP_STATUS.notFound;
     send({ code: "NOT_FOUND", message: req.url });
   });
 

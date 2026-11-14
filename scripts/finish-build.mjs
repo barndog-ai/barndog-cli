@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 const output =
   process.argv[2] ?? fileURLToPath(new URL("../dist", import.meta.url));
+const { POSIX_MODE } = await import("../dist/shared/constants.js");
 const { normalizeServer } = await import("../dist/features/auth/transport.js");
 
 try {
@@ -35,4 +36,4 @@ if (server) {
   );
 }
 
-await chmod(join(output, "cli.js"), 0o755);
+await chmod(join(output, "cli.js"), POSIX_MODE.executableFile);

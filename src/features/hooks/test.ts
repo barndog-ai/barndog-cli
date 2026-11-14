@@ -1,3 +1,5 @@
+import { MILLISECONDS_PER_SECOND } from "../../shared/constants.js";
+
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -10,6 +12,15 @@ import { cachedPackage } from "../environment/packages.js";
 import { hookCommand, runtimeRequirements } from "../native/adapters.js";
 import { readSettings } from "../../config/settings.js";
 import { repoForOrigin, selectRepoAsset } from "../git-workspace/assets.js";
+
+/** CLI hook test policy caps each input/output stream at one MiB. */
+const HOOK_IO_LIMIT_BYTES = 1048576;
+
+/** CLI hook test policy defaults to ten seconds. */
+const DEFAULT_HOOK_TIMEOUT_SECONDS = 10;
+
+/** CLI hook test policy caps execution at ten minutes. */
+const MAX_HOOK_TIMEOUT_SECONDS = 600;
 
 async function hookPackage(name: string, origin: string, home: string) {
   const settings = await readSettings(home);
@@ -108,13 +119,19 @@ export async function testHook(
   }
 
   const input = await readFile(options.input);
-  if (input.length > 1048576) {
+  if (input.length > HOOK_IO_LIMIT_BYTES) {
     throw new Error("Hook input exceeds 1 MiB");
   }
 
   JSON.parse(input.toString("utf8"));
-  const timeout = options.timeout ?? handler.timeout ?? 10;
-  if (!Number.isFinite(timeout) || timeout <= 0 || timeout > 600) {
+  const timeout =
+    options.timeout ?? handler.timeout ?? DEFAULT_HOOK_TIMEOUT_SECONDS;
+
+  if (
+    !Number.isFinite(timeout) ||
+    timeout <= 0 ||
+    timeout > MAX_HOOK_TIMEOUT_SECONDS
+  ) {
     throw new Error("Hook test timeout must be between 0 and 600 seconds");
   }
 
@@ -146,7 +163,7 @@ export async function testHook(
   const timer = setTimeout(() => {
     timedOut = true;
     stop();
-  }, timeout * 1000);
+  }, timeout * MILLISECONDS_PER_SECOND);
 
   for (const [stream, append] of [
     [
@@ -164,7 +181,7 @@ export async function testHook(
   ] as const) {
     stream.on("data", (chunk: Buffer) => {
       length += chunk.length;
-      if (length > 1048576) {
+      if (length > HOOK_IO_LIMIT_BYTES) {
         stop();
       } else {
         append(chunk.toString());
@@ -180,7 +197,7 @@ export async function testHook(
       child.once("close", (code) => resolve(code ?? 1));
     });
 
-    if (length > 1048576) {
+    if (length > HOOK_IO_LIMIT_BYTES) {
       throw new Error("Hook test output exceeds 1 MiB");
     }
 

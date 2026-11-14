@@ -51,6 +51,9 @@ import {
 import { defined } from "../../shared/lookup.js";
 import { setYamlName } from "../../shared/patterns.js";
 
+/** Three random bytes distinguish temporary move branches. */
+const MOVE_BRANCH_RANDOM_BYTES = 3;
+
 type MoveRow = {
   kind: string;
   name: string;
@@ -331,7 +334,7 @@ async function moveToGit(
     result.direct = true;
     result.branch = workspace.branch;
   } else {
-    const branch = `barndog/local-move-${randomBytes(3).toString("hex")}`;
+    const branch = `barndog/local-move-${randomBytes(MOVE_BRANCH_RANDOM_BYTES).toString("hex")}`;
     await pushCommit(repo, commit, branch);
     const opened = await openPullRequest({
       url: workspace.url,

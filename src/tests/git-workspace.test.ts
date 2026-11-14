@@ -1,3 +1,5 @@
+import { HTTP_STATUS, POSIX_MODE } from "../shared/constants.js";
+
 import { assert, expect, test, vi, type TestContext } from "vitest";
 import { execFile } from "node:child_process";
 import { builtRoot, sourceRoot } from "./built.js";
@@ -154,7 +156,11 @@ async function addAssets(root: string) {
   await write(root, "org/skills/code-review/references/a.txt", "supporting");
   await write(root, "org/hooks/audit/hook.yaml", hookYaml);
   await write(root, "org/hooks/audit/audit.sh", "#!/bin/sh\ncat >/dev/null\n");
-  await chmod(join(root, "org/hooks/audit/audit.sh"), 0o755);
+  await chmod(
+    join(root, "org/hooks/audit/audit.sh"),
+    POSIX_MODE.executableFile,
+  );
+
   await write(root, "org/mcp/docs.yaml", mcpYaml);
   await write(root, "org/knowledge/architecture.md", knowledgeMd);
   await write(root, "teams/web/skills/lint/SKILL.md", skill("lint"));
@@ -1643,7 +1649,7 @@ test("migrate previews, then moves assets and choices to cloud by scope and name
       return send(mcp);
     }
 
-    response.writeHead(404);
+    response.writeHead(HTTP_STATUS.notFound);
     response.end("{}");
   });
 
@@ -2028,7 +2034,7 @@ test("moving to cloud defaults to personal and keeps knowledge within permission
       });
     }
 
-    response.writeHead(404);
+    response.writeHead(HTTP_STATUS.notFound);
     response.end("{}");
   });
 

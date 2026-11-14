@@ -1,3 +1,5 @@
+import { HTTP_STATUS } from "../shared/constants.js";
+
 import { expect, test } from "vitest";
 import { createServer } from "node:http";
 import { mkdtemp, mkdir, rm, readFile } from "node:fs/promises";
@@ -144,7 +146,7 @@ test("connected onboarding loads actual membership without using repository sugg
 
     res.setHeader("Content-Type", "application/json");
     if (!(req.url! in data)) {
-      res.statusCode = 404;
+      res.statusCode = HTTP_STATUS.notFound;
       res.end(JSON.stringify({ code: "NOT_FOUND", message: req.url }));
 
       return;

@@ -1,3 +1,4 @@
+import { POSIX_MODE } from "../../shared/constants.js";
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -128,7 +129,11 @@ export async function cloneGitWorkspace(
   home: string,
 ): Promise<GitWorkspace | null> {
   const staging = stagingClone(home);
-  await mkdir(dirname(staging), { recursive: true, mode: 0o700 });
+  await mkdir(dirname(staging), {
+    recursive: true,
+    mode: POSIX_MODE.privateDirectory,
+  });
+
   try {
     try {
       await gitInTerminal(["clone", "--bare", "--", url, staging]);

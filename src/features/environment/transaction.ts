@@ -1,3 +1,4 @@
+import { POSIX_MODE } from "../../shared/constants.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash } from "node:crypto";
 import { rmSync } from "node:fs";
@@ -244,7 +245,11 @@ async function apply(
       throw new Error(`Sync destination changed: ${write.path}`);
     }
 
-    await mkdir(dirname(write.path), { recursive: true, mode: 0o700 });
+    await mkdir(dirname(write.path), {
+      recursive: true,
+      mode: POSIX_MODE.privateDirectory,
+    });
+
     if (write.kind === "file") {
       if (write.after === null) {
         await unlink(write.path);

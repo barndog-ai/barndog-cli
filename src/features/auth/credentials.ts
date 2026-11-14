@@ -1,3 +1,5 @@
+import { POSIX_MODE } from "../../shared/constants.js";
+
 import { chmod, lstat, mkdir, readFile, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -38,7 +40,10 @@ export async function readCredentials(home = homedir()): Promise<Credentials> {
   const path = join(home, ".barndog", "credentials.json");
   try {
     const info = await lstat(path);
-    if (!info.isFile() || (process.platform !== "win32" && info.mode & 0o077)) {
+    if (
+      !info.isFile() ||
+      (process.platform !== "win32" && info.mode & POSIX_MODE.groupAndOtherBits)
+    ) {
       throw new Error(
         "Credentials file must be a regular file accessible only to its owner",
       );
@@ -71,21 +76,23 @@ export async function updateCredentials(
   update: (credentials: Credentials) => void,
 ) {
   const root = join(home, ".barndog");
-  await mkdir(root, { recursive: true, mode: 0o700 });
+  await mkdir(root, { recursive: true, mode: POSIX_MODE.privateDirectory });
   const info = await lstat(root);
   if (!info.isDirectory()) {
     throw new Error("Credentials directory must be a regular directory");
   }
 
-  await chmod(root, 0o700);
+  await chmod(root, POSIX_MODE.privateDirectory);
   const lock = join(root, "credentials.lock");
-  await mkdir(lock, { mode: 0o700 }).catch((error: unknown) => {
-    if (errorCode(error) === "EEXIST") {
-      throw new Error("Another login or logout is running");
-    }
+  await mkdir(lock, { mode: POSIX_MODE.privateDirectory }).catch(
+    (error: unknown) => {
+      if (errorCode(error) === "EEXIST") {
+        throw new Error("Another login or logout is running");
+      }
 
-    throw error;
-  });
+      throw error;
+    },
+  );
 
   try {
     const credentials = await readCredentials(home);

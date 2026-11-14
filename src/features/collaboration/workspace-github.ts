@@ -1,3 +1,5 @@
+import { HTTP_STATUS } from "../../shared/constants.js";
+
 import { randomUUID } from "node:crypto";
 
 import { z } from "zod";
@@ -284,7 +286,13 @@ export async function pushExternal(
   } catch (error) {
     if (
       error instanceof ApiError &&
-      [400, 403, 404, 409, 413].includes(error.status)
+      [
+        HTTP_STATUS.badRequest,
+        HTTP_STATUS.forbidden,
+        HTTP_STATUS.notFound,
+        HTTP_STATUS.conflict,
+        HTTP_STATUS.payloadTooLarge,
+      ].includes(error.status)
     ) {
       delete external.pending;
       await save(work, home);

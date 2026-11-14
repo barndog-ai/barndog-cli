@@ -5,6 +5,15 @@ import { CliError } from "../../errors.js";
 import { errorCode } from "../../shared/values.js";
 import { GIT_OBJECT_ID } from "../../shared/patterns.js";
 
+/** CLI policy permits up to 512 MiB of Git plumbing output. */
+const GIT_OUTPUT_LIMIT_MIB = 512;
+
+/** IEC binary units use 1024 bytes per KiB. */
+const BYTES_PER_KIB = 1024;
+
+/** CLI policy bounds Git subprocesses to three minutes. */
+const GIT_TIMEOUT_MS = 180_000;
+
 /** The prefix Git puts on a failure line: `fatal: `, `error: ` or `remote: `. */
 const FAILURE_PREFIX = /^(?:fatal|error|remote):\s*/;
 
@@ -85,8 +94,8 @@ export function git(args: string[], options: GitOptions = {}): Promise<Buffer> {
       {
         encoding: "buffer",
         env: { ...env, ...options.env },
-        maxBuffer: 512 * 1024 * 1024,
-        timeout: options.timeoutMs ?? 180_000,
+        maxBuffer: GIT_OUTPUT_LIMIT_MIB * BYTES_PER_KIB * BYTES_PER_KIB,
+        timeout: options.timeoutMs ?? GIT_TIMEOUT_MS,
       },
       (error, stdout, stderr) => {
         if (!error) {

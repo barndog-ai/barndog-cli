@@ -1,3 +1,5 @@
+import { HTTP_STATUS } from "../shared/constants.js";
+
 import { assert, expect, test, vi, type TestContext } from "vitest";
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
@@ -190,20 +192,25 @@ test("failures render as JSON with the same fix people see", () => {
 
   expect(
     JSON.parse(
-      renderJsonError(new ApiError(403, "X", "PUBLICATION_FORBIDDEN")),
+      renderJsonError(
+        new ApiError(HTTP_STATUS.forbidden, "X", "PUBLICATION_FORBIDDEN"),
+      ),
     ),
   ).toStrictEqual({
     error: {
       message:
         "You can't publish here directly. Propose it for review instead.",
       fix: "barndog push",
-      status: 403,
+      status: HTTP_STATUS.forbidden,
     },
   });
 });
 
 test("common server refusals carry a Fix line", () => {
-  const text = renderError(new ApiError(403, "X", "CHANGE_AUTHOR_REQUIRED"));
+  const text = renderError(
+    new ApiError(HTTP_STATUS.forbidden, "X", "CHANGE_AUTHOR_REQUIRED"),
+  );
+
   expect(text).toMatch(/Only the author/);
   expect(text).toMatch(/Fix:.*barndog push --new/);
 });
@@ -211,7 +218,7 @@ test("common server refusals carry a Fix line", () => {
 test("a change ID from the other list points there", async () => {
   const { instance } = program({
     showChange: async () => {
-      throw new ApiError(404, "X", "CHANGE_NOT_FOUND");
+      throw new ApiError(HTTP_STATUS.notFound, "X", "CHANGE_NOT_FOUND");
     },
   });
 

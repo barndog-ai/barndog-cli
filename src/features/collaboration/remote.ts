@@ -24,6 +24,9 @@ import { CliError } from "../../errors.js";
 import { only } from "../../shared/lookup.js";
 import { splitOrigin } from "../../shared/patterns.js";
 
+/** CLI policy: bound review writes to thirty seconds. */
+const REVIEW_REQUEST_TIMEOUT_MS = 30000;
+
 /**
  * The saved Cloud connection, after asking the server who is signed in and
  * checking it is still that organization and developer. Pass `expected` to also
@@ -208,7 +211,7 @@ export async function download(
 ) {
   const response = await serverFetch(conn.server, home)(
     `${conn.server}${packagePath(path, kind)}`,
-    { signal: AbortSignal.timeout(30000) },
+    { signal: AbortSignal.timeout(REVIEW_REQUEST_TIMEOUT_MS) },
   );
 
   if (!response.ok) {

@@ -1,3 +1,5 @@
+import { POSIX_MODE } from "../shared/constants.js";
+
 import { assert, expect, test, type TestContext } from "vitest";
 import {
   chmod,
@@ -37,7 +39,7 @@ test("detection uses executable PATH entries and macOS app installations, not sk
   const apps = join(home, "Applications");
   await mkdir(bin);
   await writeFile(join(bin, "codex"), "#!/bin/sh\nexit 0\n");
-  await chmod(join(bin, "codex"), 0o755);
+  await chmod(join(bin, "codex"), POSIX_MODE.executableFile);
   await writeFile(join(bin, "claude"), "not executable");
   await mkdir(join(apps, "Cursor.app", "Contents", "MacOS"), {
     recursive: true,

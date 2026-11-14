@@ -1,6 +1,9 @@
 import { spawn } from "node:child_process";
 import { mcpDefinitionSchema } from "@barndog-ai/api-contract";
 
+/** Allow two seconds for the MCP child to exit before forcing shutdown. */
+const MCP_SHUTDOWN_GRACE_MS = 2000;
+
 // This process runs only when the native harness starts a selected stdio MCP.
 // Definitions contain references, never credential values. No shell is involved.
 try {
@@ -55,7 +58,7 @@ try {
           } catch {
             /* exited */
           }
-        }, 2000);
+        }, MCP_SHUTDOWN_GRACE_MS);
 
         timer.unref();
       } catch {

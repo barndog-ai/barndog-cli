@@ -1,5 +1,20 @@
 import { styleText } from "node:util";
 
+/** Node terminal color depth for 24-bit RGB. */
+const TRUE_COLOR_DEPTH = 24;
+
+/** Node terminal color depth for the 256-color palette. */
+const PALETTE_COLOR_DEPTH = 8;
+
+/** Node terminal color depth for the sixteen ANSI colors. */
+const BASIC_COLOR_DEPTH = 4;
+
+/** CSS #RRGGBB green channel starts at character three. */
+const GREEN_HEX_OFFSET = 3;
+
+/** CSS #RRGGBB blue channel starts at character five. */
+const BLUE_HEX_OFFSET = 5;
+
 /**
  * BarnDog brand accent, applied through `primary()` to headings, highlighted
  * output and prompt accents.
@@ -22,19 +37,21 @@ export function selected(
 /** The color depth `FORCE_COLOR` asks for, in bits. */
 function forcedColorDepth() {
   if (process.env.FORCE_COLOR === "3") {
-    return 24;
+    return TRUE_COLOR_DEPTH;
   }
 
-  return process.env.FORCE_COLOR === "2" ? 8 : 4;
+  return process.env.FORCE_COLOR === "2"
+    ? PALETTE_COLOR_DEPTH
+    : BASIC_COLOR_DEPTH;
 }
 
 /** The SGR foreground code for the brand color at a color depth: exact, nearest of 256, or red. */
 function primaryColorCode(depth: number, rgb: number[]) {
-  if (depth >= 24) {
+  if (depth >= TRUE_COLOR_DEPTH) {
     return `38;2;${rgb.join(";")}`;
   }
 
-  return depth >= 8 ? "38;5;131" : "31";
+  return depth >= PALETTE_COLOR_DEPTH ? "38;5;131" : "31";
 }
 
 /** Exact brand color on true-color terminals, with palette and plain-text fallbacks. */
@@ -48,7 +65,7 @@ export function primary(
   }
 
   const depth = stream.getColorDepth?.() ?? forcedColorDepth();
-  const rgb = [1, 3, 5].map((start) =>
+  const rgb = [1, GREEN_HEX_OFFSET, BLUE_HEX_OFFSET].map((start) =>
     parseInt(PRIMARY_COLOR.slice(start, start + 2), 16),
   );
 

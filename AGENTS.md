@@ -41,6 +41,8 @@ Publishing has no npm token. The `barndog` package trusts `release.yml` in `barn
 
 ## Code style
 
+- Values defined by an outside format or protocol (Git modes, harness event names, HTTP headers, size limits) get a named constant with a comment saying where they come from.
+
 - Use double quotes, semicolons, and two spaces for indentation (no tabs).
 - Prettier handles formatting; ESLint enforces braces on every `if`, `else`, `for`, `while` and `do` body, and blank lines after import blocks, between class methods, around standalone declarations, before every `return`, and after every block, multiline expression and multiline `const`/`let`. Keep related imports and class fields grouped.
 - Separate the logical steps inside a function with a blank line (validate input, then fetch, then transform, then write), so a function reads as paragraphs rather than one block. The lint rules add the mechanical blank lines; grouping statements by meaning is up to you.

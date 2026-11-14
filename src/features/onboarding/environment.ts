@@ -19,6 +19,9 @@ import type {
   Subscription,
 } from "../asset-selection/types.js";
 
+/** Limit onboarding team requests to six concurrent operations. */
+const TEAM_FETCH_CONCURRENCY = 6;
+
 /**
  * What setup offers: the catalog, the scopes the developer can use, the teams
  * they belong to and the selection saved by a previous setup, used as defaults.
@@ -74,9 +77,13 @@ export async function onboardingEnvironment(
   const teams = scopes.filter((scope) => scope.type === "team");
   const memberTeamIds: string[] = [];
   // Bound concurrent requests when using servers with the existing membership API.
-  for (let offset = 0; offset < teams.length; offset += 6) {
+  for (
+    let offset = 0;
+    offset < teams.length;
+    offset += TEAM_FETCH_CONCURRENCY
+  ) {
     const memberships = await Promise.all(
-      teams.slice(offset, offset + 6).map(async (team) => {
+      teams.slice(offset, offset + TEAM_FETCH_CONCURRENCY).map(async (team) => {
         const members = await request(
           connection,
           `/v1/teams/${team.id}/members`,

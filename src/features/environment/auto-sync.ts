@@ -1,3 +1,5 @@
+import { HTTP_STATUS } from "../../shared/constants.js";
+
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -12,7 +14,8 @@ import { readSettings, type Connection } from "../../config/settings.js";
 import { request } from "./remote.js";
 import { writeAtomic } from "../../shared/files.js";
 
-const CHECK_INTERVAL_MS = 5 * 60 * 1000;
+/** Background refresh policy: check at most every five minutes (milliseconds). */
+const CHECK_INTERVAL_MS = 300000;
 
 const checkSchema = z.object({
   server: z.string(),
@@ -67,7 +70,7 @@ async function currentRevision(conn: Connection, home: string) {
 
     return revision;
   } catch (error) {
-    if (error instanceof ApiError && error.status === 404) {
+    if (error instanceof ApiError && error.status === HTTP_STATUS.notFound) {
       return undefined;
     }
 

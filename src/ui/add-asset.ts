@@ -1,3 +1,4 @@
+import { GIT_MODE } from "../features/git-workspace/snapshot.js";
 import checkbox from "@inquirer/checkbox";
 import confirm from "@inquirer/confirm";
 import input from "@inquirer/input";
@@ -603,7 +604,9 @@ export async function addHook(
     }
 
     const modes = new Map(remote.snapshot.entries.map((e) => [e.path, e.mode]));
-    const executable = (script: string) => modes.get(script) === "100755";
+    const executable = (script: string) =>
+      modes.get(script) === GIT_MODE.executable;
+
     // Settings the author shipped answer every question, and no other tool is offered.
     const written = harnesses.filter(
       (h) => candidate.implementations[h]?.length,

@@ -1,3 +1,4 @@
+import { POSIX_MODE } from "../../shared/constants.js";
 import { CliError } from "../../errors.js";
 import { errorCode } from "../../shared/values.js";
 import { randomUUID, createHash } from "node:crypto";
@@ -376,7 +377,11 @@ export async function applyFiles<T extends StoredRecord>(
     `${Date.now()}-${randomUUID()}.json`,
   );
 
-  await mkdir(dirname(snapshot), { recursive: true, mode: 0o700 });
+  await mkdir(dirname(snapshot), {
+    recursive: true,
+    mode: POSIX_MODE.privateDirectory,
+  });
+
   await writeFile(
     snapshot,
     JSON.stringify({

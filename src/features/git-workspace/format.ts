@@ -1,3 +1,5 @@
+import { MAX_ASSET_NAME_LENGTH } from "../../shared/constants.js";
+
 import { createHash } from "node:crypto";
 
 import {
@@ -19,13 +21,49 @@ import { CliError, friendlyMessage } from "../../errors.js";
 import type { AssetKind, AssetReference } from "../asset-selection/types.js";
 import {
   isBlob,
-  TREE_MODE,
+  GIT_MODE,
   type Snapshot,
   type SnapshotEntry,
 } from "./snapshot.js";
 import { assetKinds } from "../asset-kinds/index.js";
 import { defined } from "../../shared/lookup.js";
 import { NAME, splitFrontMatter } from "../../shared/patterns.js";
+
+/** BarnDog workspace configuration allows display names up to 200 characters. */
+const MAX_WORKSPACE_NAME_LENGTH = 200;
+
+/** RFC 9562 UUIDs contain 128 bits, or sixteen bytes. */
+const UUID_BYTE_LENGTH = 16;
+
+/** RFC 9562 places the version nibble in byte six (zero based). */
+const UUID_VERSION_BYTE = 6;
+
+/** RFC 9562 preserves the low nibble when setting the UUID version. */
+const UUID_VERSION_PAYLOAD_MASK = 0x0f;
+
+/** RFC 9562 version four occupies the high nibble. */
+const UUID_V4_BITS = 0x40;
+
+/** RFC 9562 places the variant bits in byte eight (zero based). */
+const UUID_VARIANT_BYTE = 8;
+
+/** RFC 9562 preserves six payload bits for the IETF variant. */
+const UUID_VARIANT_PAYLOAD_MASK = 0x3f;
+
+/** RFC 9562 IETF variant starts with binary 10. */
+const UUID_IETF_VARIANT_BITS = 0x80;
+
+/** RFC 9562 hexadecimal UUID first group ends at character eight. */
+const UUID_FIRST_GROUP_END = 8;
+
+/** RFC 9562 hexadecimal UUID third group ends at character sixteen. */
+const UUID_THIRD_GROUP_END = 16;
+
+/** RFC 9562 hexadecimal UUID group boundary (8-4-4-4-12). */
+const UUID_SECOND_GROUP_END = 12;
+
+/** RFC 9562 hexadecimal UUID fourth group ends at character twenty. */
+const UUID_FOURTH_GROUP_END = 20;
 
 /**
  * The file at a Git or local workspace's root naming the workspace and
@@ -42,7 +80,7 @@ const configSchema = z
   .object({
     version: z.literal(1),
     workspaceId: z.uuidv4(),
-    name: z.string().trim().min(1).max(200),
+    name: z.string().trim().min(1).max(MAX_WORKSPACE_NAME_LENGTH),
     teams: z
       .record(slug, z.object({ name: z.string().min(1) }).strict())
       .default({}),
@@ -99,14 +137,24 @@ export function stableId(...parts: string[]) {
   const bytes = createHash("sha256")
     .update(parts.join("\0"))
     .digest()
-    .subarray(0, 16);
+    .subarray(0, UUID_BYTE_LENGTH);
 
   // A 16-byte digest always has these bytes; set the UUID version and variant bits.
-  bytes.writeUInt8((bytes.readUInt8(6) & 0x0f) | 0x40, 6);
-  bytes.writeUInt8((bytes.readUInt8(8) & 0x3f) | 0x80, 8);
+  bytes.writeUInt8(
+    (bytes.readUInt8(UUID_VERSION_BYTE) & UUID_VERSION_PAYLOAD_MASK) |
+      UUID_V4_BITS,
+    UUID_VERSION_BYTE,
+  );
+
+  bytes.writeUInt8(
+    (bytes.readUInt8(UUID_VARIANT_BYTE) & UUID_VARIANT_PAYLOAD_MASK) |
+      UUID_IETF_VARIANT_BITS,
+    UUID_VARIANT_BYTE,
+  );
+
   const hex = bytes.toString("hex");
 
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  return `${hex.slice(0, UUID_FIRST_GROUP_END)}-${hex.slice(UUID_FIRST_GROUP_END, UUID_SECOND_GROUP_END)}-${hex.slice(UUID_SECOND_GROUP_END, UUID_THIRD_GROUP_END)}-${hex.slice(UUID_THIRD_GROUP_END, UUID_FOURTH_GROUP_END)}-${hex.slice(UUID_FOURTH_GROUP_END)}`;
 }
 
 /**
@@ -257,7 +305,7 @@ export async function loadWorkspace(
 
   const folders = (path: string) =>
     under(path)
-      .filter(({ entry }) => entry.mode === TREE_MODE)
+      .filter(({ entry }) => entry.mode === GIT_MODE.tree)
       .map(({ name }) => name);
 
   const organizationId = id("scope", "org");
@@ -308,7 +356,7 @@ export async function loadWorkspace(
   function packageEntries(root: string) {
     const entries: PackageEntry[] = [];
     for (const entry of snapshot.entries) {
-      if (!entry.path.startsWith(`${root}/`) || entry.mode === TREE_MODE) {
+      if (!entry.path.startsWith(`${root}/`) || entry.mode === GIT_MODE.tree) {
         continue;
       }
 
@@ -321,7 +369,7 @@ export async function loadWorkspace(
       entries.push({
         path: entry.path.slice(root.length + 1),
         data: blob(entry),
-        executable: entry.mode === "100755",
+        executable: entry.mode === GIT_MODE.executable,
       });
     }
 
@@ -354,7 +402,7 @@ export async function loadWorkspace(
     };
 
     for (const { entry, name } of under(`${scope.path}/skills`)) {
-      if (entry.mode !== TREE_MODE || !named(entry.path, name)) {
+      if (entry.mode !== GIT_MODE.tree || !named(entry.path, name)) {
         continue;
       }
 
@@ -370,7 +418,7 @@ export async function loadWorkspace(
     }
 
     for (const { entry, name } of under(`${scope.path}/hooks`)) {
-      if (entry.mode !== TREE_MODE || !named(entry.path, name)) {
+      if (entry.mode !== GIT_MODE.tree || !named(entry.path, name)) {
         continue;
       }
 
@@ -495,7 +543,7 @@ export async function loadWorkspace(
  * at most 64 characters.
  */
 export function validAssetName(name: string) {
-  return slug.safeParse(name).success && name.length <= 64;
+  return slug.safeParse(name).success && name.length <= MAX_ASSET_NAME_LENGTH;
 }
 
 /** Names become folder and file names, so check them before touching the disk. */

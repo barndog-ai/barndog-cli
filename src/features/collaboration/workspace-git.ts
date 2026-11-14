@@ -1,3 +1,5 @@
+import { MILLISECONDS_PER_SECOND } from "../../shared/constants.js";
+
 import { randomBytes } from "node:crypto";
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
@@ -33,7 +35,7 @@ import {
   pushCommit,
   remoteBranch,
 } from "../git-workspace/publish.js";
-import { isBlob, gitSnapshot, TREE_MODE } from "../git-workspace/snapshot.js";
+import { isBlob, gitSnapshot, GIT_MODE } from "../git-workspace/snapshot.js";
 import {
   acceptedCommit,
   gitDirectory,
@@ -71,6 +73,9 @@ import type {
   UpdatedGitWorkingCopy,
   VersionFiles,
 } from "./results.js";
+
+/** Three random bytes provide six hex characters to distinguish work branches. */
+const BRANCH_RANDOM_BYTES = 3;
 
 async function latest(workspace: GitWorkspace, home: string) {
   const model = await gitRepoSource(workspace, home).model();
@@ -554,7 +559,7 @@ export function pushGitWorkingCopy(
 
     const branch =
       review?.branch ??
-      `barndog/${work.scope.type === "org" ? "org" : `${work.scope.type}-${work.scope.slug}`}-${work.name}-${randomBytes(3).toString("hex")}`;
+      `barndog/${work.scope.type === "org" ? "org" : `${work.scope.type}-${work.scope.slug}`}-${work.name}-${randomBytes(BRANCH_RANDOM_BYTES).toString("hex")}`;
 
     const commit = await commitFiles(repo, review?.head ?? work.baseCommit, {
       ...change,
@@ -603,7 +608,9 @@ async function assetHistory(repo: string, commit: string, path: string) {
       return {
         number: index + 1,
         commit: hash,
-        publishedAt: new Date(Number(time) * 1000).toISOString(),
+        publishedAt: new Date(
+          Number(time) * MILLISECONDS_PER_SECOND,
+        ).toISOString(),
         publishedBy: author,
         description: subject,
       };
@@ -614,7 +621,7 @@ async function filesAt(repo: string, commit: string, path: string) {
   const snapshot = await gitSnapshot(repo, commit);
   const single = snapshot.entries.find((entry) => entry.path === path);
   const members =
-    single && single.mode !== TREE_MODE
+    single && single.mode !== GIT_MODE.tree
       ? [{ ...single, path: path.slice(path.lastIndexOf("/") + 1) }]
       : snapshot.entries
           .filter(
@@ -633,7 +640,7 @@ async function filesAt(repo: string, commit: string, path: string) {
       blobs.get(entry.hash),
       `Git object ${entry.hash} wasn't read`,
     ),
-    executable: entry.mode === "100755",
+    executable: entry.mode === GIT_MODE.executable,
   }));
 }
 

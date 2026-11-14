@@ -1,3 +1,4 @@
+import { POSIX_MODE } from "./constants.js";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { errorCode } from "./values.js";
@@ -20,7 +21,11 @@ export async function withPidLock<T>(
   messages: LockMessages,
   run: () => Promise<T>,
 ): Promise<T> {
-  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+  await mkdir(dirname(path), {
+    recursive: true,
+    mode: POSIX_MODE.privateDirectory,
+  });
+
   try {
     await mkdir(path);
   } catch (error) {

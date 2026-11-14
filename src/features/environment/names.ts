@@ -1,4 +1,15 @@
+import { MAX_ASSET_NAME_LENGTH } from "../../shared/constants.js";
+
 import { NAME, slugify } from "../../shared/patterns.js";
+
+/** Eight ID characters distinguish hooks with the same display name. */
+const HOOK_ID_SUFFIX_LENGTH = 8;
+
+/** Unknown origins sort after all explicitly ranked origins. */
+const UNKNOWN_ORIGIN_RANK = 9;
+
+/** Allow repeated scope and ID disambiguation before declaring a collision. */
+const NAME_RESOLUTION_PASSES_PER_ASSET = 4;
 
 /** Kinds whose installed name is a shared native namespace (Skill folders, MCP server keys). */
 type NamedKind = "skill" | "mcp";
@@ -87,7 +98,7 @@ export function prefixedName(asset: Pick<NamedAsset, "name" | "origin">) {
  * most 64 characters.
  */
 export function validInstalledName(name: string) {
-  return NAME.test(name) && name.length <= 64;
+  return NAME.test(name) && name.length <= MAX_ASSET_NAME_LENGTH;
 }
 
 /**
@@ -144,7 +155,7 @@ export function hookFolders(
     hook.id.replace(/[^a-z0-9]/gi, "").toLowerCase();
 
   const suffixed = (hook: HookPlacement) =>
-    `${plain(hook)}-${idText(hook).slice(0, 8)}`;
+    `${plain(hook)}-${idText(hook).slice(0, HOOK_ID_SUFFIX_LENGTH)}`;
 
   const whole = (hook: HookPlacement) => `${plain(hook)}-${idText(hook)}`;
   const ordered = [...hooks].sort((a, b) => a.id.localeCompare(b.id));
@@ -231,7 +242,8 @@ function findClash(
     const [installed, incoming] = [...group].sort(
       (a, b) =>
         Number(b.installed) - Number(a.installed) ||
-        (rank[a.origin.type] ?? 9) - (rank[b.origin.type] ?? 9) ||
+        (rank[a.origin.type] ?? UNKNOWN_ORIGIN_RANK) -
+          (rank[b.origin.type] ?? UNKNOWN_ORIGIN_RANK) ||
         a.id.localeCompare(b.id),
     );
 
@@ -276,7 +288,13 @@ export async function resolveClashes(
   let active = [...assets];
   const disabled: string[] = [];
   const skipped: Clash[] = [];
-  for (let guard = 0; guard < assets.length * 4 + 4; guard++) {
+  for (
+    let guard = 0;
+    guard <
+    assets.length * NAME_RESOLUTION_PASSES_PER_ASSET +
+      NAME_RESOLUTION_PASSES_PER_ASSET;
+    guard++
+  ) {
     const clash = findClash(active, names);
     if (!clash) {
       return { localNames: names, disabledAssetIds: disabled, skipped };

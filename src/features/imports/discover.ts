@@ -1,3 +1,4 @@
+import { GIT_MODE } from "../git-workspace/snapshot.js";
 import {
   hookImplementationSchema,
   type HookManifest,
@@ -46,7 +47,7 @@ export function folderEntries(
     .map((entry) => ({
       path: entry.path.slice(prefix.length),
       data: blobOf(remote, entry),
-      executable: entry.mode === "100755",
+      executable: entry.mode === GIT_MODE.executable,
     }));
 }
 
@@ -58,7 +59,7 @@ const hasLink = (remote: RemoteRepo, root: string) =>
   remote.snapshot.entries.some(
     (entry) =>
       entry.path.startsWith(root ? `${root}/` : "") &&
-      (entry.mode === "120000" || entry.mode === "160000"),
+      (entry.mode === GIT_MODE.symlink || entry.mode === GIT_MODE.submodule),
   );
 
 const parentOf = (path: string) =>
@@ -358,7 +359,7 @@ export function discoverHooks(remote: RemoteRepo, fallbackName: string) {
         .flat()
         .map((d) => d.script),
       ...blobEntries
-        .filter((e) => scriptLike(e.path) || e.mode === "100755")
+        .filter((e) => scriptLike(e.path) || e.mode === GIT_MODE.executable)
         .map((e) => e.path),
     ]),
   ];
@@ -426,7 +427,8 @@ export function buildHookPackage(
     .map((entry) => ({
       path: relative(entry.path),
       data: blobOf(remote, entry),
-      executable: entry.mode === "100755" || scripts.includes(entry.path),
+      executable:
+        entry.mode === GIT_MODE.executable || scripts.includes(entry.path),
     }));
 
   const implementations: HookManifest["implementations"] = {};

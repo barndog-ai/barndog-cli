@@ -1,3 +1,5 @@
+import { HTTP_STATUS } from "../shared/constants.js";
+
 import { assert, expect, test } from "vitest";
 import { createServer } from "node:http";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
@@ -102,7 +104,7 @@ for (const state of ["missing", "expired", "valid", "revoked"] as const) {
 
       expect(req.headers.authorization).toBe(`Bearer ${token}`);
       if (!signedIn) {
-        res.statusCode = 401;
+        res.statusCode = HTTP_STATUS.unauthorized;
         send({ message: "LOGIN_REQUIRED" });
 
         return;

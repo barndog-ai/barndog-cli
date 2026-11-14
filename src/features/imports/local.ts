@@ -337,7 +337,8 @@ export async function updateImported(
   return results;
 }
 
-const FOLLOW_INTERVAL_MS = 5 * 60 * 1000;
+/** Background refresh policy: check at most every five minutes (milliseconds). */
+const FOLLOW_INTERVAL_MS = 300000;
 
 /** Runs before sync. A repo that fails or was edited locally never blocks delivery. */
 export async function followImports(

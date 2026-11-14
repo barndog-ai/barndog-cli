@@ -1,3 +1,4 @@
+import { POSIX_MODE } from "../../shared/constants.js";
 import { createHash, randomUUID } from "node:crypto";
 import {
   mkdir,
@@ -104,7 +105,7 @@ export async function storePackage(
     asset.id,
   );
 
-  await mkdir(parent, { recursive: true, mode: 0o700 });
+  await mkdir(parent, { recursive: true, mode: POSIX_MODE.privateDirectory });
   const check = async (root: string) => {
     const saved = z
       .object({ fingerprint: z.string() })

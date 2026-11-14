@@ -41,6 +41,9 @@ import { packageKindList } from "../features/asset-kinds/index.js";
 import { defined } from "../shared/lookup.js";
 import { positiveInteger } from "../ui/options.js";
 
+/** Shell timeout utility convention for a timed-out command. */
+const TIMEOUT_EXIT_CODE = 124;
+
 const checkMarks: Record<"ok" | "warn" | "fail", string> = {
   ok: ok("✔"),
   warn: warn("!"),
@@ -437,7 +440,7 @@ export function registerCapabilities(
 
         // The Hook's own result is the command's result, however it is printed.
         if (test.exitCode || test.timedOut) {
-          process.exitCode = test.timedOut ? 124 : test.exitCode;
+          process.exitCode = test.timedOut ? TIMEOUT_EXIT_CODE : test.exitCode;
         }
 
         if (context.mode.json) {

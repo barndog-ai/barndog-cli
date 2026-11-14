@@ -1,3 +1,4 @@
+import { POSIX_MODE } from "../../shared/constants.js";
 import { readState } from "../../config/state.js";
 import { homedir } from "node:os";
 import { readFile, mkdir } from "node:fs/promises";
@@ -217,7 +218,7 @@ export async function authenticateMcp(
   }
 
   const cwd = join(home, ".barndog/native-auth");
-  await mkdir(cwd, { recursive: true, mode: 0o700 });
+  await mkdir(cwd, { recursive: true, mode: POSIX_MODE.privateDirectory });
   const command = harness === "claude" ? "claude" : "codex";
   const child = spawn(command, ["mcp", "login", asset.name], {
     cwd,

@@ -1,3 +1,5 @@
+import { SHORT_COMMIT_LENGTH } from "../shared/constants.js";
+
 import { bad, dim, fields, hint, ok, table } from "./format.js";
 
 export type HookCompatibility = {
@@ -39,7 +41,7 @@ export function renderHookCompatibility(
         "Version",
         typeof result.version === "number"
           ? String(result.version)
-          : result.version.slice(0, 7),
+          : result.version.slice(0, SHORT_COMMIT_LENGTH),
       ],
     ]),
     ...table(

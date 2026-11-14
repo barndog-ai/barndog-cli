@@ -1,3 +1,5 @@
+import { HEX_RADIX, SHORT_COMMIT_LENGTH } from "../shared/constants.js";
+
 import { primary } from "./theme.js";
 import { renderSyncOutput } from "./output.js";
 import { changeSchema } from "@barndog-ai/api-contract";
@@ -5,6 +7,9 @@ import { textContent } from "@barndog-ai/api-contract/collaboration";
 import { z } from "zod";
 import type { EnvironmentPreview } from "../features/collaboration/index.js";
 import { isRecord } from "../shared/values.js";
+
+/** JavaScript Unicode escapes encode a UTF-16 code unit with four hex digits. */
+const UNICODE_ESCAPE_DIGITS = 4;
 
 /** C0 and C1 control characters other than tab and line feed, such as ESC (`\x1b`). */
 // eslint-disable-next-line no-control-regex -- finding control characters is the point
@@ -17,7 +22,8 @@ const CONTROL_CHARACTERS = /[\x00-\x08\x0b-\x1f\x7f-\x9f]/g;
 export function safe(value: unknown) {
   return String(value).replace(
     CONTROL_CHARACTERS,
-    (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`,
+    (c) =>
+      `\\u${c.charCodeAt(0).toString(HEX_RADIX).padStart(UNICODE_ESCAPE_DIGITS, "0")}`,
   );
 }
 
@@ -81,7 +87,7 @@ function baseLabel(
   version: number | null | undefined,
 ) {
   if (commit) {
-    return commit.slice(0, 7);
+    return commit.slice(0, SHORT_COMMIT_LENGTH);
   }
 
   return version ? `v${version}` : undefined;

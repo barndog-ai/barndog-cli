@@ -1,3 +1,5 @@
+import { POSIX_MODE } from "../../shared/constants.js";
+
 import {
   chmod,
   lstat,
@@ -45,7 +47,7 @@ async function readTree(directory: string): Promise<PackageEntry[]> {
         entries.push({
           path,
           data: await readFile(join(directory, path)),
-          executable: !!(info.mode & 0o111),
+          executable: !!(info.mode & POSIX_MODE.executableBits),
         });
       } else {
         throw new Error(`Unexpected file type in ${join(directory, path)}`);
@@ -134,14 +136,17 @@ async function removeEmptyDirectories(directory: string) {
  * replaced, so harness file watchers observe edits instead of a vanished directory.
  */
 export async function mirrorTree(directory: string, entries: PackageEntry[]) {
-  await mkdir(directory, { recursive: true, mode: 0o755 });
+  await mkdir(directory, { recursive: true, mode: POSIX_MODE.executableFile });
   const wanted = new Map(entries.map((entry) => [entry.path, entry]));
   let current: PackageEntry[] = [];
   try {
     current = await readTree(directory);
   } catch {
     await rm(directory, { recursive: true, force: true });
-    await mkdir(directory, { recursive: true, mode: 0o755 });
+    await mkdir(directory, {
+      recursive: true,
+      mode: POSIX_MODE.executableFile,
+    });
   }
 
   for (const existing of current) {
@@ -155,7 +160,10 @@ export async function mirrorTree(directory: string, entries: PackageEntry[]) {
   for (const entry of entries) {
     const path = join(directory, entry.path);
     const existing = current.find((item) => item.path === entry.path);
-    const mode = entry.executable ? 0o755 : 0o644;
+    const mode = entry.executable
+      ? POSIX_MODE.executableFile
+      : POSIX_MODE.regularFile;
+
     if (existing?.data.equals(entry.data)) {
       if (existing.executable !== entry.executable) {
         await chmod(path, mode);
@@ -164,6 +172,9 @@ export async function mirrorTree(directory: string, entries: PackageEntry[]) {
       continue;
     }
 
-    await writeAtomic(path, entry.data, { mode, directoryMode: 0o755 });
+    await writeAtomic(path, entry.data, {
+      mode,
+      directoryMode: POSIX_MODE.executableFile,
+    });
   }
 }

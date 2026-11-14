@@ -1,3 +1,5 @@
+import { HTTP_STATUS, POSIX_MODE } from "../shared/constants.js";
+
 import { assert, expect, test } from "vitest";
 import { createServer } from "node:http";
 import {
@@ -60,7 +62,9 @@ async function filesIn(directory: string) {
       .map(async (path) => [
         path,
         await readFile(join(directory, path), "utf8"),
-        ((await stat(join(directory, path))).mode & 0o111) !== 0,
+        ((await stat(join(directory, path))).mode &
+          POSIX_MODE.executableBits) !==
+          0,
       ]),
   );
 }
@@ -427,7 +431,7 @@ test("sync resolves MCP name clashes, persists renames and restores the plain na
       return send(found);
     }
 
-    res.statusCode = 404;
+    res.statusCode = HTTP_STATUS.notFound;
     send({ code: "NOT_FOUND", message: req.url });
   });
 

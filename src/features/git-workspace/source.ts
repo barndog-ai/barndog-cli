@@ -1,3 +1,10 @@
+import { POSIX_MODE } from "../../shared/constants.js";
+import {
+  HOURS_PER_DAY,
+  MILLISECONDS_PER_MINUTE,
+  MINUTES_PER_HOUR,
+} from "../../shared/constants.js";
+
 import { createHash } from "node:crypto";
 import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -20,6 +27,9 @@ import { folderSnapshot, gitSnapshot, type Snapshot } from "./snapshot.js";
 import { defined } from "../../shared/lookup.js";
 import { z } from "zod";
 import { writeAtomic } from "../../shared/files.js";
+
+/** Display ages of at least two days in days. */
+const AGE_IN_DAYS_THRESHOLD_HOURS = 48;
 
 /** A workspace read from files; adds what cloud answers through other endpoints. */
 export type RepoSource = WorkspaceSource & {
@@ -126,7 +136,8 @@ export function localRepoSource(
   );
 }
 
-const AUTO_FETCH_INTERVAL_MS = 5 * 60 * 1000;
+/** Background refresh policy: check at most every five minutes (milliseconds). */
+const AUTO_FETCH_INTERVAL_MS = 300000;
 
 const fetchStateSchema = z.looseObject({
   /** The branch tip this machine last read. */
@@ -177,7 +188,7 @@ async function writeFetchState(
 
 /** Creates or repairs the bare clone; nothing is ever checked out of it. */
 export async function ensureBareClone(repo: string, url: string) {
-  await mkdir(repo, { recursive: true, mode: 0o700 });
+  await mkdir(repo, { recursive: true, mode: POSIX_MODE.privateDirectory });
   await git(["init", "--quiet", "--bare", "."], { repo });
   await git(["config", "remote.origin.url", url], { repo });
 }
@@ -214,18 +225,23 @@ const age = (fetchedAt: string | undefined) => {
     return "an unknown time";
   }
 
-  const minutes = Math.round((Date.now() - Date.parse(fetchedAt)) / 60000);
+  const minutes = Math.round(
+    (Date.now() - Date.parse(fetchedAt)) / MILLISECONDS_PER_MINUTE,
+  );
+
   if (minutes < 1) {
     return "less than a minute";
   }
 
-  if (minutes < 60) {
+  if (minutes < MINUTES_PER_HOUR) {
     return `${minutes} minute${minutes === 1 ? "" : "s"}`;
   }
 
-  const hours = Math.round(minutes / 60);
+  const hours = Math.round(minutes / MINUTES_PER_HOUR);
 
-  return hours < 48 ? `${hours} hours` : `${Math.round(hours / 24)} days`;
+  return hours < AGE_IN_DAYS_THRESHOLD_HOURS
+    ? `${hours} hours`
+    : `${Math.round(hours / HOURS_PER_DAY)} days`;
 };
 
 /**

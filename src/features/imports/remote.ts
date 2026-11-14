@@ -1,3 +1,4 @@
+import { POSIX_MODE } from "../../shared/constants.js";
 import { randomUUID } from "node:crypto";
 import { mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -116,7 +117,7 @@ export async function fetchRemote<T>(
   use: (remote: RemoteRepo) => Promise<T>,
 ): Promise<T> {
   const repo = join(tmpdir(), `barndog-import-${randomUUID()}.git`);
-  await mkdir(repo, { recursive: true, mode: 0o700 });
+  await mkdir(repo, { recursive: true, mode: POSIX_MODE.privateDirectory });
   try {
     await git(["init", "--quiet", "--bare", "."], { repo });
     const resolved =

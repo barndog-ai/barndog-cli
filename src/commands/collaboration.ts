@@ -1,3 +1,5 @@
+import { HTTP_STATUS } from "../shared/constants.js";
+
 import { InvalidArgumentError, type Command } from "commander";
 import { styleText } from "node:util";
 import type { CommandContext } from "./context.js";
@@ -60,7 +62,7 @@ function reviewError(
     return error;
   }
 
-  if (error.status === 404 && changeId && !thread) {
+  if (error.status === HTTP_STATUS.notFound && changeId && !thread) {
     return new CliError(
       `No ${assetKinds[kind].one} Suggested Change has that ID.`,
       packageKindList

@@ -1,3 +1,4 @@
+import { GIT_MODE } from "./snapshot.js";
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { rm } from "node:fs/promises";
@@ -16,6 +17,9 @@ import {
   parseLsRemote,
 } from "./git.js";
 
+/** Git SHA-1 object IDs contain forty hexadecimal digits. */
+const SHA1_HEX_LENGTH = 40;
+
 const execute = promisify(execFile);
 
 /**
@@ -24,7 +28,7 @@ const execute = promisify(execFile);
  */
 export type NewFile = { path: string; data: Buffer; executable: boolean };
 
-const NULL_HASH = "0".repeat(40);
+const NULL_HASH = "0".repeat(SHA1_HEX_LENGTH);
 
 /** Builds a commit in a bare repository using a throwaway index, never a checkout. */
 export async function commitFiles(
@@ -64,7 +68,7 @@ export async function commitFiles(
       });
 
       updates.push(
-        `${file.executable ? "100755" : "100644"} ${hash}\t${file.path}`,
+        `${file.executable ? GIT_MODE.executable : GIT_MODE.file} ${hash}\t${file.path}`,
       );
     }
 

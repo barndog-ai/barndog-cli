@@ -1,9 +1,14 @@
+import { POSIX_MODE } from "../../shared/constants.js";
+
 import { createHash } from "node:crypto";
 import { lstat, readFile, readdir, readlink } from "node:fs/promises";
 import { join } from "node:path";
 
 import { git } from "./git.js";
 import { defined } from "../../shared/lookup.js";
+
+/** Git cat-file --batch terminates each object header with ASCII LF. */
+const LF_BYTE = 0x0a;
 
 /**
  * Repository-relative snapshot path with its Git mode and object hash; includes
@@ -18,16 +23,25 @@ export type Snapshot = {
 };
 
 /**
- * Git tree mode as a six-digit string, used to distinguish directories from
- * file entries.
+ * Git index/tree modes are octal strings: regular file, executable, symbolic
+ * link, gitlink (submodule), and directory. See gitformat-index and git ls-tree.
+ * git update-index --index-info reads <mode> <hash>	<path> records; keep these
+ * strings intact rather than converting them to decimal permission numbers.
  */
-export const TREE_MODE = "040000";
+export const GIT_MODE = {
+  file: "100644",
+  executable: "100755",
+  symlink: "120000",
+  submodule: "160000",
+  tree: "040000",
+};
 
 /**
  * Recognizes regular-file Git modes, including executables; symlinks and trees
  * are excluded.
  */
-export const isBlob = (mode: string) => mode === "100644" || mode === "100755";
+export const isBlob = (mode: string) =>
+  mode === GIT_MODE.file || mode === GIT_MODE.executable;
 
 /**
  * Computes the hexadecimal SHA-1 Git object ID from a blob or tree's raw bytes,
@@ -42,7 +56,7 @@ function gitObjectHash(type: "blob" | "tree", content: Buffer) {
 
 function treeObject(children: { name: string; mode: string; hash: string }[]) {
   const key = (child: { name: string; mode: string }) =>
-    Buffer.from(child.mode === TREE_MODE ? `${child.name}/` : child.name);
+    Buffer.from(child.mode === GIT_MODE.tree ? `${child.name}/` : child.name);
 
   return Buffer.concat(
     [...children]
@@ -76,13 +90,17 @@ export async function folderSnapshot(root: string): Promise<Snapshot> {
       let hash: string;
       if (info.isDirectory()) {
         hash = await visit(path);
-        mode = TREE_MODE;
+        mode = GIT_MODE.tree;
       } else if (info.isSymbolicLink()) {
         hash = gitObjectHash("blob", Buffer.from(await readlink(absolute)));
-        mode = "120000";
+        mode = GIT_MODE.symlink;
       } else if (info.isFile()) {
         hash = gitObjectHash("blob", await readFile(absolute));
-        mode = info.mode & 0o111 ? "100755" : "100644";
+        mode =
+          info.mode & POSIX_MODE.executableBits
+            ? GIT_MODE.executable
+            : GIT_MODE.file;
+
         paths.set(hash, absolute);
       } else {
         continue;
@@ -153,7 +171,7 @@ export async function gitSnapshot(
       const blobs = new Map<string, Buffer>();
       let offset = 0;
       for (const hash of unique) {
-        const end = output.indexOf(0x0a, offset);
+        const end = output.indexOf(LF_BYTE, offset);
         const size = Number(output.toString("utf8", offset, end).split(" ")[2]);
         blobs.set(hash, output.subarray(end + 1, end + 1 + size));
         offset = end + 1 + size + 1;

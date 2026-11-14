@@ -1,3 +1,4 @@
+import { POSIX_MODE } from "../../shared/constants.js";
 import { readState } from "../../config/state.js";
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -415,7 +416,7 @@ export async function addMcpServers(
 
         await mkdir(join(home, ".barndog/migrations"), {
           recursive: true,
-          mode: 0o700,
+          mode: POSIX_MODE.privateDirectory,
         });
 
         await copyFile(conflict.file, backup);

@@ -1,6 +1,11 @@
+import { HTTP_STATUS } from "../../shared/constants.js";
+
 import { createApiClient } from "@barndog-ai/api-contract";
 import { homedir } from "node:os";
 import { readCredentials } from "./credentials.js";
+
+/** CLI policy: stop an API request after thirty seconds. */
+const API_REQUEST_TIMEOUT_MS = 30000;
 
 export class LoginRequiredError extends Error {
   constructor() {
@@ -65,10 +70,13 @@ export function serverFetch(
     const response = await fetch(request, {
       headers,
       redirect: "error",
-      signal: AbortSignal.any([request.signal, AbortSignal.timeout(30000)]),
+      signal: AbortSignal.any([
+        request.signal,
+        AbortSignal.timeout(API_REQUEST_TIMEOUT_MS),
+      ]),
     });
 
-    if (response.status === 401 && authenticated) {
+    if (response.status === HTTP_STATUS.unauthorized && authenticated) {
       throw new LoginRequiredError();
     }
 

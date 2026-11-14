@@ -3,6 +3,12 @@ import { InvalidArgumentError, type Command } from "commander";
 import { originLabel } from "../features/environment/names.js";
 import { positiveInteger } from "./options.js";
 
+/** BarnDog catalog pagination permits at most one hundred results. */
+const MAX_PAGE_SIZE = 100;
+
+/** Show twenty catalog results per page by default. */
+const DEFAULT_PAGE_SIZE = 20;
+
 /** Asset-list filters and pagination inputs; page numbers are one-based. */
 export type ListOptions = {
   search?: string;
@@ -50,13 +56,13 @@ export function pageOptions(command: Command): Command {
       "Results per page (maximum 100)",
       (value) => {
         const count = positiveInteger(value);
-        if (count > 100) {
+        if (count > MAX_PAGE_SIZE) {
           throw new InvalidArgumentError("Use at most 100 results per page");
         }
 
         return count;
       },
-      20,
+      DEFAULT_PAGE_SIZE,
     );
 }
 

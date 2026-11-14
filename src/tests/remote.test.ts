@@ -1,3 +1,5 @@
+import { HTTP_STATUS } from "../shared/constants.js";
+
 import { updateCredentials } from "../features/auth/credentials.js";
 import { expect, test, type TestContext } from "vitest";
 import { createServer } from "node:http";
@@ -91,7 +93,7 @@ async function fixture(t: TestContext) {
       return;
     }
 
-    response.writeHead(404);
+    response.writeHead(HTTP_STATUS.notFound);
     response.end("missing package");
   });
 

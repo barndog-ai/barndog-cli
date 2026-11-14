@@ -1,3 +1,5 @@
+import { SHORT_COMMIT_LENGTH } from "../shared/constants.js";
+
 import { mcpDefinitionSchema } from "@barndog-ai/api-contract";
 import { z } from "zod";
 
@@ -62,7 +64,7 @@ export function renderMcp(value: unknown): string[] {
       "Version",
       typeof mcp.version === "object"
         ? `v${mcp.version.number}`
-        : mcp.version.slice(0, 7),
+        : mcp.version.slice(0, SHORT_COMMIT_LENGTH),
     ],
     ["Description", clean(definition.description)],
     [

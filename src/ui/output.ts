@@ -1,3 +1,5 @@
+import { HTTP_STATUS } from "../shared/constants.js";
+
 import { LoginRequiredError } from "../features/auth/transport.js";
 import { styleText } from "node:util";
 import { homedir } from "node:os";
@@ -259,7 +261,10 @@ function describeError(error: unknown): { message: string; fix?: string } {
     return { message: error.message, fix: error.hint };
   }
 
-  if (error instanceof ApiError && error.status === 500) {
+  if (
+    error instanceof ApiError &&
+    error.status === HTTP_STATUS.internalServerError
+  ) {
     return {
       message: `The BarnDog server had a problem and couldn't finish this (${error.status}). If you run it yourself, check that it and its database are up.`,
     };

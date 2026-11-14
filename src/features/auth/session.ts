@@ -1,3 +1,5 @@
+import { MILLISECONDS_PER_SECOND } from "../../shared/constants.js";
+
 import { hasRemoteSelections } from "../../config/environment.js";
 import { homedir } from "node:os";
 import { setTimeout } from "node:timers/promises";
@@ -16,6 +18,9 @@ import {
   normalizeServer,
   serverFetch,
 } from "./transport.js";
+
+/** Bound each device authorization request to ten seconds. */
+const AUTH_REQUEST_TIMEOUT_MS = 10000;
 
 /**
  * Device-login inputs, including the caller callback that presents verification
@@ -88,7 +93,7 @@ export async function login(options: LoginOptions) {
 
   let interval = started.interval;
   while (true) {
-    await setTimeout(interval * 1000, undefined, { signal });
+    await setTimeout(interval * MILLISECONDS_PER_SECOND, undefined, { signal });
     const result = loginPollSchema.parse(
       (
         await client.POST("/v1/auth/cli/poll", {
@@ -108,7 +113,7 @@ export async function login(options: LoginOptions) {
         method: "DELETE",
         headers: { Authorization: `Bearer ${result.token}` },
         redirect: "error",
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.timeout(AUTH_REQUEST_TIMEOUT_MS),
       });
 
     try {
@@ -159,7 +164,7 @@ export async function logout(home = homedir()) {
         method: "DELETE",
         headers: { Authorization: `Bearer ${credential.token}` },
         redirect: "error",
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.timeout(AUTH_REQUEST_TIMEOUT_MS),
       });
 
       revoked = response.ok;

@@ -4,6 +4,9 @@ import { danger, primary, selected } from "./theme.js";
 import { CONSTANT_CASE } from "../shared/patterns.js";
 import { isRecord } from "../shared/values.js";
 
+/** Keep the flexible table column readable when shrinking to terminal width. */
+const MIN_FLEX_COLUMN_WIDTH = 8;
+
 type Style = Parameters<typeof styleText>[0];
 
 const paint = (style: Style, text: string) =>
@@ -153,7 +156,10 @@ export function table(
 
   const total = widths.reduce((sum, width) => sum + width, 0);
   if (total > available && widths[flex] !== undefined) {
-    widths[flex] = Math.max(8, widths[flex] - (total - available));
+    widths[flex] = Math.max(
+      MIN_FLEX_COLUMN_WIDTH,
+      widths[flex] - (total - available),
+    );
   }
 
   return all.map((row) =>

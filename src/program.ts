@@ -119,6 +119,9 @@ import { primary } from "./ui/theme.js";
 import { versionReport } from "./version.js";
 import { defined } from "./shared/lookup.js";
 
+/** Keep command help readable at the conventional eighty-column terminal width. */
+const HELP_WIDTH = 80;
+
 export type ProgramOptions = Partial<Omit<CommandContext, "mode">> & {
   writeError?: (message: string) => void;
   /** Tests pin terminal detection; the CLI detects a TTY. */
@@ -286,7 +289,7 @@ function unavailableHint(command: Command, mode: SetupMode) {
   const one = hidden.length === 1;
   const path = commandPath(command);
   const help = new Help();
-  const width = Math.min(process.stdout.columns || 80, 80);
+  const width = Math.min(process.stdout.columns || HELP_WIDTH, HELP_WIDTH);
   const lines = [
     `${one ? "One command is" : "Some commands are"} hidden in ${modeName(mode)} mode because ${one ? "it needs" : "they need"} ${needText(need)}: ${hidden.map((c) => c.name).join(", ")}.`,
     `Run barndog ${path ? `${path} ` : ""}--help --list-unavailable to see ${one ? "it" : "them"}.`,

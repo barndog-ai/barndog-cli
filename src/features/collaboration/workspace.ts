@@ -1,3 +1,5 @@
+import { HTTP_STATUS } from "../../shared/constants.js";
+
 import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { join, resolve, dirname } from "node:path";
@@ -661,7 +663,13 @@ export async function pushWorkspace(
       // permit pull/reconciliation; ambiguous transport failures retain the exact key.
       if (
         error instanceof ApiError &&
-        [400, 403, 404, 409, 413].includes(error.status)
+        [
+          HTTP_STATUS.badRequest,
+          HTTP_STATUS.forbidden,
+          HTTP_STATUS.notFound,
+          HTTP_STATUS.conflict,
+          HTTP_STATUS.payloadTooLarge,
+        ].includes(error.status)
       ) {
         delete work.pending;
         await save(work, home);

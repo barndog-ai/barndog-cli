@@ -1,3 +1,5 @@
+import { HTTP_STATUS, POSIX_MODE } from "../shared/constants.js";
+
 import { expect, test, type TestContext } from "vitest";
 import { createServer } from "node:http";
 import { mkdtemp, stat, rm, readFile, chmod } from "node:fs/promises";
@@ -93,9 +95,9 @@ async function fixture(t: TestContext) {
     }
 
     if (revoked) {
-      response.writeHead(401);
+      response.writeHead(HTTP_STATUS.unauthorized);
       json({
-        statusCode: 401,
+        statusCode: HTTP_STATUS.unauthorized,
         code: "UNAUTHORIZED",
         message: "LOGIN_REQUIRED",
       });
@@ -152,7 +154,10 @@ test("browser verification, pending polling, private credential storage, status 
 
   const path = join(f.home, ".barndog", "credentials.json");
   expect((await stat(path)).mode & 0o777).toBe(0o600);
-  expect((await stat(join(f.home, ".barndog"))).mode & 0o777).toBe(0o700);
+  expect((await stat(join(f.home, ".barndog"))).mode & 0o777).toBe(
+    POSIX_MODE.privateDirectory,
+  );
+
   expect((await authStatus(f.home)).context.developer.id).toBe(
     f.context.developer.id,
   );
@@ -233,7 +238,11 @@ test("authenticated transport rejects insecure origins, redirects, cross-server 
     serverFetch(f.origin, f.home)(`${f.origin}/v1/context`),
   ).rejects.toThrow();
 
-  await chmod(join(f.home, ".barndog", "credentials.json"), 0o644);
+  await chmod(
+    join(f.home, ".barndog", "credentials.json"),
+    POSIX_MODE.regularFile,
+  );
+
   await expect(readCredentials(f.home)).rejects.toThrow(/only to its owner/);
 });
 

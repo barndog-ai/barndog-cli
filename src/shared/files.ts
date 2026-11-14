@@ -1,3 +1,4 @@
+import { POSIX_MODE } from "./constants.js";
 import { randomUUID } from "node:crypto";
 import {
   lstat,
@@ -25,7 +26,10 @@ export type AtomicWriteOptions = {
 export async function writeAtomic(
   path: string,
   data: string | Uint8Array,
-  { mode = 0o600, directoryMode = 0o700 }: AtomicWriteOptions = {},
+  {
+    mode = 0o600,
+    directoryMode = POSIX_MODE.privateDirectory,
+  }: AtomicWriteOptions = {},
 ): Promise<void> {
   await mkdir(dirname(path), { recursive: true, mode: directoryMode });
   const temporary = `${path}.${randomUUID()}.tmp`;

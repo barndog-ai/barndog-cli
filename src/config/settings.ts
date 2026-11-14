@@ -1,3 +1,5 @@
+import { MAX_ASSET_NAME_LENGTH } from "../shared/constants.js";
+
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
@@ -78,7 +80,10 @@ const localWorkspaceSchema = z.looseObject({
   workspaceId: uuid,
 });
 
-const localNamesSchema = z.record(uuid, z.string().regex(NAME).max(64));
+const localNamesSchema = z.record(
+  uuid,
+  z.string().regex(NAME).max(MAX_ASSET_NAME_LENGTH),
+);
 
 /** Every part of the file; each optional key is named only here. */
 // Loose objects keep keys this version doesn't know, as the file had them.

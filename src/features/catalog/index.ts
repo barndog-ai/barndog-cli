@@ -1,3 +1,5 @@
+import { SHORT_COMMIT_LENGTH } from "../../shared/constants.js";
+
 import { homedir } from "node:os";
 import { readSettings, type Connection } from "../../config/settings.js";
 import { CliError } from "../../errors.js";
@@ -63,7 +65,7 @@ export async function searchCatalog(
         version: {
           number: 0,
           description: asset.description,
-          label: asset.publishedVersion.slice(0, 7),
+          label: asset.publishedVersion.slice(0, SHORT_COMMIT_LENGTH),
         },
       })),
   ];
@@ -86,7 +88,7 @@ async function sharedCatalog(
         version: {
           number: 0,
           description: asset.description,
-          label: asset.publishedVersion.slice(0, 7),
+          label: asset.publishedVersion.slice(0, SHORT_COMMIT_LENGTH),
         },
       }));
   }

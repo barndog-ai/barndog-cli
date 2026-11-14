@@ -1,5 +1,8 @@
 import { knowledgeList, knowledgeIndexText } from "./index.js";
 
+/** Keep knowledge delivery from blocking harness startup beyond five seconds. */
+const STARTUP_KNOWLEDGE_TIMEOUT_MS = 5000;
+
 // BarnDog-owned integration, independent from developer-authored Hook packages.
 // Failure to retrieve an index must never block starting a coding session.
 const timer = setTimeout(() => {
@@ -8,7 +11,7 @@ const timer = setTimeout(() => {
   );
 
   process.exit(0);
-}, 5000);
+}, STARTUP_KNOWLEDGE_TIMEOUT_MS);
 
 try {
   const text = knowledgeIndexText(await knowledgeList(true, process.argv[3]));

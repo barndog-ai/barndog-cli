@@ -18,6 +18,21 @@ import { NothingToDoError } from "../errors.js";
 import { promptTheme, selected } from "./theme.js";
 import { defined } from "../shared/lookup.js";
 
+/** Cap names to leave room for hints in the picker. */
+const MAX_CHOICE_NAME_WIDTH = 40;
+
+/** Show ten choices before scrolling by default. */
+const DEFAULT_PICKER_PAGE_SIZE = 10;
+
+/** Assume one hundred columns when the output has no terminal dimensions. */
+const FALLBACK_TERMINAL_COLUMNS = 100;
+
+/** Reserve four columns for picker indentation and cursor spacing. */
+const PICKER_ROW_CHROME_WIDTH = 4;
+
+/** Only show a hint when at least four columns remain. */
+const MIN_HINT_ROOM = 3;
+
 export type PickChoice<T> = {
   value: T;
   name: string;
@@ -62,7 +77,7 @@ const prompt = createPrompt(
     const nameWidth = useMemo(
       () =>
         Math.min(
-          40,
+          MAX_CHOICE_NAME_WIDTH,
           Math.max(0, ...config.choices.map((choice) => choice.name.length)),
         ),
       [],
@@ -154,7 +169,7 @@ const prompt = createPrompt(
       ? usePagination({
           items: visible,
           active,
-          pageSize: config.pageSize ?? 10,
+          pageSize: config.pageSize ?? DEFAULT_PICKER_PAGE_SIZE,
           loop: false,
           renderItem({ item, isActive }) {
             const cursor = isActive ? promptTheme.icon.cursor : " ";
@@ -168,16 +183,16 @@ const prompt = createPrompt(
 
             // Leave a column spare so the terminal never wraps a row.
             const room =
-              (process.stdout.columns || 100) -
+              (process.stdout.columns || FALLBACK_TERMINAL_COLUMNS) -
               1 -
-              4 -
+              PICKER_ROW_CHROME_WIDTH -
               box.length -
               nameWidth -
               2;
 
             const text = item.choice.hint ?? "";
             const hint =
-              text && room > 3
+              text && room > MIN_HINT_ROOM
                 ? `  ${styleText("dim", text.length > room ? `${text.slice(0, room - 1)}…` : text)}`
                 : "";
 
