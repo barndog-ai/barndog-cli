@@ -99,7 +99,7 @@ export type Applied = {
  * nothing was saved; ask, then retry with `overrides`, `decisions` or
  * `resolution`.
  */
-export type DecisionRequired = {
+type DecisionRequired = {
   status: "decision-required";
   conflicts: readonly OverrideConflict[];
 };

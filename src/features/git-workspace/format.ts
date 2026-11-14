@@ -68,9 +68,7 @@ export type WorkspaceConfig = z.infer<typeof configSchema>;
  * The `barndog.yaml` a new workspace starts with: format version 1, its ID and
  * name, and no teams or repositories yet.
  */
-export function renderConfig(
-  config: Pick<WorkspaceConfig, "workspaceId" | "name">,
-) {
+function renderConfig(config: Pick<WorkspaceConfig, "workspaceId" | "name">) {
   return stringify({
     version: 1,
     workspaceId: config.workspaceId,
@@ -152,7 +150,7 @@ export type RepoKnowledge = {
   content: KnowledgeContent;
 };
 
-export type Problem = { path: string; reason: string };
+type Problem = { path: string; reason: string };
 
 /**
  * Everything a Git or local workspace holds at one commit, with the same

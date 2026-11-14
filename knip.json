@@ -1,0 +1,11 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "src/cli.ts!",
+    "src/features/knowledge/startup.ts!",
+    "src/features/git-workspace/startup.ts!",
+    "src/features/native/mcp-launch.ts!",
+    "scripts/*.mjs!"
+  ],
+  "project": ["src/**/*.ts!", "!src/tests/**!", "scripts/**/*.mjs!"]
+}

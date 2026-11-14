@@ -35,7 +35,7 @@ import {
 import { synchronize } from "../environment/sync.js";
 import { locked } from "../environment/transaction.js";
 import { openRepoSource } from "../environment/workspace-source.js";
-import { connectionContext } from "../skills/remote.js";
+import { connectionContext } from "../auth/session.js";
 import type {
   RepoAsset,
   RepoKnowledge,

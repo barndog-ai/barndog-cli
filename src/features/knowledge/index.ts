@@ -16,7 +16,7 @@ import type { InvalidKnowledge } from "../git-workspace/format.js";
 type KnowledgeIndex = z.infer<typeof knowledgeIndexSchema>;
 
 /** A knowledge document's name and description, without its content. */
-export type KnowledgeSummary = KnowledgeIndex["documents"][number];
+type KnowledgeSummary = KnowledgeIndex["documents"][number];
 
 export type KnowledgeListing = KnowledgeSummary & {
   /** Whether session start lists it: an `always` document while listing is on. */

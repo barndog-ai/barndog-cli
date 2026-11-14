@@ -55,7 +55,7 @@ export const nativeFile = (
   home: string,
 ) => join(home, (kind === "mcp" ? mcpFiles : hookFiles)[harness]);
 
-export function object(value: unknown): Record<string, unknown> {
+function object(value: unknown): Record<string, unknown> {
   if (!isRecord(value)) {
     throw new Error("Native configuration must contain an object");
   }

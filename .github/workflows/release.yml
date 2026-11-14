@@ -46,6 +46,7 @@ jobs:
       - run: pnpm lint
       - run: pnpm format:check
       - run: pnpm typecheck
+      - run: pnpm knip
       - run: pnpm test
 
       # Trusted publishing needs npm 11.5.1 or later.

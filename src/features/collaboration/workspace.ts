@@ -77,11 +77,7 @@ const publishedVersion = <V>(change: { publishedVersion?: V | null }) =>
     "The merged change has no published version",
   );
 
-export {
-  NoWorkingCopyError,
-  encodeFiles,
-  decodeFiles,
-} from "./workspace-store.js";
+export { NoWorkingCopyError } from "./workspace-store.js";
 
 /** Where a new working folder goes. */
 export type WorkingFolderOptions = {
@@ -369,6 +365,8 @@ const CONFLICT_MARKER = /^(?:<{7}|\|{7}|={7}|>{7})(?: |$)/m;
 
 /**
  * Whether text still holds a line the three-way merge wrote around a conflict.
+ *
+ * @internal Exported for its table test in `src/tests/patterns.test.ts`.
  */
 export const hasConflictMarkers = (text: string) => CONFLICT_MARKER.test(text);
 

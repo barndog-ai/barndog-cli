@@ -6,7 +6,7 @@ import {
 } from "@barndog-ai/api-contract";
 import { serverFetch } from "../auth/transport.js";
 import { connection } from "../collaboration/remote.js";
-import { connectionContext } from "../skills/remote.js";
+import { connectionContext } from "../auth/session.js";
 import { homedir } from "node:os";
 import type { Connection } from "../../config/settings.js";
 import {
@@ -23,7 +23,7 @@ export type EnvironmentCatalog = z.infer<typeof environmentCatalogSchema>;
 /** A scope as the server describes it, with its name and whether you can publish there. */
 export type ApiScope = z.infer<typeof scopeSchema>;
 
-export type CatalogEntry = EnvironmentCatalog["assets"][number];
+type CatalogEntry = EnvironmentCatalog["assets"][number];
 
 /** An asset picked from the catalog by name and origin, with its full description. */
 export type SelectedAsset = {

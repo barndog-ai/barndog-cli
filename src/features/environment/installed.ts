@@ -32,7 +32,7 @@ export function installedPath(home: string, kind: PackageKind, name: string) {
  * package size limits. Here everything counts: a `.git` or large file added by
  * hand must show up as a hand edit and be removed by mirroring.
  */
-export async function readTree(directory: string): Promise<PackageEntry[]> {
+async function readTree(directory: string): Promise<PackageEntry[]> {
   const entries: PackageEntry[] = [];
 
   async function visit(base: string) {

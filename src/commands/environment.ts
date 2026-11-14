@@ -38,12 +38,10 @@ import {
 } from "../ui/format.js";
 import { assetKindList, assetKinds } from "../features/asset-kinds/index.js";
 
-export { runSelection } from "../ui/selection.js";
-
 type AssetAction = "install" | "remove" | "enable" | "disable";
 
 /** Asks for a value in a terminal, or explains the flag to pass. */
-export async function ask(
+async function ask(
   context: CommandContext,
   value: string | undefined,
   {

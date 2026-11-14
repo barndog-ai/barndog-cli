@@ -25,7 +25,7 @@ import {
 /**
  * Branch name used when creating the first commit of an empty Git workspace.
  */
-export const DEFAULT_BRANCH = "main";
+const DEFAULT_BRANCH = "main";
 
 /**
  * Queries a remote repository's default head with credential prompts allowed

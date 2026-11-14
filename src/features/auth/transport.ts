@@ -1,3 +1,4 @@
+import { createApiClient } from "@barndog-ai/api-contract";
 import { homedir } from "node:os";
 import { readCredentials } from "./credentials.js";
 
@@ -73,4 +74,15 @@ export function serverFetch(
 
     return response;
   };
+}
+
+/**
+ * A typed client for the BarnDog API that sends the saved credential for
+ * `server`, refusing redirects and requests to other origins.
+ */
+export function apiClient(server: string, home = homedir()) {
+  return createApiClient({
+    baseUrl: normalizeServer(server),
+    fetch: serverFetch(server, home),
+  });
 }

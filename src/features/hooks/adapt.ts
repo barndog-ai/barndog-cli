@@ -21,11 +21,11 @@ import { importedFrom } from "../imports/local.js";
 type Implementations = HookManifest["implementations"];
 
 /** Where an agent finds the Hook's files; the folder's origin is filled in here. */
-export type AdaptPlace =
+type AdaptPlace =
   | Omit<Extract<HookAdaptPlace, { type: "folder" }>, "origin">
   | Extract<HookAdaptPlace, { type: "workspace" }>;
 
-export type AdaptInput = {
+type AdaptInput = {
   name: string;
   implementations: Implementations;
   targets: readonly Harness[];
@@ -44,7 +44,7 @@ export function toolNames(tools: readonly Harness[], joiner = "and") {
 }
 
 /** The shared prompt, with this machine's names for coding tools and the local folder. */
-export function adaptPrompt(input: AdaptInput) {
+function adaptPrompt(input: AdaptInput) {
   return hookAdaptPrompt({
     ...input,
     // Object.fromEntries types its keys as string; the map covers every harness.

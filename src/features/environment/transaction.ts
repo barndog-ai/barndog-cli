@@ -8,7 +8,7 @@ import { settingsPath } from "../../config/settings.js";
 import { skillDirectory, harnesses } from "../../harnesses/registry.js";
 import { nativeFile } from "../native/configuration.js";
 import { z } from "zod";
-import { connectionContext } from "../skills/remote.js";
+import { connectionContext } from "../auth/session.js";
 import type { JournalIdentity } from "./source.js";
 import { NAME } from "../../shared/patterns.js";
 import {
@@ -266,16 +266,16 @@ async function apply(
 }
 
 /**
- * Rolls forward an interrupted sync from ~/.barndog/pending-sync.json and
- * reports whether a journal existed. Rejects a cloud journal when its
- * authenticated organization or developer has changed.
+ * Rolls forward an interrupted sync from ~/.barndog/pending-sync.json.
+ * Rejects a cloud journal when its authenticated organization or developer
+ * has changed.
  */
-export async function recover(home: string) {
+async function recover(home: string) {
   const path = join(home, ".barndog/pending-sync.json");
   const text = await fileText(path);
 
   if (text === null) {
-    return false;
+    return;
   }
 
   const journal = journalSchema.parse(JSON.parse(text));
@@ -291,8 +291,6 @@ export async function recover(home: string) {
 
   await apply(journal.writes, home, undefined, true);
   await unlink(path);
-
-  return true;
 }
 
 /**

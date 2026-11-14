@@ -1,4 +1,4 @@
-import { assert, expect, test, type TestContext } from "vitest";
+import { assert, expect, test, vi, type TestContext } from "vitest";
 import { execFile } from "node:child_process";
 import { builtRoot, sourceRoot } from "./built.js";
 import { createServer } from "node:http";
@@ -58,7 +58,7 @@ import { synchronize } from "../features/environment/sync.js";
 import { loadWorkspace, stableId } from "../features/git-workspace/format.js";
 import { checkRepositoryUrl } from "../features/git-workspace/git.js";
 import { cloneGitWorkspace } from "../features/git-workspace/setup.js";
-import { compareUrl } from "../features/git-workspace/publish.js";
+import { openPullRequest } from "../features/git-workspace/publish.js";
 import { folderSnapshot } from "../features/git-workspace/snapshot.js";
 import { originLabel } from "../features/environment/names.js";
 import { environmentChooser } from "../ui/environment-onboarding.js";
@@ -73,7 +73,6 @@ import {
   addHook,
   addMcp,
   addSkills,
-  pickHookPlan,
   type AddPrompts,
 } from "../ui/add-asset.js";
 import {
@@ -90,7 +89,7 @@ import {
 import { parse } from "yaml";
 
 import { saveImported } from "../features/imports/local.js";
-import { adaptHook, adaptPrompt } from "../features/hooks/adapt.js";
+import { adaptHook } from "../features/hooks/adapt.js";
 import { folderDivergence } from "../features/hooks/divergence.js";
 import { hookCommand } from "../features/native/adapters.js";
 import {
@@ -1487,17 +1486,29 @@ test("the default server is set at build time and checked", async (t) => {
   expect(defaultServer).toBe("https://barndog.dev");
 });
 
-test("compare links cover GitHub and GitLab only", () => {
-  expect(
-    compareUrl("git@github.com:acme/ai.git", "main", "barndog/org-a-1"),
-  ).toBe("https://github.com/acme/ai/compare/main...barndog/org-a-1?expand=1");
+test("without gh or glab, a review falls back to a compare link on GitHub and GitLab only", async (t) => {
+  // An empty PATH, so a signed-in gh on this machine can't open a real pull request.
+  vi.stubEnv("PATH", await temp(t));
+  t.onTestFinished(() => {
+    vi.unstubAllEnvs();
+  });
 
-  expect(compareUrl("https://gitlab.com/g/p.git", "main", "b") ?? "").toMatch(
+  const review = (url: string, branch = "b") =>
+    openPullRequest({ url, base: "main", branch, title: "Update" });
+
+  expect(
+    await review("git@github.com:acme/ai.git", "barndog/org-a-1"),
+  ).toStrictEqual({
+    url: "https://github.com/acme/ai/compare/main...barndog/org-a-1?expand=1",
+    opened: false,
+  });
+
+  expect((await review("https://gitlab.com/g/p.git")).url ?? "").toMatch(
     /^https:\/\/gitlab\.com\/g\/p\/-\/merge_requests\/new/,
   );
 
-  expect(compareUrl("/srv/git/team.git", "main", "b")).toBe(null);
-  expect(compareUrl("git@example.org:a/b.git", "main", "b")).toBe(null);
+  expect((await review("/srv/git/team.git")).url).toBe(undefined);
+  expect((await review("git@example.org:a/b.git")).url).toBe(undefined);
 });
 
 test("migrate previews, then moves assets and choices to cloud by scope and name", async (t) => {
@@ -2732,42 +2743,29 @@ test("a Hook that covers this machine's coding tools needs no prompt", async (t)
   expect((await adaptHook("both", "local", undefined, home)).prompt).toBe(null);
 });
 
-test("the adapt prompt follows where the Hook lives", () => {
-  const implementations = {
-    cursor: {
-      compatibility: "supported" as const,
-      scripts: ["run.sh"],
-      requirements: { commands: [] },
-      events: { stop: [{ command: "${BARNDOG_HOOK_ROOT}/run.sh" }] },
-    },
-  };
+test("a shared Hook's adapt prompt says to pull it and propose the change for review", async (t) => {
+  const { root, url } = await teamRepo(t);
+  const member = join(root, "member");
+  await setupGit(url, member);
+  const { prompt } = await adaptHook(
+    "audit",
+    "org",
+    ["codex", "cursor"],
+    member,
+  );
 
-  const local = adaptPrompt({
-    name: "tidy",
-    implementations,
-    targets: ["claude", "codex"],
-    place: { type: "folder", path: "/work/org/hooks/tidy", shareable: true },
-  });
+  expect(prompt).toMatch(/written for Claude Code only/);
+  expect(prompt).toMatch(/also runs in Codex and Cursor\./);
+  expect(prompt).toMatch(
+    /- Claude Code, PreToolUse, matcher "Bash": \$\{BARNDOG_HOOK_ROOT\}\/audit\.sh/,
+  );
 
-  expect(local).toMatch(/written for Cursor only/);
-  expect(local).toMatch(/also runs in Claude Code and Codex\./);
-  expect(local).toMatch(/- Cursor, stop: \$\{BARNDOG_HOOK_ROOT\}\/run\.sh/);
-  expect(local).toMatch(/Run `barndog sync` to install it/);
-  expect(local).toMatch(/barndog local move tidy/);
-  expect(local).not.toMatch(/still follows/);
-  const shared = adaptPrompt({
-    name: "tidy",
-    implementations,
-    targets: ["claude"],
-    place: { type: "workspace", origin: "team/web", review: "a pull request" },
-  });
-
-  expect(shared).toMatch(/barndog hooks pull tidy --origin team\/web/);
-  expect(shared).toMatch(
+  expect(prompt).toMatch(/barndog hooks pull audit --origin org/);
+  expect(prompt).toMatch(
     /`barndog hooks push` to propose the change as a pull request/,
   );
 
-  expect(shared).not.toMatch(/barndog sync/);
+  expect(prompt).not.toMatch(/barndog sync|barndog local move/);
 });
 
 test("hook commands get the root variable their coding tool sets", () => {
@@ -2789,18 +2787,17 @@ test("hook commands get the root variable their coding tool sets", () => {
 });
 
 test("events chosen for one coding tool start selected for the next", async (t) => {
-  const { home } = await localHome(t);
+  const { root, home, folder } = await localHome(t);
+  const { url } = await sourceRepo(root, "guard", {
+    "a.sh": "#!/bin/sh\n",
+    "b.sh": "#!/bin/sh\n",
+  });
+
   const offered: Record<string, string[]> = {};
   const scripts: Record<string, string | undefined> = {};
-  const plan = await pickHookPlan(
-    {
-      type: "draft",
-      name: "guard",
-      scripts: ["a.sh", "b.sh"],
-      implementations: {},
-      skipped: [],
-    },
-    () => true,
+  await addHook(
+    url,
+    { as: "guard", updates: "manual" },
     quiet(
       home,
       {
@@ -2834,12 +2831,16 @@ test("events chosen for one coding tool start selected for the next", async (t) 
   expect(offered.Cursor).toStrictEqual(["preToolUse", "stop"]);
   expect(scripts["Claude Code PreToolUse: which script?"]).toBe(undefined);
   expect(scripts["Codex PreToolUse: which script?"]).toBe("b.sh");
-  expect(
-    plan.cursor?.map((event) => [event.event, event.script]),
-  ).toStrictEqual([
-    ["preToolUse", "b.sh"],
-    ["stop", "b.sh"],
+  const manifest = parse(
+    await readFile(join(folder, "org/hooks/guard/hook.yaml"), "utf8"),
+  );
+
+  expect(Object.keys(manifest.implementations.cursor.events)).toStrictEqual([
+    "preToolUse",
+    "stop",
   ]);
+
+  expect(JSON.stringify(manifest.implementations.cursor)).not.toMatch(/a\.sh/);
 });
 
 test("pasted MCP JSON never stores a secret and installs everywhere", async (t) => {

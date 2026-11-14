@@ -4,7 +4,7 @@ import { z } from "zod";
 import { defaultServer } from "./config/build.js";
 
 /** The package version, read from package.json beside dist/ so it can't drift. */
-export const version = z
+const version = z
   .object({ version: z.string() })
   .parse(
     JSON.parse(

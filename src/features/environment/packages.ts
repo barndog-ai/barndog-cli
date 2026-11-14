@@ -32,7 +32,7 @@ export function cacheKey(conn: Connection) {
   return join(server, conn.organizationId, conn.developerId);
 }
 
-export const cacheRoot = (key: string, home: string) =>
+const cacheRoot = (key: string, home: string) =>
   join(home, ".barndog", "packages", key);
 
 /**

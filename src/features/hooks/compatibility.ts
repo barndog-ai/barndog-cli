@@ -11,7 +11,7 @@ import { runtimeRequirements } from "../native/adapters.js";
 import type { Hook } from "./catalog.js";
 
 /** What a Hook declares for one coding tool, and what this machine lacks to run it. */
-export type HarnessCompatibility = Hook["compatibility"][number] & {
+type HarnessCompatibility = Hook["compatibility"][number] & {
   /** Null when every requirement is met. */
   runtimeIssue: string | null;
 };

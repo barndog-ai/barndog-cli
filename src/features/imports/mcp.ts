@@ -26,7 +26,7 @@ import { asRecord, asStrings, isRecord } from "../../shared/values.js";
 /**
  * An MCP server entry as a harness or pasted JSON spells it, before conversion.
  */
-export type RawServer = Record<string, unknown>;
+type RawServer = Record<string, unknown>;
 
 export type ImportedServer = { name: string; server: RawServer };
 
@@ -82,25 +82,41 @@ const WHOLE_VARIABLE = new RegExp(
   String.raw`^(?:${BRACED_VARIABLE.source}|\$([A-Z_a-z]\w*))$`,
 );
 
-/** The variable a whole value refers to: `${env:TOKEN}` or `$TOKEN` → `TOKEN`. */
+/**
+ * The variable a whole value refers to: `${env:TOKEN}` or `$TOKEN` → `TOKEN`.
+ *
+ * @internal Exported for its table test in `src/tests/patterns.test.ts`.
+ */
 export const variableName = (value: string) => {
   const [, braced, bare] = WHOLE_VARIABLE.exec(value) ?? [];
 
   return braced ?? bare;
 };
 
-/** The first braced variable inside a value: `Bearer ${TOKEN}` → `TOKEN`. */
+/**
+ * The first braced variable inside a value: `Bearer ${TOKEN}` → `TOKEN`.
+ *
+ * @internal Exported for its table test in `src/tests/patterns.test.ts`.
+ */
 export const embeddedVariable = (value: string) =>
   BRACED_VARIABLE.exec(value)?.[1];
 
-/** An environment variable name made from any text: `my-server_x-api` → `MY_SERVER_X_API`. */
+/**
+ * An environment variable name made from any text: `my-server_x-api` → `MY_SERVER_X_API`.
+ *
+ * @internal Exported for its table test in `src/tests/patterns.test.ts`.
+ */
 export const envName = (text: string) =>
   text.toUpperCase().replace(/[^\dA-Z_]/g, "_");
 
 /** Words that suggest a credential: `--api-key`, `apikey=`, `TOKEN`, `password`. */
 const SECRET_WORD = /api[-_]?key|token|secret|password/i;
 
-/** Whether a command-line argument may hold a credential: a secret-sounding word, or an `sk-` key. */
+/**
+ * Whether a command-line argument may hold a credential: a secret-sounding word, or an `sk-` key.
+ *
+ * @internal Exported for its table test in `src/tests/patterns.test.ts`.
+ */
 export const looksSecret = (arg: string) =>
   SECRET_WORD.test(arg) || arg.startsWith("sk-");
 

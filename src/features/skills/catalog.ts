@@ -1,53 +1,19 @@
-import { normalizeServer, serverFetch } from "../auth/transport.js";
 import {
   contextSchema,
   listOutputSchema,
-  createApiClient,
   type Skill,
 } from "@barndog-ai/api-contract";
 import { homedir } from "node:os";
-import { type Connection } from "../../config/settings.js";
+import type { Connection } from "../../config/settings.js";
+import { apiClient } from "../auth/transport.js";
 import type { CatalogAsset } from "../catalog/index.js";
-
-export { normalizeServer } from "../auth/transport.js";
-
-/**
- * A typed client for the BarnDog API that sends the saved credential for
- * `server`, refusing redirects and requests to other origins.
- */
-export function apiClient(server: string, home = homedir()) {
-  return createApiClient({
-    baseUrl: normalizeServer(server),
-    fetch: serverFetch(server, home),
-  });
-}
-
-/**
- * The organization and developer the saved credential signs in as on `server`;
- * one request to the server.
- */
-export async function connectionContext(
-  server: string,
-  home = homedir(),
-): Promise<Connection> {
-  server = normalizeServer(server);
-  const context = contextSchema.parse(
-    (await apiClient(server, home).GET("/v1/context")).data,
-  );
-
-  return {
-    server,
-    organizationId: context.organization.id,
-    developerId: context.developer.id,
-  };
-}
 
 /**
  * Every published Skill the developer can see, page by page. Throws when the
  * server now reports another organization or developer than `connection`, or
  * answers with a broken page.
  */
-export async function catalog(
+export async function publishedSkills(
   connection: Connection,
   home = homedir(),
 ): Promise<Skill[]> {
@@ -105,7 +71,7 @@ export async function skillCatalog(
   connection: Connection,
   home: string,
 ): Promise<CatalogAsset[]> {
-  return (await catalog(connection, home)).map((skill) => ({
+  return (await publishedSkills(connection, home)).map((skill) => ({
     id: skill.id,
     kind: "skill",
     name: skill.name,

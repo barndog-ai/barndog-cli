@@ -1,23 +1,17 @@
 import { chmod, lstat, mkdir, readFile, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { contextSchema, type ActorContext } from "@barndog-ai/api-contract";
+import { contextSchema } from "@barndog-ai/api-contract";
 import { z } from "zod";
 import { errorCode } from "../../shared/values.js";
 import { writeAtomic } from "../../shared/files.js";
 
-/** A BarnDog session token: 32 random bytes in unpadded base64url, 43 characters. */
-export const SESSION_TOKEN = /^[\w-]{43}$/;
-
 /**
- * Secret session token, expiry and actor identity stored for one server; never
- * include it in output.
+ * A BarnDog session token: 32 random bytes in unpadded base64url, 43 characters.
+ *
+ * @internal Exported for its table test in `src/tests/patterns.test.ts`.
  */
-export type Credential = {
-  token: string;
-  expiresAt: string;
-  context: ActorContext;
-};
+export const SESSION_TOKEN = /^[\w-]{43}$/;
 
 const credentialsSchema = z.looseObject({
   version: z.literal(1),

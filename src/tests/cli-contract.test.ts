@@ -1,4 +1,5 @@
-import { assert, expect, test, type TestContext } from "vitest";
+import { assert, expect, test, vi, type TestContext } from "vitest";
+import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { built } from "./built.js";
 import { existsSync } from "node:fs";
@@ -18,7 +19,9 @@ import { ApiError, mcpDefinitionSchema } from "@barndog-ai/api-contract";
 
 import { assertCommandAvailable } from "../commands/availability.js";
 import { CliError } from "../errors.js";
-import { selectedText } from "../features/collaboration/index.js";
+import { commentOnChange } from "../features/collaboration/index.js";
+import { updateCredentials } from "../features/auth/credentials.js";
+import { saveSettings } from "../config/settings.js";
 import { synchronize } from "../features/environment/sync.js";
 import { assertSourceExists } from "../features/imports/folder.js";
 import { convertServer } from "../features/imports/mcp.js";
@@ -448,11 +451,90 @@ test("MCP details read as fields and keep variable names exact", () => {
   expect(plain(renderValue({ E2E_MCP_TOKEN: "x" }))).toMatch(/E2E_MCP_TOKEN/);
 });
 
-test("a text file's closing newline isn't part of the selected lines", () => {
-  expect(selectedText("one\ntwo\n", 2)).toBe("one\ntwo");
-  expect(selectedText("one\ntwo", 2)).toBe("one\ntwo");
-  expect(selectedText("one\n", 2), "range ends on an empty line").toBe("one\n");
-  expect(selectedText("new\n")).toBe("new");
+test("a comment's text files drop their closing newline unless the range ends on an empty line", async (t) => {
+  const home = await realpath(
+    await mkdtemp(join(tmpdir(), "barndog-comment-")),
+  );
+
+  const organization = { id: randomUUID(), slug: "local", name: "Local" };
+  const developer = {
+    id: randomUUID(),
+    slug: "admin",
+    name: "Admin",
+    role: "organization_admin" as const,
+  };
+
+  const server = "http://127.0.0.1:9";
+  await saveSettings(
+    {
+      harnesses: [],
+      connection: {
+        server,
+        organizationId: organization.id,
+        developerId: developer.id,
+      },
+    },
+    home,
+  );
+
+  await updateCredentials(home, (credentials) => {
+    credentials.servers[server] = {
+      token: "a".repeat(43),
+      expiresAt: new Date(Date.now() + 3600000).toISOString(),
+      context: { organization, developer },
+    };
+  });
+
+  const bodies: Record<string, unknown>[] = [];
+  vi.stubGlobal("fetch", async (request: Request) => {
+    if (request.method === "POST") {
+      bodies.push(await request.json());
+    }
+
+    return Response.json({ organization, developer });
+  });
+
+  t.onTestFinished(async () => {
+    vi.unstubAllGlobals();
+    await rm(home, { recursive: true, force: true });
+  });
+
+  const file = async (name: string, text: string) => {
+    await writeFile(join(home, name), text);
+
+    return join(home, name);
+  };
+
+  const comment = async (expected: string, lines: number) =>
+    commentOnChange(
+      {
+        kind: "skill",
+        id: randomUUID(),
+        revision: 1,
+        body: "Suggestion",
+        path: "SKILL.md",
+        side: "new",
+        startLine: 1,
+        endLine: lines,
+        replacementFile: await file("replacement.txt", "new\n"),
+        expectedFile: await file("expected.txt", expected),
+      },
+      home,
+    );
+
+  await comment("one\ntwo\n", 2);
+  await comment("one\ntwo", 2);
+  await comment("one\n", 2);
+  expect(
+    bodies.map(({ replacement, expectedContent }) => [
+      replacement,
+      expectedContent,
+    ]),
+  ).toStrictEqual([
+    ["new", "one\ntwo"],
+    ["new", "one\ntwo"],
+    ["new", "one\n"],
+  ]);
 });
 
 test("assets install accepts override decisions", async () => {

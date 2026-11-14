@@ -2,7 +2,7 @@ import { hookListSchema, type hookSchema } from "@barndog-ai/api-contract";
 import type { z } from "zod";
 import type { Connection } from "../../config/settings.js";
 import type { CatalogAsset } from "../catalog/index.js";
-import { apiClient } from "../skills/remote.js";
+import { apiClient } from "../auth/transport.js";
 
 export type Hook = z.infer<typeof hookSchema>;
 

@@ -12,6 +12,8 @@ const CHANGES_COMMANDS = /^(?:skills |hooks )?changes(?: |$)/;
  * Commands that need a BarnDog server, matched against the command's words
  * without the program name: `auth status`, `skills fork`, `github pulls list`.
  * `src/tests/patterns.test.ts` checks that each still matches a real command.
+ *
+ * @internal Exported for its table test in `src/tests/patterns.test.ts`.
  */
 export const cloudOnlyCommands = [
   /^login$/,
@@ -25,7 +27,11 @@ export const cloudOnlyCommands = [
   /^mcp (?:create|update)$/,
 ];
 
-/** Commands that need published versions and reviews, which a local folder lacks. */
+/**
+ * Commands that need published versions and reviews, which a local folder lacks.
+ *
+ * @internal Exported for its table test in `src/tests/patterns.test.ts`.
+ */
 export const reviewCommands = [
   /^(?:pull|push|resolve)$/,
   /^(?:skills|hooks) (?:pull|push|create|versions|show|diff)$/,

@@ -8,9 +8,10 @@ import {
   loginStartSchema,
   type ActorContext,
 } from "@barndog-ai/api-contract";
-import { readSettings } from "../../config/settings.js";
+import { readSettings, type Connection } from "../../config/settings.js";
 import { readCredentials, updateCredentials } from "./credentials.js";
 import {
+  apiClient,
   LoginRequiredError,
   normalizeServer,
   serverFetch,
@@ -195,12 +196,29 @@ export async function authStatus(
     throw new LoginRequiredError();
   }
 
-  const client = createApiClient({
-    baseUrl: server,
-    fetch: serverFetch(server, home),
-  });
-
-  const context = contextSchema.parse((await client.GET("/v1/context")).data);
+  const context = contextSchema.parse(
+    (await apiClient(server, home).GET("/v1/context")).data,
+  );
 
   return { server, context };
+}
+
+/**
+ * The organization and developer the saved credential signs in as on `server`;
+ * one request to the server.
+ */
+export async function connectionContext(
+  server: string,
+  home = homedir(),
+): Promise<Connection> {
+  server = normalizeServer(server);
+  const context = contextSchema.parse(
+    (await apiClient(server, home).GET("/v1/context")).data,
+  );
+
+  return {
+    server,
+    organizationId: context.organization.id,
+    developerId: context.developer.id,
+  };
 }

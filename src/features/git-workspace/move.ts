@@ -35,7 +35,7 @@ import {
   inspectRepository,
 } from "./setup.js";
 import { LoginRequiredError, normalizeServer } from "../auth/transport.js";
-import { connectionContext } from "../skills/remote.js";
+import { connectionContext } from "../auth/session.js";
 import { publishKnowledge, publishMcp, publishPackage } from "./migrate.js";
 import { readMoved, recordMoved } from "./overlay.js";
 import { commitFiles, openPullRequest, pushCommit } from "./publish.js";
@@ -51,7 +51,7 @@ import {
 import { defined } from "../../shared/lookup.js";
 import { setYamlName } from "../../shared/patterns.js";
 
-export type MoveRow = {
+type MoveRow = {
   kind: string;
   name: string;
   status: "moved" | "clash" | "skipped" | "failed";
@@ -550,7 +550,7 @@ export function moveLocalAssets(
   });
 }
 
-export type LocalAssetState = "active" | "moved" | "invalid";
+type LocalAssetState = "active" | "moved" | "invalid";
 
 /** The local folder and every asset and knowledge document in it. */
 export type LocalAssets = {

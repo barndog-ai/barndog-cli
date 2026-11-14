@@ -19,7 +19,7 @@ export const hookCommand = (root: string, command: string, harness?: Harness) =>
   `export ${["BARNDOG_HOOK_ROOT", ...(harness ? adapters[harness].hooks.rootVariables : [])].map((name) => `${name}=${shellQuote(root)}`).join(" ")}; ${command}`;
 
 /** Where `command` runs from, trying Windows extensions there; null when it isn't on PATH. */
-export function executable(
+function executable(
   command: string,
   path = process.env.PATH ?? "",
 ): Promise<string | null> {

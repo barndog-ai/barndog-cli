@@ -56,7 +56,7 @@ const developerNames = (home: string): Promise<Record<string, string>> =>
  * A text file's closing newline isn't part of the selected lines. With a known line
  * count it's kept when it really is content: a range that ends on an empty line.
  */
-export function selectedText(text: string, lines?: number) {
+function selectedText(text: string, lines?: number) {
   if (!text.endsWith("\n")) {
     return text;
   }

@@ -15,9 +15,7 @@ import { adapters, harnesses } from "../../harnesses/registry.js";
  * A caution for Hooks whose coding tools run different scripts: changing one
  * tool's scripts leaves the others as they were. Null when all share one set.
  */
-export function divergenceWarning(
-  implementations: HookManifest["implementations"],
-) {
+function divergenceWarning(implementations: HookManifest["implementations"]) {
   const divergent = divergentHookTools(implementations);
   if (!divergent.length) {
     return null;

@@ -26,7 +26,7 @@ import {
   settingsPath,
 } from "../../config/settings.js";
 
-import { connectionContext } from "../skills/remote.js";
+import { connectionContext } from "../auth/session.js";
 import { defined } from "../../shared/lookup.js";
 
 export type HarnessChoice = {

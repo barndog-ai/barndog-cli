@@ -417,7 +417,7 @@ export async function addSkills(
 }
 
 /** Scripts with no settings anywhere: the person says which tools and events run them. */
-export async function pickHookPlan(
+async function pickHookPlan(
   draft: Extract<HookCandidate, { type: "draft" }>,
   executable: (script: string) => boolean,
   context: AddContext,

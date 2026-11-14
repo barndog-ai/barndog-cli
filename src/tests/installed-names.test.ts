@@ -3,6 +3,7 @@ import { createServer } from "node:http";
 import {
   mkdtemp,
   mkdir,
+  readdir,
   readFile,
   rm,
   stat,
@@ -14,28 +15,21 @@ import { randomUUID } from "node:crypto";
 import { stripVTControlCharacters } from "node:util";
 import { parse as parseJson } from "jsonc-parser";
 import {
-  findClash,
   hookFolders,
   type ClashResolver,
   type HookPlacement,
   prefixedName,
   resolveClashes,
-  restoreNames,
   type NamedAsset,
 } from "../features/environment/names.js";
 import {
   desiredEntries,
   installedRoot,
   mirrorTree,
-  readTree,
   renameSkillEntries,
 } from "../features/environment/installed.js";
-import { recover, transact } from "../features/environment/transaction.js";
-import {
-  cacheKey,
-  cacheRoot,
-  pruneCache,
-} from "../features/environment/packages.js";
+import { locked, transact } from "../features/environment/transaction.js";
+import { cacheKey, pruneCache } from "../features/environment/packages.js";
 import { packageFingerprint } from "@barndog-ai/api-contract/package";
 import { synchronize } from "../features/environment/sync.js";
 import {
@@ -46,6 +40,30 @@ import {
 import { updateCredentials } from "../features/auth/credentials.js";
 import { renderSyncOutput } from "../ui/output.js";
 import { table } from "../ui/format.js";
+
+/** Each file under `directory` as [relative path, text, executable], sorted by path. */
+async function filesIn(directory: string) {
+  const entries = await readdir(directory, {
+    recursive: true,
+    withFileTypes: true,
+  });
+
+  return Promise.all(
+    entries
+      .filter((entry) => entry.isFile())
+      .map((entry) =>
+        join(entry.parentPath, entry.name)
+          .slice(directory.length + 1)
+          .replaceAll("\\", "/"),
+      )
+      .sort()
+      .map(async (path) => [
+        path,
+        await readFile(join(directory, path), "utf8"),
+        ((await stat(join(directory, path))).mode & 0o111) !== 0,
+      ]),
+  );
+}
 
 const asset = (
   name: string,
@@ -70,15 +88,20 @@ test("prefixed names use single hyphens and the origin type and slug", () => {
   );
 });
 
-test("the installed asset keeps its name; otherwise the closest scope does", () => {
+test("the installed asset keeps its name; otherwise the closest scope does", async () => {
   const org = asset("review", "org", "acme");
   const team = asset("review", "team", "web");
   const dev = asset("review", "dev", "john");
-  expect(findClash([org, team], {})?.installed.id).toBe(team.id);
-  expect(findClash([org, dev, team], {})?.installed.id).toBe(dev.id);
+  const keeper = async (assets: NamedAsset[]) =>
+    (await resolveClashes(assets, {})).skipped.map(
+      (clash) => clash.installed.id,
+    );
+
+  expect(await keeper([org, team])).toStrictEqual([team.id]);
+  expect(await keeper([org, dev, team])).toStrictEqual([dev.id, dev.id]);
   const installedOrg = { ...org, installed: true };
-  expect(findClash([installedOrg, dev], {})?.installed.id).toBe(org.id);
-  expect(findClash([org, { ...team, kind: "mcp" }], {})).toBe(undefined);
+  expect(await keeper([installedOrg, dev])).toStrictEqual([org.id]);
+  expect(await keeper([org, { ...team, kind: "mcp" }])).toStrictEqual([]);
 });
 
 test("without a terminal the newcomer is skipped and nothing is persisted", async () => {
@@ -125,20 +148,25 @@ test("each clash choice persists as a rename or a disable", async () => {
   ).toStrictEqual([incoming.id]);
 });
 
-test("automatic renames are restored once the clash is gone; explicit names stay", () => {
+test("automatic renames are restored once the clash is gone; explicit names stay", async () => {
   const team = asset("review", "team", "web");
   const other = asset("lint", "org", "acme");
-  expect(restoreNames([team], { [team.id]: "team-web-review" })).toStrictEqual(
+  const names = async (
+    assets: NamedAsset[],
+    localNames: Record<string, string>,
+  ) => (await resolveClashes(assets, localNames)).localNames;
+
+  expect(await names([team], { [team.id]: "team-web-review" })).toStrictEqual(
     {},
   );
 
-  expect(restoreNames([team], { [team.id]: "my-review" })).toStrictEqual({
+  expect(await names([team], { [team.id]: "my-review" })).toStrictEqual({
     [team.id]: "my-review",
   });
 
   const org = asset("review", "org", "acme");
   expect(
-    restoreNames([team, org, other], { [team.id]: "team-web-review" }),
+    await names([team, org, other], { [team.id]: "team-web-review" }),
   ).toStrictEqual({ [team.id]: "team-web-review" });
 });
 
@@ -179,13 +207,7 @@ test("installed folders update file by file without replacing the folder", async
   ]);
 
   expect((await stat(target)).ino).toBe(before);
-  expect(
-    (await readTree(target)).map((e) => [
-      e.path,
-      e.data.toString(),
-      e.executable,
-    ]),
-  ).toStrictEqual([
+  expect(await filesIn(target)).toStrictEqual([
     ["SKILL.md", "v2", false],
     ["scripts/run.sh", "#!/bin/sh", true],
   ]);
@@ -201,7 +223,7 @@ test("a folder in an installed package can become a file", async (t) => {
     { path: "docs", data: Buffer.from("file"), executable: false },
   ]);
 
-  expect((await readTree(target)).map((e) => e.path)).toStrictEqual(["docs"]);
+  expect((await filesIn(target)).map(([path]) => path)).toStrictEqual(["docs"]);
 });
 
 test("a journal can't restore a kept folder that has vanished", async (t) => {
@@ -226,7 +248,7 @@ test("a journal can't restore a kept folder that has vanished", async (t) => {
     }),
   );
 
-  expect(await recover(home)).toBe(true);
+  await locked(home, async () => {});
   await expect(
     stat(join(home, ".barndog", "pending-sync.json")),
   ).rejects.toThrow();
@@ -298,7 +320,7 @@ test("every Hook gets its own folder", () => {
   expect(again).toStrictEqual(twins);
 });
 
-test("an invalid asset's automatic name survives restoring names", () => {
+test("an invalid asset's automatic name survives restoring names", async () => {
   const kept: NamedAsset = {
     id: "1",
     kind: "skill",
@@ -308,9 +330,9 @@ test("an invalid asset's automatic name survives restoring names", () => {
     renamable: false,
   };
 
-  expect(restoreNames([kept], { "1": "org-org-review" })).toStrictEqual({
-    "1": "org-org-review",
-  });
+  expect(
+    (await resolveClashes([kept], { "1": "org-org-review" })).localNames,
+  ).toStrictEqual({ "1": "org-org-review" });
 });
 
 test("tables align styled cells and shrink the flexible column to fit", () => {
@@ -550,8 +572,10 @@ test("installed folders are journaled and an interrupted copy is completed on re
     JSON.stringify({ version: 1, writes: [{ ...write, before: "old" }] }),
   );
 
-  expect(await recover(home)).toBe(true);
-  expect((await readTree(path)).map((e) => e.path)).toStrictEqual(["SKILL.md"]);
+  await locked(home, async () => {});
+  expect((await filesIn(path)).map(([path]) => path)).toStrictEqual([
+    "SKILL.md",
+  ]);
 });
 
 test("cache pruning keeps only the versions installed folders use", async (t) => {
@@ -563,7 +587,7 @@ test("cache pruning keeps only the versions installed folders use", async (t) =>
     developerId: randomUUID(),
   };
 
-  const root = cacheRoot(cacheKey(conn), home);
+  const root = join(home, ".barndog", "packages", cacheKey(conn));
   const skill = randomUUID();
   const gone = randomUUID();
   const hook = randomUUID();

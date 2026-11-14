@@ -3,7 +3,7 @@ import { readSettings, type Connection } from "../../config/settings.js";
 import { CliError } from "../../errors.js";
 import { hookCatalog } from "../hooks/catalog.js";
 import { mcpCatalog } from "../mcps/catalog.js";
-import { skillCatalog } from "../skills/remote.js";
+import { skillCatalog } from "../skills/catalog.js";
 import { openRepoSource } from "../environment/workspace-source.js";
 import { activeLocal, localOverlay } from "../git-workspace/overlay.js";
 import type { AssetKind } from "../asset-selection/types.js";

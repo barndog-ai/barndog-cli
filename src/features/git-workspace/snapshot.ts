@@ -33,7 +33,7 @@ export const isBlob = (mode: string) => mode === "100644" || mode === "100755";
  * Computes the hexadecimal SHA-1 Git object ID from a blob or tree's raw bytes,
  * including its object header.
  */
-export function gitObjectHash(type: "blob" | "tree", content: Buffer) {
+function gitObjectHash(type: "blob" | "tree", content: Buffer) {
   return createHash("sha1")
     .update(`${type} ${content.length}\0`)
     .update(content)

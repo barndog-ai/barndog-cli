@@ -172,17 +172,6 @@ export function table(
   );
 }
 
-export type State =
-  | "installed"
-  | "enabled"
-  | "disabled"
-  | "unsupported"
-  | "clash"
-  | "skipped"
-  | "missing"
-  | "pending"
-  | "unavailable";
-
 /** Known states get a color; any other text shows as it is. */
 export function badge(state: string, label: string = state): string {
   switch (state) {

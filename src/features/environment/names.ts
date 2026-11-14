@@ -1,7 +1,7 @@
 import { NAME, slugify } from "../../shared/patterns.js";
 
 /** Kinds whose installed name is a shared native namespace (Skill folders, MCP server keys). */
-export type NamedKind = "skill" | "mcp";
+type NamedKind = "skill" | "mcp";
 
 /**
  * An asset competing for an installed name. Clashes are resolved separately for
@@ -102,7 +102,11 @@ export const installedName = (
 /** A folder name with a trailing copy number, `review-1a2b-2`; group 1 is the rest. */
 const COPY_NUMBER = /^(.*)-\d+$/;
 
-/** `review-1a2b-2` → `review-1a2b`; undefined when there is no copy number. */
+/**
+ * `review-1a2b-2` → `review-1a2b`; undefined when there is no copy number.
+ *
+ * @internal Exported for its table test in `src/tests/patterns.test.ts`.
+ */
 export const withoutCopyNumber = (folder: string) =>
   COPY_NUMBER.exec(folder)?.[1];
 
@@ -187,7 +191,7 @@ export function hookFolders(
 }
 
 /** Drops automatic renames whose plain name is free again; explicit names stay. */
-export function restoreNames(
+function restoreNames(
   assets: readonly NamedAsset[],
   localNames: Record<string, string>,
 ): Record<string, string> {
@@ -213,7 +217,7 @@ export function restoreNames(
 }
 
 /** The first clash in a stable order; the asset already installed (or most specific scope) keeps the name. */
-export function findClash(
+function findClash(
   assets: readonly NamedAsset[],
   localNames: Record<string, string>,
 ): Clash | undefined {

@@ -24,7 +24,7 @@ import { asRecord, isRecord } from "../../shared/values.js";
  * What imported Hook commands use for the installed package folder; BarnDog
  * binds it when installing.
  */
-export const ROOT_TOKEN = "${BARNDOG_HOOK_ROOT}";
+const ROOT_TOKEN = "${BARNDOG_HOOK_ROOT}";
 
 /** A link to a folder or file narrows everything to it; the rest of the repo is ignored. */
 const inScope = (remote: RemoteRepo, path: string) =>
@@ -51,7 +51,7 @@ export function folderEntries(
 }
 
 /** Every blob in a fetched snapshot was read with it. */
-export const blobOf = (remote: RemoteRepo, entry: SnapshotEntry) =>
+const blobOf = (remote: RemoteRepo, entry: SnapshotEntry) =>
   defined(remote.blobs.get(entry.hash), `Git object ${entry.hash} wasn't read`);
 
 const hasLink = (remote: RemoteRepo, root: string) =>
@@ -71,7 +71,7 @@ export type SkillCandidate = {
   entries: PackageEntry[];
 };
 
-export type Skipped = { path: string; reason: string };
+type Skipped = { path: string; reason: string };
 
 /**
  * Every valid Skill folder (one holding `SKILL.md`) in the linked part of a
@@ -169,7 +169,11 @@ const scriptExtensions = new Set([
   ...Object.keys(interpreters),
 ]);
 
-/** Whether a repository file looks like a hook script: `hooks/check.sh`, `lint.mjs`. */
+/**
+ * Whether a repository file looks like a hook script: `hooks/check.sh`, `lint.mjs`.
+ *
+ * @internal Exported for its table test in `src/tests/patterns.test.ts`.
+ */
 export const scriptLike = (path: string) =>
   scriptExtensions.has(extensionOf(path));
 
@@ -238,6 +242,8 @@ const QUOTES = /^["']|["']$/g;
 /**
  * The repository-relative path one word of a native hook command may name:
  * `"$CLAUDE_PROJECT_DIR/.claude/hooks/check.sh"` → `.claude/hooks/check.sh`.
+ *
+ * @internal Exported for its table test in `src/tests/patterns.test.ts`.
  */
 export function scriptPath(token: string) {
   return token.replace(QUOTES, "").replace(ROOT_PREFIXES, "");

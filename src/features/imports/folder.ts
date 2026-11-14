@@ -10,7 +10,11 @@ import type { RemoteRepo } from "./remote.js";
 /** `~` or `~/…` at the start of a path, which a shell would expand to the home folder. */
 const HOME_PREFIX = /^~(?=\/|$)/;
 
-/** `~/skills` → `/Users/me/skills`; other paths are unchanged. */
+/**
+ * `~/skills` → `/Users/me/skills`; other paths are unchanged.
+ *
+ * @internal Exported for its table test in `src/tests/patterns.test.ts`.
+ */
 export const expandHome = (path: string, home = homedir()) =>
   path.replace(HOME_PREFIX, () => home);
 
@@ -23,6 +27,8 @@ const LOCAL_PATH = /^(?:\/|\.{1,2}(?:\/|$)|~(?:\/|$))/;
 /**
  * Recognizes path-like import inputs after trimming whitespace; does not check
  * filesystem existence.
+ *
+ * @internal Exported for its table test in `src/tests/patterns.test.ts`.
  */
 export const looksLocal = (source: string) => LOCAL_PATH.test(source.trim());
 

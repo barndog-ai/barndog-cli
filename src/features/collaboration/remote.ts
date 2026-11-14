@@ -9,7 +9,8 @@ import {
   type Skill,
 } from "@barndog-ai/api-contract";
 import { parsePackage, defaultLimits } from "@barndog-ai/api-contract/package";
-import { apiClient, catalog } from "../skills/remote.js";
+import { apiClient } from "../auth/transport.js";
+import { publishedSkills } from "../skills/catalog.js";
 import { publishedHooks, type Hook } from "../hooks/catalog.js";
 import { serverFetch } from "../auth/transport.js";
 import { collaborationClient, packagePath } from "./domain.js";
@@ -259,7 +260,7 @@ export async function getChange(
 }
 
 /** Every published package of a kind that you can see. */
-export const packageCatalogs: Record<
+const packageCatalogs: Record<
   PackageKind,
   (conn: Connection, home: string) => Promise<(Skill | Hook)[]>
-> = { skill: catalog, hook: publishedHooks };
+> = { skill: publishedSkills, hook: publishedHooks };

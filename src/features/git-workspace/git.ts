@@ -221,6 +221,8 @@ const HEAD_LINE = /^([\da-f]+)\s+HEAD$/m;
  *
  * Empty output means an empty repository (null). Fails for SHA-256 repositories
  * and when either line is missing.
+ *
+ * @internal Exported for its table test in `src/tests/patterns.test.ts`.
  */
 export function parseRemoteHead(output: string, url: string): RemoteHead {
   if (!output) {
@@ -273,6 +275,8 @@ const identityHint = 'git config --global user.email "you@example.com"';
 /**
  * Git's stderr when a commit has no author: `*** Please tell me who you are.`
  * followed by the `git config` commands to run.
+ *
+ * @internal Exported for its table test in `src/tests/patterns.test.ts`.
  */
 export const UNKNOWN_IDENTITY = /tell me who you are/i;
 

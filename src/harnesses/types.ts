@@ -1,6 +1,6 @@
 export type Harness = "claude" | "codex" | "cursor";
 
-export type HookEvent = {
+type HookEvent = {
   name: string;
   /** What a matcher filters on; absent means the tool ignores matchers there. */
   matcher?: string;
@@ -11,7 +11,7 @@ export type HookEvent = {
  * here relates one tool to another: a Hook supports a tool only when its author
  * shipped settings for it.
  */
-export type HookProfile = {
+type HookProfile = {
   /** From the tool's hook reference. Setup also accepts names not listed here. */
   events: readonly HookEvent[];
   /**

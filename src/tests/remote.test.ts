@@ -6,7 +6,7 @@ import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Skill } from "@barndog-ai/api-contract";
-import { catalog } from "../features/skills/remote.js";
+import { publishedSkills } from "../features/skills/catalog.js";
 
 async function fixture(t: TestContext) {
   const home = await realpath(await mkdtemp(join(tmpdir(), "barndog-remote-")));
@@ -148,11 +148,14 @@ async function fixture(t: TestContext) {
   };
 }
 
-test("catalog retrieves every page before selection; rejects malformed and cyclic pagination", async (t) => {
+test("publishedSkills retrieves every page before selection; rejects malformed and cyclic pagination", async (t) => {
   const f = await fixture(t);
-  expect((await catalog(f.connection, f.home)).length).toBe(105);
+  expect((await publishedSkills(f.connection, f.home)).length).toBe(105);
   f.repeat();
-  await expect(catalog(f.connection, f.home)).rejects.toThrow(/pagination/);
+  await expect(publishedSkills(f.connection, f.home)).rejects.toThrow(
+    /pagination/,
+  );
+
   f.malformed();
-  await expect(catalog(f.connection, f.home)).rejects.toThrow();
+  await expect(publishedSkills(f.connection, f.home)).rejects.toThrow();
 });

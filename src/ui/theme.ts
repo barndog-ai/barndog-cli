@@ -4,9 +4,9 @@ import { styleText } from "node:util";
  * BarnDog brand accent, applied through `primary()` to headings, highlighted
  * output and prompt accents.
  */
-export const PRIMARY_COLOR = "#C54836";
+const PRIMARY_COLOR = "#C54836";
 
-export const SELECTION_COLOR = "green";
+const SELECTION_COLOR = "green";
 
 /**
  * Applies the selection color using Node's color policy for the supplied stream
@@ -59,7 +59,7 @@ export function primary(
   return `${start}${text.replaceAll("\u001b[39m", start)}\u001b[39m`;
 }
 
-export const DANGER_COLOR = "red";
+const DANGER_COLOR = "red";
 
 export function danger(
   text: string,

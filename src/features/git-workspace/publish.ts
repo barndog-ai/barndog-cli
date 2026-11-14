@@ -136,7 +136,7 @@ export async function remoteBranch(repo: string, branch: string) {
  * Extracts a normalized credential-free host and repository path from a remote
  * URL; invalid remotes return null.
  */
-export function hostOf(url: string) {
+function hostOf(url: string) {
   const remote = normalizeRepositoryRemote(url);
   if (!remote) {
     return null;
@@ -151,7 +151,7 @@ export function hostOf(url: string) {
 }
 
 /** A browser link that starts a pull request, for hosts with a known URL shape. */
-export function compareUrl(url: string, base: string, branch: string) {
+function compareUrl(url: string, base: string, branch: string) {
   const remote = hostOf(url);
   if (!remote) {
     return null;
@@ -181,7 +181,11 @@ const signedIn = async (tool: string, host: string) => {
   }
 };
 
-/** The first web link in a tool's output: `Created https://github.com/o/r/pull/1` → the link. */
+/**
+ * The first web link in a tool's output: `Created https://github.com/o/r/pull/1` → the link.
+ *
+ * @internal Exported for its table test in `src/tests/patterns.test.ts`.
+ */
 export const firstUrl = (text: string) => /https?:\/\/\S+/.exec(text)?.[0];
 
 /** The gh or glab command that opens a review of `branch` against `base`, if the host has one. */
