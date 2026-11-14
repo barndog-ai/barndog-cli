@@ -12,7 +12,8 @@ import {
   type PackageEntry,
 } from "@barndog-ai/api-contract/package";
 import type { Connection } from "../../config/settings.js";
-import { serverFetch } from "../auth/transport.js";
+import { ApiError } from "@barndog-ai/api-contract";
+import { type ApiClient, apiClient } from "../auth/transport.js";
 import { assetKinds, metadata } from "../asset-kinds/index.js";
 import { type PackageKind } from "../../config/selection.js";
 import { GIT_OBJECT_ID } from "../../shared/patterns.js";
@@ -135,6 +136,87 @@ export async function storePackage(
   return join(target, asset.name);
 }
 
+/** A typed-client call made with `parseAs: "stream"`, so the body is still unread. */
+type PackageDownload = Promise<{ response: Response }>;
+
+/**
+ * Reads and unpacks a package download within the package size limits. With
+ * `commit`, refuses a package whose ETag names another revision. `subject`
+ * names the package in errors.
+ */
+export async function unpackDownload(
+  download: PackageDownload,
+  options: {
+    kind: PackageKind;
+    commit?: string;
+    subject: string;
+    fix?: string;
+  },
+): Promise<PackageEntry[]> {
+  const { kind, commit, subject, fix } = options;
+  let response: Response;
+  try {
+    ({ response } = await download);
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw new CliError(
+        `Downloading ${subject} failed (${error.status}). Try again.`,
+        fix,
+        { cause: error },
+      );
+    }
+
+    throw error;
+  }
+
+  if (commit && response.headers.get("etag") !== `"${commit}"`) {
+    throw new CliError(
+      `The server changed ${subject} while it was downloading. Try again.`,
+      fix,
+    );
+  }
+
+  if (!response.body) {
+    throw new Error("The server sent a package download with no body");
+  }
+
+  let size = 0;
+  const chunks: Uint8Array[] = [];
+  for await (const chunk of response.body) {
+    size += chunk.length;
+    if (size > defaultLimits.compressed) {
+      throw new PackageError("PACKAGE_TOO_LARGE");
+    }
+
+    chunks.push(chunk);
+  }
+
+  return parsePackage(
+    Buffer.concat(chunks),
+    defaultLimits,
+    assetKinds[kind].manifest,
+  );
+}
+
+type PublishedVersion = { id: string; version: { number: number } };
+
+/** The published-package route of each kind. */
+const packageDownloads: Record<
+  PackageKind,
+  (client: ApiClient, asset: PublishedVersion) => PackageDownload
+> = {
+  skill: (client, asset) =>
+    client.GET("/v1/skills/{id}/versions/{version}/package", {
+      params: { path: { id: asset.id, version: asset.version.number } },
+      parseAs: "stream",
+    }),
+  hook: (client, asset) =>
+    client.GET("/v1/hooks/{id}/versions/{version}/package", {
+      params: { path: { id: asset.id, version: asset.version.number } },
+      parseAs: "stream",
+    }),
+};
+
 /**
  * Returns a cached package or downloads and validates its revision, size and
  * metadata before storing it.
@@ -154,46 +236,14 @@ export async function cachedPackage(
     { id: asset.id, name: asset.name, revision: asset.version.commit },
     { key: cacheKey(conn), home },
     async () => {
-      const response = await serverFetch(
-        conn.server,
-        home,
-      )(
-        `${conn.server}/v1/${assetKinds[kind].route}/${asset.id}/versions/${asset.version.number}/package`,
-      );
-
-      if (!response.ok) {
-        throw new CliError(
-          `Downloading ${asset.name} failed (${response.status}). Try again.`,
-          "barndog sync",
-        );
-      }
-
-      if (response.headers.get("etag") !== `"${asset.version.commit}"`) {
-        throw new CliError(
-          `${asset.name} changed on the server while it was downloading. Try again.`,
-          "barndog sync",
-        );
-      }
-
-      if (!response.body) {
-        throw new Error("The server sent a package download with no body");
-      }
-
-      let size = 0;
-      const chunks: Uint8Array[] = [];
-      for await (const chunk of response.body) {
-        size += chunk.length;
-        if (size > defaultLimits.compressed) {
-          throw new PackageError("PACKAGE_TOO_LARGE");
-        }
-
-        chunks.push(chunk);
-      }
-
-      const entries = await parsePackage(
-        Buffer.concat(chunks),
-        defaultLimits,
-        assetKinds[kind].manifest,
+      const entries = await unpackDownload(
+        packageDownloads[kind](apiClient(conn.server, home), asset),
+        {
+          kind,
+          commit: asset.version.commit,
+          subject: asset.name,
+          fix: "barndog sync",
+        },
       );
 
       if (metadata(entries, kind).name !== asset.name) {

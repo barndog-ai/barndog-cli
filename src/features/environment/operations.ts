@@ -1,7 +1,6 @@
 import { homedir } from "node:os";
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
-import { scopeSchema } from "@barndog-ai/api-contract";
 import {
   readSettings,
   SetupRequiredError,
@@ -28,9 +27,9 @@ import type {
   Subscription,
 } from "../../config/selection.js";
 import type { SyncEvent } from "./events.js";
-import { environmentCatalog, type ApiScope } from "../server/catalog.js";
-import { request } from "../server/request.js";
-import { matchesOrigin } from "../server/origin.js";
+import { environmentCatalog } from "../server/catalog.js";
+import type { ApiScope } from "../server/origin.js";
+import { matchesOrigin, scopes } from "../server/origin.js";
 import { locked } from "./transaction.js";
 import { installedNames, synchronize } from "./sync.js";
 import type { WorkspaceSource } from "../workspace/source.js";
@@ -212,7 +211,7 @@ async function workspaceAccess(settings: Settings, home: string) {
   return {
     identity: conn,
     catalog: await merge(catalog),
-    scopes: () => request(conn, "/v1/scopes", z.array(scopeSchema), { home }),
+    scopes: () => scopes(conn, home),
   };
 }
 

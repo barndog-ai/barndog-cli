@@ -3,10 +3,9 @@ import { serverFetch, normalizeServer } from "../auth/transport.js";
 import { homedir } from "node:os";
 import { assetKinds } from "../asset-kinds/index.js";
 import { type PackageKind } from "../../config/selection.js";
-import { defined } from "../../shared/lookup.js";
 
 /** The typed client speaks Skill routes; other package kinds swap in their own. */
-export function packagePath(path: string, kind: PackageKind) {
+function packagePath(path: string, kind: PackageKind) {
   return path
     .replace(/^\/v1\/skills(?=\/|$)/, `/v1/${assetKinds[kind].route}`)
     .replace(/^\/v1\/skill-changes(?=\/|$)/, `/v1/${kind}-changes`);
@@ -43,11 +42,6 @@ function fields(value: unknown, from: string, to: string): unknown {
   }
 
   return value;
-}
-
-/** The body of a successful response; the client throws ApiError for failures. */
-export function responseData<T>(response: { data?: T }): T {
-  return defined(response.data, "The server sent an empty response");
 }
 
 /** Transport adapter for the proven working-copy algorithm. Distinct public Hook

@@ -21,8 +21,9 @@ import {
 } from "@barndog-ai/api-contract";
 import { readDirectory } from "@barndog-ai/api-contract/collaboration";
 import { connection } from "../server/connection.js";
-import { type RetryKey, request } from "../server/request.js";
-import { connectionPath } from "./connections.js";
+import { type RetryKey, parsed } from "../server/client.js";
+import { connectionParams } from "./connections.js";
+import { apiClient } from "../auth/transport.js";
 
 export type GitPull = z.infer<typeof gitPullSchema>;
 
@@ -91,8 +92,13 @@ const bodyText = async (options: PullText) =>
     ? await readFile(options.bodyFile, "utf8")
     : (options.body ?? "");
 
-const pullNumber = (number: number) =>
-  z.number().int().positive().parse(number);
+/** The path parameters of one pull request's routes. */
+const pullParams = (connectionId: string, number: number) => ({
+  path: {
+    ...connectionParams(connectionId).path,
+    number: z.number().int().positive().parse(number),
+  },
+});
 
 /** Every file of the package, as the server's proposal routes take them. */
 async function packageFiles(directory: string | undefined) {
@@ -111,11 +117,11 @@ export async function githubPullsList(
 ): Promise<GitPull[]> {
   const conn = await connection(home);
 
-  return request(
-    conn,
-    `${connectionPath(connectionId)}/pulls`,
+  return parsed(
     z.array(gitPullSchema),
-    { home },
+    apiClient(conn.server, home).GET("/v1/git-connections/{id}/pulls", {
+      params: connectionParams(connectionId),
+    }),
   );
 }
 
@@ -127,11 +133,14 @@ export async function githubPullsShow(
 ): Promise<GitPullDetails> {
   const conn = await connection(home);
 
-  return request(
-    conn,
-    `${connectionPath(connectionId)}/pulls/${pullNumber(number)}`,
+  return parsed(
     gitPullDetailsSchema,
-    { home },
+    apiClient(conn.server, home).GET(
+      "/v1/git-connections/{id}/pulls/{number}",
+      {
+        params: pullParams(connectionId, number),
+      },
+    ),
   );
 }
 
@@ -141,7 +150,6 @@ export async function githubPullsCreate(
   home = homedir(),
 ): Promise<GitPull> {
   const conn = await connection(home);
-  const path = connectionPath(options.connectionId);
   const body = await bodyText(options);
   const proposal = gitProposalSchema.parse({
     expectedCommit: options.expectedCommit,
@@ -151,11 +159,13 @@ export async function githubPullsCreate(
     idempotencyKey: options.key ?? randomUUID(),
   });
 
-  return request(conn, `${path}/pulls`, gitPullSchema, {
-    home,
-    method: "POST",
-    body: proposal,
-  });
+  return parsed(
+    gitPullSchema,
+    apiClient(conn.server, home).POST("/v1/git-connections/{id}/pulls", {
+      params: connectionParams(options.connectionId),
+      body: proposal,
+    }),
+  );
 }
 
 /** Replaces an open pull request's content with the complete package. */
@@ -164,7 +174,6 @@ export async function githubPullsRevise(
   home = homedir(),
 ): Promise<GitPull> {
   const conn = await connection(home);
-  const path = connectionPath(options.connectionId);
   const body = await bodyText(options);
   const revision = gitRevisionSchema.parse({
     expectedCommit: options.expectedCommit,
@@ -174,11 +183,15 @@ export async function githubPullsRevise(
     idempotencyKey: options.key ?? randomUUID(),
   });
 
-  return request(
-    conn,
-    `${path}/pulls/${pullNumber(options.number)}/revisions`,
+  return parsed(
     gitPullSchema,
-    { home, method: "PUT", body: revision },
+    apiClient(conn.server, home).PUT(
+      "/v1/git-connections/{id}/pulls/{number}/revisions",
+      {
+        params: pullParams(options.connectionId, options.number),
+        body: revision,
+      },
+    ),
   );
 }
 
@@ -191,22 +204,21 @@ export async function githubPullsReview(
   home = homedir(),
 ): Promise<GitPullDetails> {
   const conn = await connection(home);
-  const path = connectionPath(options.connectionId);
   const body = await bodyText(options);
 
-  return request(
-    conn,
-    `${path}/pulls/${pullNumber(options.number)}/reviews`,
+  return parsed(
     gitPullDetailsSchema,
-    {
-      home,
-      method: "POST",
-      body: gitReviewSchema.parse({
-        expectedCommit: options.expectedCommit,
-        event: options.event,
-        body,
-      }),
-    },
+    apiClient(conn.server, home).POST(
+      "/v1/git-connections/{id}/pulls/{number}/reviews",
+      {
+        params: pullParams(options.connectionId, options.number),
+        body: gitReviewSchema.parse({
+          expectedCommit: options.expectedCommit,
+          event: options.event,
+          body,
+        }),
+      },
+    ),
   );
 }
 
@@ -216,24 +228,23 @@ export async function githubPullsComment(
   home = homedir(),
 ): Promise<GitPullDetails> {
   const conn = await connection(home);
-  const path = connectionPath(options.connectionId);
   const body = await bodyText(options);
 
-  return request(
-    conn,
-    `${path}/pulls/${pullNumber(options.number)}/comments`,
+  return parsed(
     gitPullDetailsSchema,
-    {
-      home,
-      method: "POST",
-      body: gitCommentSchema.parse({
-        expectedCommit: options.expectedCommit,
-        body,
-        path: options.path,
-        line: options.line,
-        side: options.side,
-      }),
-    },
+    apiClient(conn.server, home).POST(
+      "/v1/git-connections/{id}/pulls/{number}/comments",
+      {
+        params: pullParams(options.connectionId, options.number),
+        body: gitCommentSchema.parse({
+          expectedCommit: options.expectedCommit,
+          body,
+          path: options.path,
+          line: options.line,
+          side: options.side,
+        }),
+      },
+    ),
   );
 }
 
@@ -243,16 +254,15 @@ export async function githubPullsMerge(
   home = homedir(),
 ): Promise<GitConnection> {
   const conn = await connection(home);
-  const path = connectionPath(options.connectionId);
 
-  return request(
-    conn,
-    `${path}/pulls/${pullNumber(options.number)}/merge`,
+  return parsed(
     gitConnectionSchema,
-    {
-      home,
-      method: "PUT",
-      body: gitMergeSchema.parse({ expectedCommit: options.expectedCommit }),
-    },
+    apiClient(conn.server, home).PUT(
+      "/v1/git-connections/{id}/pulls/{number}/merge",
+      {
+        params: pullParams(options.connectionId, options.number),
+        body: gitMergeSchema.parse({ expectedCommit: options.expectedCommit }),
+      },
+    ),
   );
 }

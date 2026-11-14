@@ -1,11 +1,11 @@
 import { z } from "zod";
-import { scopeSchema, teamMemberSchema } from "@barndog-ai/api-contract";
+import { teamMemberSchema } from "@barndog-ai/api-contract";
 import {
   environmentCatalog,
   type EnvironmentCatalog,
-  type ApiScope,
 } from "../server/catalog.js";
-import { request } from "../server/request.js";
+import type { ApiScope } from "../server/origin.js";
+import { parsed } from "../server/client.js";
 import { openRepoSource } from "../workspace/workspace-source.js";
 import { selectionState, withSelection } from "../../config/environment.js";
 import {
@@ -16,6 +16,8 @@ import {
 } from "../../config/selection.js";
 import type { Settings } from "../../config/settings.js";
 import { CliError } from "../../errors.js";
+import { apiClient } from "../auth/transport.js";
+import { scopes } from "../server/origin.js";
 
 /** Limit onboarding team requests to six concurrent operations. */
 const TEAM_FETCH_CONCURRENCY = 6;
@@ -68,11 +70,8 @@ export async function onboardingEnvironment(
     settings.connection,
   );
 
-  const scopes = await request(connection, "/v1/scopes", z.array(scopeSchema), {
-    home,
-  });
-
-  const teams = scopes.filter((scope) => scope.type === "team");
+  const visible = await scopes(connection, home);
+  const teams = visible.filter((scope) => scope.type === "team");
   const memberTeamIds: string[] = [];
   // Bound concurrent requests when using servers with the existing membership API.
   for (
@@ -82,11 +81,11 @@ export async function onboardingEnvironment(
   ) {
     const memberships = await Promise.all(
       teams.slice(offset, offset + TEAM_FETCH_CONCURRENCY).map(async (team) => {
-        const members = await request(
-          connection,
-          `/v1/teams/${team.id}/members`,
+        const members = await parsed(
           z.array(teamMemberSchema),
-          { home },
+          apiClient(connection.server, home).GET("/v1/teams/{id}/members", {
+            params: { path: { id: team.id } },
+          }),
         );
 
         return members.some((member) => member.id === connection.developerId)
@@ -102,7 +101,7 @@ export async function onboardingEnvironment(
 
   return {
     catalog,
-    scopes,
+    scopes: visible,
     memberTeamIds,
     developerId: connection.developerId,
     firstSetup: settings.environment === undefined,

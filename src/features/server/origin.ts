@@ -11,6 +11,7 @@ import { CliError } from "../../errors.js";
 import { only } from "../../shared/lookup.js";
 import { splitOrigin } from "../../shared/patterns.js";
 import { apiClient } from "../auth/transport.js";
+import { parsed } from "./client.js";
 
 /**
  * Whether an asset or scope belongs to the origin `selector` names: `org`,
@@ -39,6 +40,17 @@ export function matchesOrigin(
   return origin.type === type && [origin.id, origin.slug].includes(value);
 }
 
+/** A scope as the server lists it, with whether the developer can publish there. */
+export type ApiScope = z.infer<typeof scopeSchema>;
+
+/** The scopes the developer can see: the organization, teams, repositories and their own. */
+export function scopes(conn: Connection, home: string): Promise<ApiScope[]> {
+  return parsed(
+    z.array(scopeSchema),
+    apiClient(conn.server, home).GET("/v1/scopes"),
+  );
+}
+
 /**
  * The scope an origin selector names, among those the developer can use.
  * Organization admins can also name any member's personal scope.
@@ -48,11 +60,8 @@ export async function selectOrigin(
   conn: Connection,
   home = homedir(),
 ) {
-  const scopes = z
-    .array(scopeSchema)
-    .parse((await apiClient(conn.server, home).GET("/v1/scopes")).data);
-
-  const matches = scopes.filter((s) => matchesOrigin(s, selector, conn));
+  const visible = await scopes(conn, home);
+  const matches = visible.filter((s) => matchesOrigin(s, selector, conn));
   const personal = splitOrigin(selector);
   if (
     !matches.length &&

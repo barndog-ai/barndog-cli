@@ -9,9 +9,10 @@ import {
 } from "@barndog-ai/api-contract";
 import type { Connection } from "../../config/settings.js";
 import { connection } from "../server/connection.js";
-import { request } from "../server/request.js";
+import { parsed } from "../server/client.js";
 import { errorCode } from "../../shared/values.js";
 import { only } from "../../shared/lookup.js";
+import { apiClient } from "../auth/transport.js";
 
 const execute = promisify(execFile);
 
@@ -72,11 +73,10 @@ export async function repositoryContext(
 ) {
   const local = await localRepository(cwd);
   const conn = expected ?? (await connection(home));
-  const repositories = await request(
-    conn,
-    "/v1/repositories",
+  const client = apiClient(conn.server, home);
+  const repositories = await parsed(
     z.array(repositorySchema),
-    { home },
+    client.GET("/v1/repositories"),
   );
 
   const matches = repositories.filter(
@@ -85,7 +85,7 @@ export async function repositoryContext(
 
   const repository = only(matches) ?? null;
   const teams = repository
-    ? await request(conn, "/v1/teams", z.array(teamSchema), { home })
+    ? await parsed(z.array(teamSchema), client.GET("/v1/teams"))
     : [];
 
   return {

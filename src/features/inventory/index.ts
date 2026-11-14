@@ -1,19 +1,16 @@
 import { homedir } from "node:os";
 import { basename } from "node:path";
-import { z } from "zod";
 import { readSettings, SetupRequiredError } from "../../config/settings.js";
 import { selectionState } from "../../config/environment.js";
 import { readState } from "../../config/state.js";
 import { treeFingerprint } from "../../shared/tree.js";
 import { linkTarget } from "../environment/transaction.js";
 import { environmentCatalog } from "../server/catalog.js";
-import { request } from "../server/request.js";
 import { openRepoSource } from "../workspace/workspace-source.js";
 import { localOverlay, mergeLocalCatalog } from "../workspace/overlay.js";
-import { scopeSchema } from "@barndog-ai/api-contract";
 import { resolveAssets } from "../asset-selection/index.js";
 import { installedName, resolveClashes } from "../environment/names.js";
-import { originLabel } from "../server/origin.js";
+import { originLabel, scopes } from "../server/origin.js";
 import type { Harness } from "../../harnesses/types.js";
 import type { AssetKind } from "../../config/selection.js";
 import { isAssetKind } from "../asset-kinds/index.js";
@@ -146,10 +143,7 @@ export async function inventory(home = homedir()): Promise<Inventory> {
 
           return {
             catalog: remote.catalog,
-            scopes: () =>
-              request(remote.connection, "/v1/scopes", z.array(scopeSchema), {
-                home,
-              }),
+            scopes: () => scopes(remote.connection, home),
           };
         })();
 
@@ -225,11 +219,11 @@ export async function inventory(home = homedir()): Promise<Inventory> {
         });
       }
 
-      const scopes = await loadScopes();
+      const visible = await loadScopes();
       for (const item of items) {
         item.via = item.via.map((label) => {
           const [type, id] = label.split("/");
-          const scope = scopes.find(
+          const scope = visible.find(
             (s) => s.type === type && (type === "org" || s.id === id),
           );
 

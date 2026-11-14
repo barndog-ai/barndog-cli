@@ -4,9 +4,10 @@ import { homedir } from "node:os";
 import { z } from "zod";
 import { changeSchema, type Change } from "@barndog-ai/api-contract";
 import type { FileDiff } from "@barndog-ai/api-contract/collaboration";
-import { collaborationClient, responseData } from "./domain.js";
+import { collaborationClient } from "./domain.js";
+import { responseData } from "../server/client.js";
 import type { PackageKind } from "../../config/selection.js";
-import { download, getChange, selectSkill } from "./remote.js";
+import { downloadChange, getChange, selectSkill } from "./remote.js";
 import { connection } from "../server/connection.js";
 import { readSettings, type GitWorkspace } from "../../config/settings.js";
 import type { SyncEvent } from "../environment/events.js";
@@ -504,10 +505,10 @@ export async function showChange(
   const client = collaborationClient(conn.server, home, target.kind);
   const change = await getChange(id, conn, home, target.kind);
   const [files, names, versions] = await Promise.all([
-    download(
-      `/v1/skill-changes/${id}/package?revision=${change.revision}`,
+    downloadChange(
+      { id, revision: change.revision, commit: change.commit },
       conn,
-      { home, commit: change.commit, kind: target.kind },
+      { home, kind: target.kind },
     ),
     developerNames(home),
     change.baseVersionId

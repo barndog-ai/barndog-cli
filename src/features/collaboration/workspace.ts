@@ -23,13 +23,19 @@ import {
   readDirectory,
   textContent,
 } from "@barndog-ai/api-contract/collaboration";
-import { collaborationClient, responseData } from "./domain.js";
+import { collaborationClient } from "./domain.js";
+import { responseData } from "../server/client.js";
 import {
   metadata as packageMetadataFor,
   assetKinds,
 } from "../asset-kinds/index.js";
 import { type PackageKind } from "../../config/selection.js";
-import { download, getChange, selectSkill } from "./remote.js";
+import {
+  downloadChange,
+  downloadVersion,
+  getChange,
+  selectSkill,
+} from "./remote.js";
 import { selectOrigin } from "../server/origin.js";
 import { connection } from "../server/connection.js";
 
@@ -113,10 +119,14 @@ export async function pullSkill(
     await mkdir(path);
     const root = await realpath(path);
     try {
-      const files = await download(
-        `/v1/skills/${skill.id}/versions/${skill.version.number}/package`,
+      const files = await downloadVersion(
+        {
+          id: skill.id,
+          number: skill.version.number,
+          commit: skill.version.commit,
+        },
         conn,
-        { home, commit: skill.version.commit, kind },
+        { home, kind },
       );
 
       await writePackage(root, files);
@@ -225,11 +235,10 @@ export async function updateWorkspace(
       );
 
       if (proposal.revision !== work.proposal.revision) {
-        const remote = await download(
-          `/v1/skill-changes/${proposal.id}/package?revision=${proposal.revision}`,
-          work.connection,
-          { home, commit: proposal.commit, kind: work.kind },
-        );
+        const remote = await downloadChange(proposal, work.connection, {
+          home,
+          kind: work.kind,
+        });
 
         const merged = await mergeEntries(
           decodeFiles(work.proposal.files),
@@ -263,10 +272,14 @@ export async function updateWorkspace(
             }
 
             work.base = encodeFiles(
-              await download(
-                `/v1/skills/${work.skillId}/versions/${version.number}/package`,
+              await downloadVersion(
+                {
+                  id: publishedId(work),
+                  number: version.number,
+                  commit: version.commit,
+                },
                 work.connection,
-                { home, commit: version.commit, kind: work.kind },
+                { home, kind: work.kind },
               ),
             );
 
@@ -301,10 +314,14 @@ export async function updateWorkspace(
       );
 
       if (skill.version.id !== work.baseVersionId) {
-        const latest = await download(
-          `/v1/skills/${skill.id}/versions/${skill.version.number}/package`,
+        const latest = await downloadVersion(
+          {
+            id: skill.id,
+            number: skill.version.number,
+            commit: skill.version.commit,
+          },
           work.connection,
-          { home, commit: skill.version.commit, kind: work.kind },
+          { home, kind: work.kind },
         );
 
         const merged = await mergeEntries(

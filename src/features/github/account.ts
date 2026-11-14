@@ -13,7 +13,8 @@ import {
   gitInstallationSchema,
 } from "@barndog-ai/api-contract";
 import { connection } from "../server/connection.js";
-import { request } from "../server/request.js";
+import { parsed } from "../server/client.js";
+import { apiClient } from "../auth/transport.js";
 
 /** The developer's GitHub account link and what the BarnDog GitHub App allows. */
 export type GithubStatus = z.infer<typeof githubStatusSchema>;
@@ -24,33 +25,35 @@ export type GithubInstallation = z.infer<typeof gitInstallationSchema>;
 /** A GitHub page where the developer finishes a step. */
 export type GithubPage = { url: string };
 
-async function githubPage(
-  path: "/v1/github/authorize" | "/v1/github/install",
-  home: string,
-): Promise<GithubPage> {
+export async function githubStatus(home = homedir()): Promise<GithubStatus> {
   const conn = await connection(home);
-  const { url } = await request(conn, path, gitAuthorizationSchema, {
-    home,
-    method: "POST",
-  });
+
+  return parsed(
+    githubStatusSchema,
+    apiClient(conn.server, home).GET("/v1/github/status"),
+  );
+}
+
+/** The page that links the developer's GitHub account to BarnDog. */
+export async function githubAuth(home = homedir()): Promise<GithubPage> {
+  const conn = await connection(home);
+  const { url } = await parsed(
+    gitAuthorizationSchema,
+    apiClient(conn.server, home).POST("/v1/github/authorize"),
+  );
 
   return { url };
 }
 
-export async function githubStatus(home = homedir()): Promise<GithubStatus> {
-  const conn = await connection(home);
-
-  return request(conn, "/v1/github/status", githubStatusSchema, { home });
-}
-
-/** The page that links the developer's GitHub account to BarnDog. */
-export function githubAuth(home = homedir()): Promise<GithubPage> {
-  return githubPage("/v1/github/authorize", home);
-}
-
 /** The page that installs the BarnDog GitHub App on an account or organization. */
-export function githubInstall(home = homedir()): Promise<GithubPage> {
-  return githubPage("/v1/github/install", home);
+export async function githubInstall(home = homedir()): Promise<GithubPage> {
+  const conn = await connection(home);
+  const { url } = await parsed(
+    gitAuthorizationSchema,
+    apiClient(conn.server, home).POST("/v1/github/install"),
+  );
+
+  return { url };
 }
 
 export async function githubInstallations(
@@ -58,10 +61,8 @@ export async function githubInstallations(
 ): Promise<GithubInstallation[]> {
   const conn = await connection(home);
 
-  return request(
-    conn,
-    "/v1/github/installations",
+  return parsed(
     z.array(gitInstallationSchema),
-    { home },
+    apiClient(conn.server, home).GET("/v1/github/installations"),
   );
 }

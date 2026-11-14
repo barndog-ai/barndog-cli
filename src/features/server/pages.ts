@@ -4,6 +4,9 @@ export type Page<T> = {
   nextCursor?: string | null;
 };
 
+/** The largest page the server's list routes return. */
+export const PAGE_SIZE = 100;
+
 /**
  * Every item of a cursor-paginated list, fetching pages until the server stops
  * returning a cursor. A cursor the server already returned means it would loop

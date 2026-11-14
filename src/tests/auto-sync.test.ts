@@ -218,6 +218,7 @@ test("syncing a cloud workspace registers the session-start sync", async (t) => 
 test("sync rewrites legacy harness entry paths and stays idempotent", async (t) => {
   const { home } = await connectedHome(t, {
     harnesses: ["claude", "codex", "cursor"],
+    knowledge: true,
   });
 
   await synchronize(undefined, home);

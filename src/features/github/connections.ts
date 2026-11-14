@@ -21,8 +21,9 @@ import {
 import { selectOrigin } from "../server/origin.js";
 import { connection } from "../server/connection.js";
 import { selectAsset } from "../server/catalog.js";
-import { type RetryKey, request } from "../server/request.js";
+import { type RetryKey, parsed } from "../server/client.js";
 import { CliError } from "../../errors.js";
+import { apiClient } from "../auth/transport.js";
 
 /** A BarnDog-owned copy of a repository, with no connection left behind. */
 export type GitCopyImportResult = z.infer<typeof gitCopyImportResultSchema>;
@@ -86,9 +87,10 @@ export type GithubResolveMirrorOptions = {
   key?: RetryKey;
 };
 
-/** The server route of one connection; only a UUID may reach the URL. */
-export const connectionPath = (connectionId: string) =>
-  `/v1/git-connections/${z.uuidv4().parse(connectionId)}`;
+/** The path parameters of one connection's routes; only a UUID may reach the URL. */
+export const connectionParams = (connectionId: string) => ({
+  path: { id: z.uuidv4().parse(connectionId) },
+});
 
 function repositoryTarget(options: GithubRepositoryOptions) {
   const [owner, repository, ...rest] = options.repository.split("/");
@@ -107,9 +109,10 @@ function repositoryTarget(options: GithubRepositoryOptions) {
 export async function githubList(home = homedir()): Promise<GitConnection[]> {
   const conn = await connection(home);
 
-  return request(conn, "/v1/git-connections", z.array(gitConnectionSchema), {
-    home,
-  });
+  return parsed(
+    z.array(gitConnectionSchema),
+    apiClient(conn.server, home).GET("/v1/git-connections"),
+  );
 }
 
 /** Connects a published Skill or Hook to an existing GitHub repository. */
@@ -133,11 +136,10 @@ export async function githubConnect(
     mode: options.mode ?? "connect",
   });
 
-  return request(conn, "/v1/git-connections", gitConnectionSchema, {
-    home,
-    method: "POST",
-    body,
-  });
+  return parsed(
+    gitConnectionSchema,
+    apiClient(conn.server, home).POST("/v1/git-connections", { body }),
+  );
 }
 
 /** Creates a Skill or Hook from a GitHub repository, which stays authoritative. */
@@ -154,11 +156,10 @@ export async function githubImport(
     origin: { type: scope.type, id: scope.id },
   });
 
-  return request(conn, "/v1/git-connections/import", gitConnectionSchema, {
-    home,
-    method: "POST",
-    body,
-  });
+  return parsed(
+    gitConnectionSchema,
+    apiClient(conn.server, home).POST("/v1/git-connections/import", { body }),
+  );
 }
 
 /** Copies a GitHub repository into a BarnDog-owned asset with no connection left behind. */
@@ -176,11 +177,11 @@ export async function githubImportCopy(
     idempotencyKey: options.key,
   });
 
-  return request(
-    conn,
-    "/v1/git-connections/import-copy",
+  return parsed(
     gitCopyImportResultSchema,
-    { home, method: "POST", body },
+    apiClient(conn.server, home).POST("/v1/git-connections/import-copy", {
+      body,
+    }),
   );
 }
 
@@ -207,11 +208,11 @@ export async function githubCreateRepository(
     idempotencyKey: options.key,
   });
 
-  return request(
-    conn,
-    "/v1/git-connections/create-repository",
+  return parsed(
     gitConnectionSchema,
-    { home, method: "POST", body },
+    apiClient(conn.server, home).POST("/v1/git-connections/create-repository", {
+      body,
+    }),
   );
 }
 
@@ -221,9 +222,12 @@ export async function githubShow(
 ): Promise<GitConnection> {
   const conn = await connection(home);
 
-  return request(conn, connectionPath(connectionId), gitConnectionSchema, {
-    home,
-  });
+  return parsed(
+    gitConnectionSchema,
+    apiClient(conn.server, home).GET("/v1/git-connections/{id}", {
+      params: connectionParams(connectionId),
+    }),
+  );
 }
 
 /** Syncs now instead of waiting for the server's next scheduled sync. */
@@ -233,11 +237,11 @@ export async function githubSync(
 ): Promise<GitConnection> {
   const conn = await connection(home);
 
-  return request(
-    conn,
-    `${connectionPath(connectionId)}/sync`,
+  return parsed(
     gitConnectionSchema,
-    { home, method: "POST" },
+    apiClient(conn.server, home).POST("/v1/git-connections/{id}/sync", {
+      params: connectionParams(connectionId),
+    }),
   );
 }
 
@@ -248,11 +252,11 @@ export async function githubRemoteHead(
 ): Promise<GitRemoteHead> {
   const conn = await connection(home);
 
-  return request(
-    conn,
-    `${connectionPath(connectionId)}/remote-head`,
+  return parsed(
     gitRemoteHeadSchema,
-    { home },
+    apiClient(conn.server, home).GET("/v1/git-connections/{id}/remote-head", {
+      params: connectionParams(connectionId),
+    }),
   );
 }
 
@@ -262,7 +266,6 @@ export async function githubResolveMirror(
   home = homedir(),
 ): Promise<MirrorResolved> {
   const conn = await connection(home);
-  const path = connectionPath(options.connectionId);
   const body = gitMirrorResolutionSchema.parse({
     action: options.action,
     expectedVersionId: options.expectedVersion,
@@ -270,9 +273,11 @@ export async function githubResolveMirror(
     idempotencyKey: options.key ?? randomUUID(),
   });
 
-  return request(conn, `${path}/mirror-resolution`, okSchema, {
-    home,
-    method: "POST",
-    body,
-  });
+  return parsed(
+    okSchema,
+    apiClient(conn.server, home).POST(
+      "/v1/git-connections/{id}/mirror-resolution",
+      { params: connectionParams(options.connectionId), body },
+    ),
+  );
 }

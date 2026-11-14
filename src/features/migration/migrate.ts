@@ -5,10 +5,8 @@ import {
   mcpSchema,
   knowledgeDocumentSchema,
   knowledgeIndexSchema,
-  scopeSchema,
   type ChangeUpload,
 } from "@barndog-ai/api-contract";
-import { z } from "zod";
 
 import { selectionState, withSelection } from "../../config/environment.js";
 import {
@@ -20,13 +18,14 @@ import {
 import { CliError } from "../../errors.js";
 import type { AssetReference } from "../asset-selection/types.js";
 import type { SelectionState, PackageKind } from "../../config/selection.js";
-import { normalizeServer } from "../auth/transport.js";
+import { normalizeServer, apiClient } from "../auth/transport.js";
 import { collaborationClient } from "../collaboration/domain.js";
 import { archive } from "../collaboration/workspace.js";
 import { encodeFiles } from "../collaboration/workspace-store.js";
-import { originLabel } from "../server/origin.js";
-import { environmentCatalog, type ApiScope } from "../server/catalog.js";
-import { request } from "../server/request.js";
+import { originLabel, scopes } from "../server/origin.js";
+import { environmentCatalog } from "../server/catalog.js";
+import type { ApiScope } from "../server/origin.js";
+import { parsed } from "../server/client.js";
 import { synchronize } from "../environment/sync.js";
 import { locked } from "../environment/transaction.js";
 import { openRepoSource } from "../workspace/workspace-source.js";
@@ -38,6 +37,8 @@ import type {
   WorkspaceModel,
 } from "../workspace/format.js";
 import { localOverlay } from "../workspace/overlay.js";
+import { PAGE_SIZE } from "../server/pages.js";
+import { defined } from "../../shared/lookup.js";
 
 /**
  * What `migrate` does with one asset or knowledge document: publish it, leave
@@ -106,31 +107,36 @@ export const publishMcp = (
   conn: Connection,
   home: string,
 ) =>
-  request(conn, "/v1/mcps", mcpSchema, {
-    home,
-    method: "POST",
-    body: {
-      name: asset.name,
-      origin: { type: scope.type, id: scope.id },
-      definition: asset.definition,
-      idempotencyKey: `migrate-${asset.id}-${asset.publishedVersion}-${scope.id}-${asset.name}`,
-    },
-  });
+  parsed(
+    mcpSchema,
+    apiClient(conn.server, home).POST("/v1/mcps", {
+      body: {
+        name: asset.name,
+        origin: { type: scope.type, id: scope.id },
+        definition: defined(
+          asset.definition,
+          `The MCP configuration ${asset.name} has no definition`,
+        ),
+        idempotencyKey: `migrate-${asset.id}-${asset.publishedVersion}-${scope.id}-${asset.name}`,
+      },
+    }),
+  );
 
 export const publishKnowledge = (
   doc: Pick<RepoKnowledge, "id" | "version" | "content">,
   conn: Connection,
   home: string,
 ) =>
-  request(conn, "/v1/knowledge/publish", knowledgeDocumentSchema, {
-    home,
-    method: "POST",
-    body: {
-      baseVersionId: null,
-      content: doc.content,
-      idempotencyKey: `migrate-${doc.id}-${doc.version}-${doc.content.name}`,
-    },
-  });
+  parsed(
+    knowledgeDocumentSchema,
+    apiClient(conn.server, home).POST("/v1/knowledge/publish", {
+      body: {
+        baseVersionId: null,
+        content: doc.content,
+        idempotencyKey: `migrate-${doc.id}-${doc.version}-${doc.content.name}`,
+      },
+    }),
+  );
 
 /** Carries each choice over by scope and name, because cloud assigns new IDs. */
 function translateSelection(
@@ -260,18 +266,16 @@ export async function migrate(
     const model = await source.model();
     const server = normalizeServer(options.server);
     const conn = await connectionContext(server, home);
-    const cloudScopes = await request(
-      conn,
-      "/v1/scopes",
-      z.array(scopeSchema),
-      { home },
-    );
+    const cloudScopes = await scopes(conn, home);
 
     const { catalog: existing } = await environmentCatalog(home, conn);
     const existingDocs = (
-      await request(conn, "/v1/knowledge?limit=100", knowledgeIndexSchema, {
-        home,
-      })
+      await parsed(
+        knowledgeIndexSchema,
+        apiClient(conn.server, home).GET("/v1/knowledge", {
+          params: { query: { limit: PAGE_SIZE } },
+        }),
+      )
     ).documents;
 
     const pairs = model.scopes.flatMap((local) => {

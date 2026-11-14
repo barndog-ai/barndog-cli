@@ -15,6 +15,7 @@ import { readCredentials, updateCredentials } from "./credentials.js";
 import {
   apiClient,
   LoginRequiredError,
+  type ApiClient,
   normalizeServer,
   serverFetch,
 } from "./transport.js";
@@ -65,16 +66,31 @@ async function selectedServer(server: string | undefined, home: string) {
 }
 
 /**
+ * A client that attaches no saved credential: sign-in has none yet, and
+ * revoking names the token itself, which may not be the saved one.
+ */
+const signInClient = (server: string, home: string): ApiClient =>
+  createApiClient({
+    baseUrl: server,
+    fetch: serverFetch(server, home, false),
+  });
+
+/** Ends the session `token` belongs to; throws when the server didn't confirm it. */
+async function revokeSession(client: ApiClient, token: string) {
+  await client.DELETE("/v1/auth/cli/session", {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(AUTH_REQUEST_TIMEOUT_MS),
+  });
+}
+
+/**
  * Starts device login, invokes the verification callback, polls completion and
  * persists the returned session.
  */
 export async function login(options: LoginOptions) {
   const home = options.home ?? homedir();
   const server = await selectedServer(options.server, home);
-  const client = createApiClient({
-    baseUrl: server,
-    fetch: serverFetch(server, home, false),
-  });
+  const client = signInClient(server, home);
 
   const started = loginStartSchema.parse(
     (await client.POST("/v1/auth/cli/start", { signal: options.signal })).data,
@@ -110,13 +126,7 @@ export async function login(options: LoginOptions) {
       continue;
     }
 
-    const revoke = () =>
-      fetch(`${server}/v1/auth/cli/session`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${result.token}` },
-        redirect: "error",
-        signal: AbortSignal.timeout(AUTH_REQUEST_TIMEOUT_MS),
-      });
+    const revoke = () => revokeSession(client, result.token);
 
     try {
       const settings = await readSettings(home);
@@ -163,14 +173,7 @@ export async function logout(home = homedir()) {
   let revoked = true;
   if (credential) {
     try {
-      const response = await fetch(`${server}/v1/auth/cli/session`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${credential.token}` },
-        redirect: "error",
-        signal: AbortSignal.timeout(AUTH_REQUEST_TIMEOUT_MS),
-      });
-
-      revoked = response.ok;
+      await revokeSession(signInClient(server, home), credential.token);
     } catch {
       revoked = false;
     }

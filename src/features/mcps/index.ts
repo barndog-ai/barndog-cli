@@ -13,7 +13,7 @@ import {
 import { selectOrigin } from "../server/origin.js";
 import { connection } from "../server/connection.js";
 import { selectAsset } from "../server/catalog.js";
-import { type RetryKey, request } from "../server/request.js";
+import { type RetryKey, parsed } from "../server/client.js";
 import { readSettings } from "../../config/settings.js";
 import type { McpServer, PublishedAsset } from "../asset-kinds/index.js";
 import {
@@ -31,6 +31,7 @@ import { fileText } from "../../shared/files.js";
 import { defined } from "../../shared/lookup.js";
 import { CliError } from "../../errors.js";
 import { barndogPaths } from "../../config/paths.js";
+import { apiClient } from "../auth/transport.js";
 
 export type McpWriteInput = {
   name: string;
@@ -69,16 +70,17 @@ export async function createMcp(
 
   const definition = await readDefinition(input.file);
 
-  return request(conn, "/v1/mcps", mcpSchema, {
-    home,
-    method: "POST",
-    body: {
-      name: input.name,
-      origin: { type: scope.type, id: scope.id },
-      definition,
-      idempotencyKey: input.key ?? randomUUID(),
-    },
-  });
+  return parsed(
+    mcpSchema,
+    apiClient(conn.server, home).POST("/v1/mcps", {
+      body: {
+        name: input.name,
+        origin: { type: scope.type, id: scope.id },
+        definition,
+        idempotencyKey: input.key ?? randomUUID(),
+      },
+    }),
+  );
 }
 
 /** Publishes a new revision of an MCP configuration, against the inspected version. */
@@ -91,19 +93,16 @@ export async function updateMcp(
   const definition = await readDefinition(input.file);
   const selected = await selectAsset("mcp", input.name, input.origin, home);
 
-  return request(
-    conn,
-    `/v1/mcps/${selected.reference.id}/versions`,
+  return parsed(
     mcpSchema,
-    {
-      home,
-      method: "POST",
+    apiClient(conn.server, home).POST("/v1/mcps/{id}/versions", {
+      params: { path: { id: selected.reference.id } },
       body: {
         definition,
         expectedVersionId: z.uuidv4().parse(input.expectedVersion),
         idempotencyKey: input.key ?? randomUUID(),
       },
-    },
+    }),
   );
 }
 
@@ -140,11 +139,11 @@ export async function mcpVersions(
 
   const selected = await selectAsset("mcp", name, origin, home);
 
-  return request(
-    selected.connection,
-    `/v1/mcps/${selected.reference.id}/versions`,
+  return parsed(
     z.array(mcpVersionSchema),
-    { home },
+    apiClient(selected.connection.server, home).GET("/v1/mcps/{id}/versions", {
+      params: { path: { id: selected.reference.id } },
+    }),
   );
 }
 

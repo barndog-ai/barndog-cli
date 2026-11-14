@@ -10,9 +10,10 @@ import {
 import { z } from "zod";
 
 import { readSettings, type Connection } from "../../config/settings.js";
-import { request } from "../server/request.js";
+import { parsed } from "../server/client.js";
 import { writeAtomic } from "../../shared/files.js";
 import { barndogPaths } from "../../config/paths.js";
+import { apiClient } from "../auth/transport.js";
 
 /** Background refresh policy: check at most every five minutes (milliseconds). */
 const CHECK_INTERVAL_MS = 300000;
@@ -65,11 +66,9 @@ async function writeCheck(home: string, check: Check) {
 /** A server from before the check existed answers 404; sync as if it changed. */
 async function currentRevision(conn: Connection, home: string) {
   try {
-    const { revision } = await request(
-      conn,
-      "/v1/environment/catalog/revision",
+    const { revision } = await parsed(
       environmentCatalogRevisionSchema,
-      { home },
+      apiClient(conn.server, home).GET("/v1/environment/catalog/revision"),
     );
 
     return revision;

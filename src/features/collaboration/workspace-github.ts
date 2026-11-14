@@ -10,6 +10,8 @@ import {
   gitPullSchema,
   type GitConnection,
   gitPullDetailsSchema,
+  gitProposalSchema,
+  gitRevisionSchema,
 } from "@barndog-ai/api-contract";
 import {
   packageFingerprint,
@@ -20,9 +22,9 @@ import {
   readDirectory,
 } from "@barndog-ai/api-contract/collaboration";
 import { metadata as packageMetadataFor } from "../asset-kinds/index.js";
-import { download } from "./remote.js";
+import { downloadPull, downloadVersion } from "./remote.js";
 import { getAsset } from "../server/catalog.js";
-import { request } from "../server/request.js";
+import { parsed } from "../server/client.js";
 import {
   encodeFiles,
   decodeFiles,
@@ -34,6 +36,7 @@ import { defined } from "../../shared/lookup.js";
 
 import type { CloudPushResult, UpdatedCloudWorkingCopy } from "./results.js";
 import { CliError } from "../../errors.js";
+import { apiClient } from "../auth/transport.js";
 
 const publishedId = (work: { skillId?: string | null }) =>
   defined(work.skillId, "This working copy isn't published yet");
@@ -48,11 +51,9 @@ export async function externalSource(work: Workspace, home: string) {
     return undefined;
   }
 
-  const connections = await request(
-    work.connection,
-    "/v1/git-connections",
+  const connections = await parsed(
     z.array(gitConnectionSchema),
-    { home },
+    apiClient(work.connection.server, home).GET("/v1/git-connections"),
   );
 
   const source = connections.find(
@@ -104,18 +105,19 @@ export async function pullExternal(
   const external = work.external;
 
   if (external.pull) {
-    const { pull } = await request(
-      work.connection,
-      `/v1/git-connections/${source.id}/pulls/${external.pull.number}`,
+    const { pull } = await parsed(
       gitPullDetailsSchema,
-      { home },
+      apiClient(work.connection.server, home).GET(
+        "/v1/git-connections/{id}/pulls/{number}",
+        { params: { path: { id: source.id, number: external.pull.number } } },
+      ),
     );
 
     if (pull.head !== external.pull.head) {
-      const remote = await download(
-        `/v1/git-connections/${source.id}/pulls/${pull.number}/package`,
+      const remote = await downloadPull(
+        { connectionId: source.id, number: pull.number, head: pull.head },
         work.connection,
-        { home, commit: pull.head, kind: work.kind },
+        { home, kind: work.kind },
       );
 
       const merged = await mergeEntries(
@@ -152,10 +154,14 @@ export async function pullExternal(
   }
 
   if (asset.version.id !== work.baseVersionId) {
-    const latest = await download(
-      `/v1/skills/${work.skillId}/versions/${asset.version.number}/package`,
+    const latest = await downloadVersion(
+      {
+        id: publishedId(work),
+        number: asset.version.number,
+        commit: asset.version.commit,
+      },
       work.connection,
-      { home, commit: asset.version.commit, kind: work.kind },
+      { home, kind: work.kind },
     );
 
     const merged = await mergeEntries(decodeFiles(work.base), entries, latest);
@@ -192,7 +198,15 @@ export async function pushExternal(
 ): Promise<CloudPushResult> {
   work.external ??= { id: source.id };
   const external = work.external;
-  const path = `/v1/git-connections/${source.id}`;
+  const client = apiClient(work.connection.server, home);
+  const merge = (number: number, expectedCommit: string) =>
+    parsed(
+      gitConnectionSchema,
+      client.PUT("/v1/git-connections/{id}/pulls/{number}/merge", {
+        params: { path: { id: source.id, number } },
+        body: { expectedCommit },
+      }),
+    );
 
   if (!external.pending) {
     const asset = await getAsset(
@@ -211,11 +225,13 @@ export async function pushExternal(
 
     let pull = external.pull
       ? (
-          await request(
-            work.connection,
-            `${path}/pulls/${external.pull.number}`,
+          await parsed(
             gitPullDetailsSchema,
-            { home },
+            client.GET("/v1/git-connections/{id}/pulls/{number}", {
+              params: {
+                path: { id: source.id, number: external.pull.number },
+              },
+            }),
           )
         ).pull
       : undefined;
@@ -251,12 +267,7 @@ export async function pushExternal(
       !options.title
     ) {
       if (options.publish && pull) {
-        return request(
-          work.connection,
-          `${path}/pulls/${pull.number}/merge`,
-          gitConnectionSchema,
-          { home, method: "PUT", body: { expectedCommit: pull.head } },
-        );
+        return merge(pull.number, pull.head);
       }
 
       return { unchanged: true, pull: pull?.number };
@@ -278,22 +289,24 @@ export async function pushExternal(
   const pending = external.pending;
   let pull;
   try {
-    pull = await request(
-      work.connection,
-      pending.number
-        ? `${path}/pulls/${pending.number}/revisions`
-        : `${path}/pulls`,
+    const body = {
+      expectedCommit: pending.expectedCommit,
+      files: pending.files,
+      title: pending.title,
+      idempotencyKey: pending.idempotencyKey,
+    };
+
+    pull = await parsed(
       gitPullSchema,
-      {
-        home,
-        method: pending.number ? "PUT" : "POST",
-        body: {
-          expectedCommit: pending.expectedCommit,
-          files: pending.files,
-          title: pending.title,
-          idempotencyKey: pending.idempotencyKey,
-        },
-      },
+      pending.number
+        ? client.PUT("/v1/git-connections/{id}/pulls/{number}/revisions", {
+            params: { path: { id: source.id, number: pending.number } },
+            body: gitRevisionSchema.parse(body),
+          })
+        : client.POST("/v1/git-connections/{id}/pulls", {
+            params: { path: { id: source.id } },
+            body: gitProposalSchema.parse(body),
+          }),
     );
   } catch (error) {
     if (
@@ -322,12 +335,7 @@ export async function pushExternal(
   delete external.pending;
   await save(work, home);
   if (options.publish) {
-    return request(
-      work.connection,
-      `${path}/pulls/${pull.number}/merge`,
-      gitConnectionSchema,
-      { home, method: "PUT", body: { expectedCommit: external.pull.head } },
-    );
+    return merge(pull.number, external.pull.head);
   }
 
   return pull;

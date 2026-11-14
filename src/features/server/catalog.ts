@@ -1,8 +1,5 @@
 import { z } from "zod";
-import {
-  environmentCatalogSchema,
-  scopeSchema,
-} from "@barndog-ai/api-contract";
+import { environmentCatalogSchema } from "@barndog-ai/api-contract";
 import { connection } from "./connection.js";
 import { connectionContext } from "../auth/session.js";
 import { homedir } from "node:os";
@@ -15,14 +12,14 @@ import {
 import { type AssetKind } from "../../config/selection.js";
 import { only } from "../../shared/lookup.js";
 import { matchesOrigin } from "./origin.js";
-import { request } from "./request.js";
+import { type ApiClient, apiClient } from "../auth/transport.js";
+import { parsed, responseData } from "./client.js";
 import { CliError } from "../../errors.js";
 
 /** Every asset this developer can install, as the server lists them. */
 export type EnvironmentCatalog = z.infer<typeof environmentCatalogSchema>;
 
 /** A scope as the server describes it, with its name and whether you can publish there. */
-export type ApiScope = z.infer<typeof scopeSchema>;
 
 type CatalogEntry = EnvironmentCatalog["assets"][number];
 
@@ -58,11 +55,9 @@ export async function environmentCatalog(
 
   return {
     connection: conn,
-    catalog: await request(
-      conn,
-      "/v1/environment/catalog",
+    catalog: await parsed(
       environmentCatalogSchema,
-      { home },
+      apiClient(conn.server, home).GET("/v1/environment/catalog"),
     ),
   };
 }
@@ -73,12 +68,29 @@ export async function getAsset(
   conn: Connection,
   home = homedir(),
 ): Promise<PublishedAsset> {
-  const path = `/v1/${assetKinds[kind].route}/${z.uuidv4().parse(id)}`;
-
   return assetKinds[kind].schema.parse(
-    await request(conn, path, z.unknown(), { home }),
+    responseData(
+      await assetRoutes[kind](
+        apiClient(conn.server, home),
+        // Only a UUID may reach the URL.
+        z.uuidv4().parse(id),
+      ),
+    ),
   );
 }
+
+/** The route that returns one published asset of each kind. */
+const assetRoutes: Record<
+  AssetKind,
+  (client: ApiClient, id: string) => Promise<{ data?: unknown }>
+> = {
+  skill: (client, id) =>
+    client.GET("/v1/skills/{id}", { params: { path: { id } } }),
+  hook: (client, id) =>
+    client.GET("/v1/hooks/{id}", { params: { path: { id } } }),
+  mcp: (client, id) =>
+    client.GET("/v1/mcps/{id}", { params: { path: { id } } }),
+};
 
 /**
  * Resolves one catalog asset by name or ID and origin, then fetches its

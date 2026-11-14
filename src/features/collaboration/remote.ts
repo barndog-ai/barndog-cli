@@ -4,20 +4,15 @@ import {
   type Change,
   type Skill,
 } from "@barndog-ai/api-contract";
-import { parsePackage, defaultLimits } from "@barndog-ai/api-contract/package";
 import { publishedSkills } from "../skills/catalog.js";
 import { publishedHooks } from "../hooks/catalog.js";
-import { type Hook, assetKinds, assetNotFound } from "../asset-kinds/index.js";
-import { serverFetch } from "../auth/transport.js";
-import { collaborationClient, packagePath } from "./domain.js";
+import { type Hook, assetNotFound } from "../asset-kinds/index.js";
+import { unpackDownload } from "../workspace/packages.js";
+import { collaborationClient } from "./domain.js";
 import { type PackageKind } from "../../config/selection.js";
 import { type Connection } from "../../config/settings.js";
-import { CliError, PackageError } from "../../errors.js";
 import { only } from "../../shared/lookup.js";
 import { matchesOrigin } from "../server/origin.js";
-
-/** CLI policy: bound review writes to thirty seconds. */
-const REVIEW_REQUEST_TIMEOUT_MS = 30000;
 
 /**
  * The one published Skill or Hook named `name` in the origin `selector`; throws
@@ -45,56 +40,62 @@ export async function selectSkill(
   return match;
 }
 
-/**
- * Downloads and unpacks a package from the server, within the package size
- * limits and a 30-second timeout. With `commit`, refuses a package whose ETag
- * names another revision.
- */
-export async function download(
-  path: string,
+type DownloadOptions = { home?: string; kind?: PackageKind };
+
+/** The package of one published version, checked against that version's commit. */
+export function downloadVersion(
+  version: { id: string; number: number; commit: string },
   conn: Connection,
-  {
-    home = homedir(),
-    commit,
-    kind = "skill",
-  }: { home?: string; commit?: string; kind?: PackageKind } = {},
+  { home = homedir(), kind = "skill" }: DownloadOptions = {},
 ) {
-  const response = await serverFetch(conn.server, home)(
-    `${conn.server}${packagePath(path, kind)}`,
-    { signal: AbortSignal.timeout(REVIEW_REQUEST_TIMEOUT_MS) },
+  return unpackDownload(
+    collaborationClient(conn.server, home, kind).GET(
+      "/v1/skills/{id}/versions/{version}/package",
+      {
+        params: { path: { id: version.id, version: version.number } },
+        parseAs: "stream",
+      },
+    ),
+    { kind, commit: version.commit, subject: "the package" },
   );
+}
 
-  if (!response.ok) {
-    throw new CliError(
-      `Downloading the package failed (${response.status}). Try again.`,
-    );
-  }
+/** The package of a Suggested Change at one revision, checked against its commit. */
+export function downloadChange(
+  change: { id: string; revision: number; commit: string },
+  conn: Connection,
+  { home = homedir(), kind = "skill" }: DownloadOptions = {},
+) {
+  return unpackDownload(
+    collaborationClient(conn.server, home, kind).GET(
+      "/v1/skill-changes/{id}/package",
+      {
+        params: {
+          path: { id: change.id },
+          query: { revision: change.revision },
+        },
+        parseAs: "stream",
+      },
+    ),
+    { kind, commit: change.commit, subject: "the package" },
+  );
+}
 
-  if (commit && response.headers.get("etag") !== `"${commit}"`) {
-    throw new CliError(
-      "The package changed on the server while it was downloading. Try again.",
-    );
-  }
-
-  if (!response.body) {
-    throw new Error("The server sent a package download with no body");
-  }
-
-  let size = 0;
-  const chunks: Uint8Array[] = [];
-  for await (const chunk of response.body) {
-    size += chunk.length;
-    if (size > defaultLimits.compressed) {
-      throw new PackageError("PACKAGE_TOO_LARGE");
-    }
-
-    chunks.push(chunk);
-  }
-
-  return parsePackage(
-    Buffer.concat(chunks),
-    defaultLimits,
-    assetKinds[kind].manifest,
+/** The package at the head of a GitHub pull request, checked against that head. */
+export function downloadPull(
+  pull: { connectionId: string; number: number; head: string },
+  conn: Connection,
+  { home = homedir(), kind = "skill" }: DownloadOptions = {},
+) {
+  return unpackDownload(
+    collaborationClient(conn.server, home, kind).GET(
+      "/v1/git-connections/{id}/pulls/{number}/package",
+      {
+        params: { path: { id: pull.connectionId, number: pull.number } },
+        parseAs: "stream",
+      },
+    ),
+    { kind, commit: pull.head, subject: "the package" },
   );
 }
 

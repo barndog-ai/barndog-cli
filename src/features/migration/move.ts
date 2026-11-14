@@ -6,12 +6,10 @@ import {
   type KnowledgeContent,
   type McpDefinition,
   knowledgeIndexSchema,
-  scopeSchema,
 } from "@barndog-ai/api-contract";
 import type { PackageEntry } from "@barndog-ai/api-contract/package";
 import type { AssetKind } from "../../config/selection.js";
 import { stringify } from "yaml";
-import { z } from "zod";
 
 import {
   readSettings,
@@ -20,13 +18,13 @@ import {
   type GitWorkspace,
 } from "../../config/settings.js";
 import { CliError, friendlyMessage } from "../../errors.js";
-import { matchesOrigin, selectOrigin } from "../server/origin.js";
+import { matchesOrigin, selectOrigin, scopes } from "../server/origin.js";
 import { connection } from "../server/connection.js";
 import { selectScope } from "../collaboration/workspace-git.js";
 import { renameSkillEntries } from "../workspace/installed.js";
 import { originLabel } from "../server/origin.js";
 import { environmentCatalog } from "../server/catalog.js";
-import { request } from "../server/request.js";
+import { parsed } from "../server/client.js";
 import { synchronize } from "../environment/sync.js";
 import { locked } from "../environment/transaction.js";
 import { assetPath, stableId, type RepoAsset } from "../workspace/format.js";
@@ -36,7 +34,11 @@ import {
   createGitWorkspace,
   inspectRepository,
 } from "../workspace/setup.js";
-import { LoginRequiredError, normalizeServer } from "../auth/transport.js";
+import {
+  LoginRequiredError,
+  normalizeServer,
+  apiClient,
+} from "../auth/transport.js";
 import { connectionContext } from "../auth/session.js";
 import { publishKnowledge, publishMcp, publishPackage } from "./migrate.js";
 import { readMoved, recordMoved } from "../workspace/overlay.js";
@@ -56,6 +58,7 @@ import {
 import { defined } from "../../shared/lookup.js";
 import { setYamlName } from "../../shared/patterns.js";
 import { barndogPaths } from "../../config/paths.js";
+import { PAGE_SIZE } from "../server/pages.js";
 
 /** Three random bytes distinguish temporary move branches. */
 const MOVE_BRANCH_RANDOM_BYTES = 3;
@@ -380,16 +383,16 @@ async function moveToCloud(
 
   const { catalog } = await environmentCatalog(home, conn);
   const docs = (
-    await request(conn, "/v1/knowledge?limit=100", knowledgeIndexSchema, {
-      home,
-    })
+    await parsed(
+      knowledgeIndexSchema,
+      apiClient(conn.server, home).GET("/v1/knowledge", {
+        params: { query: { limit: PAGE_SIZE } },
+      }),
+    )
   ).documents;
 
-  const scopes = await request(conn, "/v1/scopes", z.array(scopeSchema), {
-    home,
-  });
-
-  const org = scopes.find((s) => s.type === "org");
+  const visible = await scopes(conn, home);
+  const org = visible.find((s) => s.type === "org");
   const rows: MoveRow[] = [];
   for (const item of items) {
     const base = { kind: item.kind, name: item.name };
@@ -614,11 +617,9 @@ export async function listLocalAssets(home = homedir()): Promise<LocalAssets> {
 /** Where setup can offer to send local assets in a Cloud Workspace; personal first. */
 export async function cloudMoveTargets(home: string) {
   const conn = await connection(home);
-  const scopes = await request(conn, "/v1/scopes", z.array(scopeSchema), {
-    home,
-  });
+  const visible = await scopes(conn, home);
 
-  return scopes
+  return visible
     .filter(
       (s) => s.canPublish && (s.type !== "dev" || matchesOrigin(s, "me", conn)),
     )

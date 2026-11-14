@@ -10,12 +10,13 @@ import {
 import { selectOrigin } from "../server/origin.js";
 import { connection } from "../server/connection.js";
 import { selectAsset } from "../server/catalog.js";
-import { type RetryKey, request } from "../server/request.js";
+import { type RetryKey, parsed } from "../server/client.js";
 import type { AssetKind } from "../../config/selection.js";
 import { randomUUID } from "node:crypto";
 import { assetKindList } from "../asset-kinds/index.js";
 import { only } from "../../shared/lookup.js";
-import { allPages } from "../server/pages.js";
+import { allPages, PAGE_SIZE } from "../server/pages.js";
+import { apiClient } from "../auth/transport.js";
 
 type DeveloperList = z.infer<typeof developerListSchema>;
 
@@ -41,17 +42,11 @@ export async function developers(
   const conn = await connection(home);
 
   return allPages(async (cursor) => {
-    const query = new URLSearchParams({
-      limit: "100",
-      ...(search ? { search } : {}),
-      ...(cursor ? { cursor } : {}),
-    });
-
-    const page: DeveloperList = await request(
-      conn,
-      `/v1/developers?${query}`,
+    const page: DeveloperList = await parsed(
       developerListSchema,
-      { home },
+      apiClient(conn.server, home).GET("/v1/developers", {
+        params: { query: { limit: PAGE_SIZE, search, cursor } },
+      }),
     );
 
     return { items: page.developers, nextCursor: page.nextCursor };
@@ -82,17 +77,14 @@ export async function developerAssets(
 
   const conn = await connection(home);
   const assets = await allPages(async (cursor) => {
-    const query = new URLSearchParams({
-      limit: "100",
-      ...(search ? { search } : {}),
-      ...(cursor ? { cursor } : {}),
-    });
-
-    const page: DeveloperAssetPage = await request(
-      conn,
-      `/v1/developers/${developer.id}/assets?${query}`,
+    const page: DeveloperAssetPage = await parsed(
       developerAssetsSchema,
-      { home },
+      apiClient(conn.server, home).GET("/v1/developers/{id}/assets", {
+        params: {
+          path: { id: developer.id },
+          query: { limit: PAGE_SIZE, search, cursor },
+        },
+      }),
     );
 
     return { items: page.assets, nextCursor: page.nextCursor };
@@ -138,18 +130,25 @@ export async function copyToScope(
 
   const scope = await selectOrigin(input.target, selected.connection, home);
 
-  const schema = action === "fork" ? forkInputSchema : promotionInputSchema;
-  const body = schema.parse({
+  const client = apiClient(selected.connection.server, home);
+  const params = { path: { kind: input.kind, id: selected.reference.id } };
+  const body = {
     name: input.newName,
     origin: { type: scope.type, id: scope.id },
     idempotencyKey: input.key ?? randomUUID(),
-  });
+  };
 
-  return request(
-    selected.connection,
-    `/v1/environment/${input.kind}/${selected.reference.id}/${action}`,
+  return parsed(
     promotionSchema,
-    { home, method: "POST", body },
+    action === "fork"
+      ? client.POST("/v1/environment/{kind}/{id}/fork", {
+          params,
+          body: forkInputSchema.parse(body),
+        })
+      : client.POST("/v1/environment/{kind}/{id}/promote", {
+          params,
+          body: promotionInputSchema.parse(body),
+        }),
   );
 }
 

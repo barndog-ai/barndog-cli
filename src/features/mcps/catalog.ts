@@ -1,8 +1,9 @@
 import { mcpListSchema } from "@barndog-ai/api-contract";
 import type { Connection } from "../../config/settings.js";
 import type { CatalogAsset } from "../asset-kinds/index.js";
-import { request } from "../server/request.js";
-import { allPages } from "../server/pages.js";
+import { parsed } from "../server/client.js";
+import { allPages, PAGE_SIZE } from "../server/pages.js";
+import { apiClient } from "../auth/transport.js";
 
 /**
  * Fetches every MCP catalog page, rejecting organization mismatches and
@@ -13,11 +14,11 @@ export async function mcpCatalog(
   home: string,
 ): Promise<CatalogAsset[]> {
   return allPages(async (cursor) => {
-    const page = await request(
-      conn,
-      `/v1/mcps?limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+    const page = await parsed(
       mcpListSchema,
-      { home },
+      apiClient(conn.server, home).GET("/v1/mcps", {
+        params: { query: { limit: PAGE_SIZE, cursor } },
+      }),
     );
 
     const items = page.mcps.map((mcp): CatalogAsset => {

@@ -116,11 +116,14 @@ export function serverFetch(
   };
 }
 
+/** The contract's typed client; openapi-fetch doesn't name the type for our paths. */
+export type ApiClient = ReturnType<typeof createApiClient>;
+
 /**
  * A typed client for the BarnDog API that sends the saved credential for
  * `server`, refusing redirects and requests to other origins.
  */
-export function apiClient(server: string, home = homedir()) {
+export function apiClient(server: string, home = homedir()): ApiClient {
   return createApiClient({
     baseUrl: normalizeServer(server),
     fetch: serverFetch(server, home),

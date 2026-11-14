@@ -6,13 +6,14 @@ import {
   type KnowledgeContent,
 } from "@barndog-ai/api-contract";
 import { connection } from "../server/connection.js";
-import { request } from "../server/request.js";
+import { parsed } from "../server/client.js";
 import { openRepoSource } from "../workspace/workspace-source.js";
 import { activeLocal, localOverlay } from "../workspace/overlay.js";
 import { readSettings } from "../../config/settings.js";
 import { CliError } from "../../errors.js";
 import type { InvalidKnowledge } from "../workspace/format.js";
-import { allPages } from "../server/pages.js";
+import { allPages, PAGE_SIZE } from "../server/pages.js";
+import { apiClient } from "../auth/transport.js";
 
 type KnowledgeIndex = z.infer<typeof knowledgeIndexSchema>;
 
@@ -60,17 +61,17 @@ async function sharedKnowledge(
   const conn = await connection(home);
 
   return allPages(async (cursor) => {
-    const params = new URLSearchParams({
-      limit: "100",
-      ...(always ? { accessMode: "always" } : {}),
-      ...(cursor ? { cursor } : {}),
-    });
-
-    const page: KnowledgeIndex = await request(
-      conn,
-      `/v1/knowledge?${params}`,
+    const page: KnowledgeIndex = await parsed(
       knowledgeIndexSchema,
-      { home },
+      apiClient(conn.server, home).GET("/v1/knowledge", {
+        params: {
+          query: {
+            limit: PAGE_SIZE,
+            cursor,
+            ...(always ? { accessMode: "always" as const } : {}),
+          },
+        },
+      }),
     );
 
     return { items: page.documents, nextCursor: page.nextCursor };
@@ -96,11 +97,11 @@ async function sharedDocument(
 
   const conn = await connection(home);
 
-  return request(
-    conn,
-    `/v1/knowledge/${encodeURIComponent(name)}`,
+  return parsed(
     knowledgeDocumentSchema,
-    { home },
+    apiClient(conn.server, home).GET("/v1/knowledge/{selector}", {
+      params: { path: { selector: name } },
+    }),
   );
 }
 
