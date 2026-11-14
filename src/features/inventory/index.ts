@@ -6,7 +6,6 @@ import { selectionState } from "../../config/environment.js";
 import { readState } from "../../config/state.js";
 import { treeFingerprint } from "../environment/installed.js";
 import { linkTarget } from "../environment/transaction.js";
-import { fileText } from "../../shared/files.js";
 import { environmentCatalog, request } from "../environment/remote.js";
 import { openRepoSource } from "../environment/workspace-source.js";
 import { localOverlay, mergeLocalCatalog } from "../git-workspace/overlay.js";
@@ -17,7 +16,6 @@ import {
   originLabel,
   resolveClashes,
 } from "../environment/names.js";
-import { asRecord } from "../../shared/values.js";
 import type { Harness } from "../../harnesses/types.js";
 import type { AssetKind } from "../asset-selection/types.js";
 import { isAssetKind } from "../asset-kinds/index.js";
@@ -56,26 +54,6 @@ export type Inventory = {
   offline: string | null;
   items: InventoryItem[];
 };
-
-const nativeSchema = z.array(
-  z.object({
-    id: z.string(),
-    kind: z.string(),
-    harness: z.string(),
-    file: z.string(),
-    key: z.string(),
-  }),
-);
-
-const installedSchema = z.array(
-  z.object({
-    id: z.string(),
-    kind: z.string(),
-    path: z.string(),
-    fingerprint: z.string().optional(),
-    versionId: z.string().optional(),
-  }),
-);
 
 /** What is selected and what is actually installed on this machine. */
 /** The state of a selected asset; the first that applies wins. */
@@ -127,11 +105,8 @@ export async function inventory(home = homedir()): Promise<Inventory> {
   }
 
   const statePath = join(home, ".barndog/state.json");
-  const raw = await fileText(statePath);
   const state = await readState(statePath, home);
-  const parsed = asRecord(raw ? JSON.parse(raw) : {});
-  const native = nativeSchema.parse(parsed.native ?? []);
-  const installed = installedSchema.parse(parsed.installed ?? []);
+  const { native, installed } = state;
   const conn = settings.connection;
   const localNames = settings.localNames ?? {};
   const linksOf = (id: string) => state.links.filter((l) => l.id === id);

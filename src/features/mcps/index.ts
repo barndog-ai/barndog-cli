@@ -1,3 +1,4 @@
+import { readState } from "../../config/state.js";
 import { homedir } from "node:os";
 import { readFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -22,11 +23,7 @@ import {
 import { gitVersions } from "../collaboration/workspace-git.js";
 import type { PackageVersion } from "../collaboration/results.js";
 import type { Harness } from "../../harnesses/types.js";
-import {
-  patchNative,
-  nativeFile,
-  type NativeEntry,
-} from "../native/configuration.js";
+import { patchNative, type NativeEntry } from "../native/configuration.js";
 import { fileText } from "../../shared/files.js";
 import { defined } from "../../shared/lookup.js";
 
@@ -146,22 +143,6 @@ export async function mcpVersions(
   );
 }
 
-/** The native entries in state.json, as far as authentication reads them. */
-const installedMcpSchema = z.looseObject({
-  native: z
-    .array(
-      z.looseObject({
-        id: z.string(),
-        kind: z.string(),
-        harness: z.string(),
-        file: z.string(),
-        key: z.string(),
-        value: z.record(z.string(), z.unknown()),
-      }),
-    )
-    .default([]),
-});
-
 /**
  * Guides MCP authentication or starts the native harness login command;
  * credentials remain in native storage.
@@ -215,9 +196,7 @@ export async function authenticateMcp(
     };
   }
 
-  const { native } = installedMcpSchema.parse(
-    JSON.parse((await fileText(join(home, ".barndog/state.json"))) ?? "{}"),
-  );
+  const { native } = await readState(join(home, ".barndog/state.json"), home);
 
   const installed = native.find(
     (e) => e.id === asset.id && e.kind === "mcp" && e.harness === harness,
@@ -230,10 +209,6 @@ export async function authenticateMcp(
   }
 
   const entry: NativeEntry = { ...installed, kind: "mcp", harness };
-  if (entry.file !== nativeFile(harness, "mcp", home)) {
-    throw new Error("Invalid native installation state");
-  }
-
   patchNative(await fileText(entry.file), [entry], [entry]);
   if (harness === "cursor") {
     return {

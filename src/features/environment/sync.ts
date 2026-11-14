@@ -3,7 +3,6 @@ import { basename, dirname, join, resolve } from "node:path";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
-import { z } from "zod";
 import { hookManifestSchema } from "@barndog-ai/api-contract";
 import { readState, type Link } from "../../config/state.js";
 import {
@@ -15,12 +14,7 @@ import {
 } from "../../config/settings.js";
 import { packageFingerprint } from "@barndog-ai/api-contract/package";
 import { CliError } from "../../errors.js";
-import {
-  desiredEntries,
-  installedPath,
-  installedRoot,
-  treeFingerprint,
-} from "./installed.js";
+import { desiredEntries, installedPath, treeFingerprint } from "./installed.js";
 import {
   installedName,
   originLabel,
@@ -29,7 +23,7 @@ import {
   type ClashResolver,
 } from "./names.js";
 import { selectionState, withSelection } from "../../config/environment.js";
-import { harnesses, skillDirectory } from "../../harnesses/registry.js";
+import { skillDirectory } from "../../harnesses/registry.js";
 import type { SyncEvent } from "./events.js";
 import { resolveAssets } from "../asset-selection/index.js";
 import { pruneCache } from "./packages.js";
@@ -51,25 +45,8 @@ import { shellQuote } from "../../shared/shell.js";
 import { linkTarget, locked, transact, type Write } from "./transaction.js";
 import { fileText, isInside } from "../../shared/files.js";
 import type { AssetCatalog } from "../asset-selection/types.js";
-import {
-  assetKinds,
-  packageKindList,
-  type PackageKind,
-} from "../asset-kinds/index.js";
+import { assetKinds, type PackageKind } from "../asset-kinds/index.js";
 import { defined } from "../../shared/lookup.js";
-
-const nativeSchema = z.array(
-  z
-    .object({
-      id: z.string(),
-      kind: z.enum(["mcp", "hook", "knowledge", "sync"]),
-      harness: z.enum(harnesses),
-      file: z.string(),
-      key: z.string(),
-      value: z.record(z.string(), z.unknown()),
-    })
-    .strict(),
-);
 
 /** The name an asset is installed under right now, whatever settings say it should be. */
 function heldName(
@@ -87,9 +64,7 @@ function heldName(
 /** Looks up installed names from state, for checks made outside a sync. */
 export async function installedNames(home: string) {
   const path = join(home, ".barndog/state.json");
-  const raw = await fileText(path);
-  const { links } = await readState(path, home);
-  const { native } = readStateFile(raw);
+  const { links, native } = await readState(path, home);
 
   return (id: string) => heldName(id, links, native);
 }
@@ -145,27 +120,6 @@ type InstalledTree = {
   versionId: string;
 };
 
-const installedSchema = z.array(
-  z
-    .object({
-      id: z.string(),
-      kind: z.enum(packageKindList),
-      path: z.string(),
-      fingerprint: z.string(),
-      versionId: z.string().optional(),
-    })
-    .strict(),
-);
-
-/** The parts of state.json this module owns; links are read by readState(). */
-const stateFileSchema = z.looseObject({
-  native: nativeSchema.default([]),
-  installed: installedSchema.default([]),
-});
-
-const readStateFile = (raw: string | null) =>
-  stateFileSchema.parse(raw ? JSON.parse(raw) : {});
-
 /**
  * Locks the environment, plans harness updates and applies journaled writes;
  * dry runs return planned events.
@@ -210,20 +164,7 @@ export async function synchronize(
     const rawState = await fileText(stateFile);
 
     const before = await readState(stateFile, home);
-    const { native: oldNative, installed: installedState } =
-      readStateFile(rawState);
-
-    for (const entry of oldNative) {
-      if (entry.file !== nativeFile(entry.harness, entry.kind, home)) {
-        throw new Error("Invalid native installation state");
-      }
-    }
-
-    for (const entry of installedState) {
-      if (dirname(entry.path) !== installedRoot(home, entry.kind)) {
-        throw new Error("Invalid installed package state");
-      }
-    }
+    const { native: oldNative, installed: installedState } = before;
 
     let selection = selectionState(settings);
     const followNotices =

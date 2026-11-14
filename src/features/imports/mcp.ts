@@ -1,3 +1,4 @@
+import { readState } from "../../config/state.js";
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
@@ -9,7 +10,6 @@ import {
 import { parse as parseJsonc } from "jsonc-parser";
 import { parse as parseToml } from "smol-toml";
 import { stringify } from "yaml";
-import { z } from "zod";
 
 import { readSettings, SetupRequiredError } from "../../config/settings.js";
 import { CliError } from "../../errors.js";
@@ -298,17 +298,9 @@ async function jsonFile(path: string) {
 export async function harnessServers(
   home = homedir(),
 ): Promise<HarnessServer[]> {
-  const state = await jsonFile(join(home, ".barndog/state.json"));
+  const { native } = await readState(join(home, ".barndog/state.json"), home);
   const owned = new Set(
-    z
-      .array(
-        z.looseObject({
-          kind: z.string(),
-          harness: z.string(),
-          key: z.string(),
-        }),
-      )
-      .parse(state.native ?? [])
+    native
       .filter((entry) => entry.kind === "mcp")
       .map((entry) => `${entry.harness}:${entry.key}`),
   );
