@@ -105,6 +105,11 @@ function selectAsset(
   return match;
 }
 
+/**
+ * The repository scope an origin selector names, for a new asset. A team or
+ * repo that has no folder yet is still accepted, so the first asset can create
+ * it; personal scopes don't exist in a Git workspace and are refused.
+ */
 export function selectScope(model: WorkspaceModel, origin: string) {
   const matches = model.scopes.filter((scope) =>
     matchesOrigin(scope, origin, model),
@@ -178,6 +183,11 @@ async function startWorkingCopy(
   }
 }
 
+/**
+ * Creates and registers a working folder from the current Git workspace
+ * snapshot. Takes the working-copy lock and attempts a fetch, with cached
+ * content used if fetching fails. Rejects existing folders and invalid assets.
+ */
 export function pullGitAsset(
   workspace: GitWorkspace,
   options: {
@@ -215,6 +225,10 @@ export function pullGitAsset(
   });
 }
 
+/**
+ * Starts a working copy from the kind's scaffold, fetching workspace metadata
+ * first. Asset content is not pushed until `push`.
+ */
 export function createGitAsset(
   workspace: GitWorkspace,
   options: {
@@ -247,6 +261,10 @@ export function createGitAsset(
   });
 }
 
+/**
+ * The working copy containing `cwd`, with its edits as diffs against the commit
+ * it started from. Throws `CliError` outside a working copy.
+ */
 export function gitWorkingStatus(
   cwd: string,
   home = homedir(),
@@ -304,6 +322,13 @@ async function branchFiles(work: GitWorkingCopy, head: string, home: string) {
   return usable(asset).entries;
 }
 
+/**
+ * `pull` for a Git working copy: merges edits pushed to its review branch, then
+ * the newest default-branch content, into the folder. Conflicting text gets
+ * base/local/remote markers and is listed in `conflicts`; refuses to run while
+ * earlier conflicts are unresolved. Drops the review once the default branch
+ * holds its content.
+ */
 export function updateGitWorkingCopy(
   cwd: string,
   home = homedir(),
@@ -368,6 +393,10 @@ export function updateGitWorkingCopy(
   });
 }
 
+/**
+ * Marks one conflicted file resolved, after checking its conflict markers are
+ * gone.
+ */
 export function resolveGitConflict(
   path: string,
   cwd: string,
@@ -378,6 +407,14 @@ export function resolveGitConflict(
   );
 }
 
+/**
+ * `push` for a Git working copy. With `publish`, commits straight to the
+ * workspace's default branch; otherwise commits to a review branch
+ * (`barndog/<scope>-<name>-<random>`) and opens a pull request when the host
+ * allows one. Inside a folder that isn't a working copy yet, `origin` registers
+ * it first. Refused when the review branch moved on the host since the last
+ * pull, or, with `publish`, when the asset changed on the default branch.
+ */
 export function pushGitWorkingCopy(
   workspace: GitWorkspace,
   options: {
@@ -630,6 +667,10 @@ async function history(
   return { versions, filesOf };
 }
 
+/**
+ * Every commit that changed the asset's folder, oldest first and numbered from
+ * 1, as Git workspaces have no published version numbers of their own.
+ */
 export async function gitVersions(
   workspace: GitWorkspace,
   target: HistoryTarget,
@@ -638,6 +679,7 @@ export async function gitVersions(
   return (await history(workspace, target, home)).versions;
 }
 
+/** A version's files, base64-encoded; the newest when `version` is left out. */
 export async function gitVersionFiles(
   workspace: GitWorkspace,
   target: HistoryTarget & { version?: number },
@@ -648,6 +690,10 @@ export async function gitVersionFiles(
   return { files: encodeFiles(await filesOf(target.version)) };
 }
 
+/**
+ * What changed in the asset between two versions, numbered as `gitVersions()`
+ * numbers them.
+ */
 export async function gitVersionDiff(
   workspace: GitWorkspace,
   target: HistoryTarget & { from: number; to: number },

@@ -104,6 +104,10 @@ export function renameSkillEntries(
   });
 }
 
+/**
+ * Reads package files from a source folder and optionally rewrites Skill
+ * metadata for an installed alias.
+ */
 export async function desiredEntries(
   source: string,
   rename: string | null,

@@ -40,6 +40,10 @@ type PullPackage = PullText & {
   key?: RetryKey;
 };
 
+/**
+ * A new pull request whose content is the complete package in `directory`,
+ * starting from the inspected canonical commit.
+ */
 export type GithubPullsCreateOptions = PullPackage & {
   connectionId: string;
   /** The inspected canonical commit the edits start from. */
@@ -47,6 +51,10 @@ export type GithubPullsCreateOptions = PullPackage & {
   title: string;
 };
 
+/**
+ * A new revision of an open pull request, refused if its head moved since
+ * `expectedCommit` was inspected.
+ */
 export type GithubPullsReviseOptions = PullPackage &
   PullReference & {
     /** The inspected pull head commit. */
@@ -54,12 +62,17 @@ export type GithubPullsReviseOptions = PullPackage &
     title?: string;
   };
 
+/** A review on the inspected head commit. */
 export type GithubPullsReviewOptions = PullText &
   PullReference & {
     expectedCommit: string;
     event: "APPROVE" | "REQUEST_CHANGES" | "COMMENT";
   };
 
+/**
+ * A comment on the inspected head commit: general, or inline when `path`,
+ * `line` and `side` are given.
+ */
 export type GithubPullsCommentOptions = PullText &
   PullReference & {
     expectedCommit: string;
@@ -68,6 +81,7 @@ export type GithubPullsCommentOptions = PullText &
     side?: "LEFT" | "RIGHT";
   };
 
+/** A merge of the inspected head commit. */
 export type GithubPullsMergeOptions = PullReference & {
   expectedCommit: string;
 };
@@ -168,6 +182,10 @@ export async function githubPullsRevise(
   );
 }
 
+/**
+ * Approves, requests changes or comments on a pull request at the inspected
+ * head commit. Reads `bodyFile` when given.
+ */
 export async function githubPullsReview(
   options: GithubPullsReviewOptions,
   home = homedir(),

@@ -21,6 +21,10 @@ export const selectionStateSchema = z
   })
   .strict();
 
+/**
+ * Reads selections from settings, returning empty lists when no environment has
+ * been saved.
+ */
 export function selectionState(settings: Settings): SelectionState {
   return (
     settings.environment ?? {
@@ -42,6 +46,10 @@ export function withSelection(
   };
 }
 
+/**
+ * Checks whether settings contain subscriptions or individually selected
+ * assets, including disabled selections.
+ */
 export function hasRemoteSelections(settings: Settings): boolean {
   const state = selectionState(settings);
 

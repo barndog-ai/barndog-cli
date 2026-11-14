@@ -25,6 +25,10 @@ export type HookProfile = {
   rootVariables: readonly string[];
 };
 
+/**
+ * Tool metadata for detection, Skill delivery and Hook imports; skillRoot is
+ * relative to the user home.
+ */
 export type HarnessAdapter = {
   id: Harness;
   name: string;

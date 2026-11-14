@@ -26,6 +26,10 @@ export function executable(
   return which(command, { path, nothrow: true });
 }
 
+/**
+ * Checks required executables and optionally runs the harness version command;
+ * returns the first issue or null.
+ */
 export async function runtimeRequirements(
   harness: Harness,
   requirements: { commands: string[]; harnessVersion?: string },
@@ -67,6 +71,10 @@ export async function runtimeRequirements(
   return null;
 }
 
+/**
+ * Builds a harness-specific MCP configuration entry with secret references;
+ * does not write native settings.
+ */
 export function mcpEntry(
   harness: Harness,
   asset: { id: string; name: string },
@@ -146,6 +154,10 @@ export function mcpEntry(
   };
 }
 
+/**
+ * Builds native Hook entries with commands rooted at the installed package;
+ * missing implementations yield no entries.
+ */
 export function hookEntries(
   harness: Harness,
   { id, root, manifest }: { id: string; root: string; manifest: HookManifest },

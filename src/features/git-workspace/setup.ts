@@ -22,8 +22,15 @@ import {
   trackingRef,
 } from "./source.js";
 
+/**
+ * Branch name used when creating the first commit of an empty Git workspace.
+ */
 export const DEFAULT_BRANCH = "main";
 
+/**
+ * Queries a remote repository's default head with credential prompts allowed
+ * for interactive setup.
+ */
 export const inspectRepository = (url: string): Promise<RemoteHead> =>
   remoteHead(url, true);
 

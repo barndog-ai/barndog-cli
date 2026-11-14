@@ -3,6 +3,7 @@ import { InvalidArgumentError, type Command } from "commander";
 import { originLabel } from "../features/environment/names.js";
 import { positiveInteger } from "./options.js";
 
+/** Asset-list filters and pagination inputs; page numbers are one-based. */
 export type ListOptions = {
   search?: string;
   origin?: string;
@@ -17,6 +18,10 @@ export type ListAsset = {
   version?: { number: number; description?: string };
 };
 
+/**
+ * Adds origin, paging and optional search flags to a Commander command,
+ * mutating and returning it.
+ */
 export function assetListOptions(command: Command, withSearch = true): Command {
   if (withSearch) {
     command.option(
@@ -33,6 +38,10 @@ export function assetListOptions(command: Command, withSearch = true): Command {
   );
 }
 
+/**
+ * Adds positive page and limit flags to a command; defaults are page 1 and 20
+ * rows, with a 100-row maximum.
+ */
 export function pageOptions(command: Command): Command {
   return command
     .option("--page <number>", "Results page", positiveInteger, 1)
@@ -83,6 +92,10 @@ export function filterAssets<T extends ListAsset>(
     );
 }
 
+/**
+ * Filters and slices rows using one-based paging, returning totals and at least
+ * one page even for empty results.
+ */
 export function assetPage<T extends ListAsset>(
   rows: T[],
   options: ListOptions,

@@ -57,6 +57,10 @@ function requestBody(body: unknown): {
   };
 }
 
+/**
+ * Sends an authenticated /v1/ request and validates JSON against the supplied
+ * schema; non-success responses throw ApiError.
+ */
 export async function request<T>(
   conn: Connection,
   path: string,
@@ -96,6 +100,10 @@ export async function request<T>(
   return schema.parse(await response.json());
 }
 
+/**
+ * Fetches the environment catalog and authenticated connection, rejecting a
+ * mismatch with an expected saved identity.
+ */
 export async function environmentCatalog(
   home = homedir(),
   expected?: Connection,
@@ -138,6 +146,10 @@ export async function getAsset(
   );
 }
 
+/**
+ * Resolves one catalog asset by name or ID and origin, then fetches its
+ * published content; ambiguous matches fail.
+ */
 export async function selectAsset(
   kind: AssetKind,
   name: string,

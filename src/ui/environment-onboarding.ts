@@ -34,6 +34,10 @@ function sourceLabels(
   });
 }
 
+/**
+ * Creates the interactive environment picker using the supplied output sink;
+ * returns selections without persisting them.
+ */
 export function environmentChooser(
   write: (text: string) => void,
 ): ChooseEnvironment {

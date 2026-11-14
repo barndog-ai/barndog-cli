@@ -17,6 +17,10 @@ export class SetupRequiredError extends Error {
   }
 }
 
+/**
+ * Saved server origin and organization/developer identity used to bind remote
+ * operations.
+ */
 export type Connection = {
   server: string;
   organizationId: string;
@@ -148,6 +152,10 @@ function validate(value: unknown): Settings {
   return settings;
 }
 
+/**
+ * Reads and validates YAML settings at the given path; a missing file returns
+ * null, malformed settings throw.
+ */
 export async function readSettings(
   home = homedir(),
   path = settingsPath(home),
@@ -170,6 +178,9 @@ export function settingsText(settings: Settings): string {
   return stringify(settings);
 }
 
+/**
+ * Validates and atomically writes settings under the supplied home directory.
+ */
 export async function saveSettings(
   settings: Settings,
   home = homedir(),

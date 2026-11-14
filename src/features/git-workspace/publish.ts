@@ -18,6 +18,10 @@ import {
 
 const execute = promisify(execFile);
 
+/**
+ * Repository-relative file bytes and executable flag used to construct a Git
+ * commit.
+ */
 export type NewFile = { path: string; data: Buffer; executable: boolean };
 
 const NULL_HASH = "0".repeat(40);
@@ -88,6 +92,10 @@ export async function commitFiles(
   }
 }
 
+/**
+ * Pushes a commit to an origin branch; prompts are opt-in and Git rejections
+ * become CLI errors.
+ */
 export async function pushCommit(
   repo: string,
   commit: string,
@@ -124,6 +132,10 @@ export async function remoteBranch(repo: string, branch: string) {
   return parseLsRemote(output)[0]?.commit ?? null;
 }
 
+/**
+ * Extracts a normalized credential-free host and repository path from a remote
+ * URL; invalid remotes return null.
+ */
 export function hostOf(url: string) {
   const remote = normalizeRepositoryRemote(url);
   if (!remote) {

@@ -16,6 +16,10 @@ import {
   serverFetch,
 } from "./transport.js";
 
+/**
+ * Device-login inputs, including the caller callback that presents verification
+ * details before polling.
+ */
 export type LoginOptions = {
   server?: string;
   home?: string;
@@ -27,6 +31,10 @@ export type LoginOptions = {
   }) => Promise<void>;
 };
 
+/**
+ * The saved connection's server, else the server last signed in to, as a
+ * validated origin.
+ */
 export async function configuredServer(
   home = homedir(),
 ): Promise<string | undefined> {
@@ -48,6 +56,10 @@ async function selectedServer(server: string | undefined, home: string) {
   return normalizeServer(value);
 }
 
+/**
+ * Starts device login, invokes the verification callback, polls completion and
+ * persists the returned session.
+ */
 export async function login(options: LoginOptions) {
   const home = options.home ?? homedir();
   const server = await selectedServer(options.server, home);
@@ -132,6 +144,10 @@ export async function login(options: LoginOptions) {
   }
 }
 
+/**
+ * Attempts remote session revocation and removes local credentials even if
+ * revocation fails; reports that outcome.
+ */
 export async function logout(home = homedir()) {
   const server = await selectedServer(undefined, home);
   const credential = (await readCredentials(home)).servers[server];
@@ -164,6 +180,10 @@ export async function logout(home = homedir()) {
 /** Who this machine is signed in as, and on which server. */
 export type AuthStatus = { server: string; context: ActorContext };
 
+/**
+ * Fetches the authenticated server context; missing or expired credentials
+ * require login.
+ */
 export async function authStatus(
   home = homedir(),
   explicitServer?: string,

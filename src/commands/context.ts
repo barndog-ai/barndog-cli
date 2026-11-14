@@ -121,6 +121,10 @@ import type {
 /** Output and prompting preferences resolved from global flags and the terminal. */
 export type Mode = { json: boolean; interactive: boolean };
 
+/**
+ * Services and ambient inputs injected into command handlers, allowing tests to
+ * replace individual operations.
+ */
 export type CommandContext = {
   login: (options: {
     server?: string;

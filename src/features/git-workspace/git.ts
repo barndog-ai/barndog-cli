@@ -28,6 +28,10 @@ export function gitReason(stderr: string) {
 /** Git can't read the repository with what this machine has set up. */
 export class RepositoryAccessError extends CliError {}
 
+/**
+ * Git command failure retaining stderr and exit status for actionable
+ * diagnostics.
+ */
 export class GitError extends Error {
   constructor(
     message: string,
@@ -39,6 +43,10 @@ export class GitError extends Error {
   }
 }
 
+/**
+ * Git process inputs, repository and environment overrides; credential prompts
+ * are opt-in.
+ */
 export type GitOptions = {
   /** The repository to run in; omitted for commands that take a URL. */
   repo?: string;
@@ -132,6 +140,10 @@ export function gitInTerminal(args: string[]): Promise<void> {
   });
 }
 
+/**
+ * Runs Git with the supplied arguments and returns UTF-8 stdout with
+ * surrounding whitespace removed.
+ */
 export const gitText = async (args: string[], options?: GitOptions) =>
   (await git(args, options)).toString("utf8").trim();
 
@@ -190,6 +202,7 @@ export function parseLsRemote(output: string): RemoteRef[] {
     .map(([commit = "", ref = ""]) => ({ commit, ref }));
 }
 
+/** Remote default branch and commit; null represents an empty repository. */
 export type RemoteHead = { branch: string; commit: string } | null;
 
 /** `ref: refs/heads/main\tHEAD` in `git ls-remote --symref <url> HEAD` output. */

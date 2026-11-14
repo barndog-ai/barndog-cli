@@ -23,6 +23,9 @@ import { LOCAL_ORIGIN } from "../git-workspace/overlay.js";
 import { ensureLocalWorkspace } from "./local.js";
 import { asRecord, asStrings, isRecord } from "../../shared/values.js";
 
+/**
+ * An MCP server entry as a harness or pasted JSON spells it, before conversion.
+ */
 export type RawServer = Record<string, unknown>;
 
 export type ImportedServer = { name: string; server: RawServer };
@@ -101,6 +104,10 @@ const SECRET_WORD = /api[-_]?key|token|secret|password/i;
 export const looksSecret = (arg: string) =>
   SECRET_WORD.test(arg) || arg.startsWith("sk-");
 
+/**
+ * An imported server as a BarnDog MCP definition, with what the developer still
+ * has to do (such as set an environment variable).
+ */
 export type ConvertedServer = {
   name: string;
   definition: McpDefinition;
@@ -137,6 +144,11 @@ function reference(
   return { secretRef: fallback };
 }
 
+/**
+ * Converts environment and header values to local secret references. Command
+ * arguments and URLs are preserved, so the result is not guaranteed to be free
+ * of secrets.
+ */
 export function convertServer(
   { name, server }: ImportedServer,
   description?: string,
@@ -345,6 +357,11 @@ export async function conflictingEntries(name: string, home = homedir()) {
     }));
 }
 
+/**
+ * Writes converted MCP servers and synchronizes them. Existing local workspace
+ * names are always rejected; replace permits backing up and removing
+ * conflicting native entries.
+ */
 export async function addMcpServers(
   servers: ConvertedServer[],
   options: { replace?: boolean },

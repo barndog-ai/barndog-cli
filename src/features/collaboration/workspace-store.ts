@@ -30,6 +30,9 @@ const filesSchema = z.array(
   z.object({ path: z.string(), content: z.string(), executable: z.boolean() }),
 );
 
+/**
+ * Package files as JSON can hold them: base64 content plus the executable bit.
+ */
 export type Files = z.infer<typeof filesSchema>;
 
 const workspaceSchema = z.object({
@@ -89,6 +92,11 @@ const workspaceSchema = z.object({
   pendingSnapshot: z.string().optional(),
 });
 
+/**
+ * A Cloud working copy's record in `~/.barndog/workspaces/`: its server
+ * identity, the version and files it started from, its proposal, pending
+ * uploads (kept with their retry keys) and unresolved conflicts.
+ */
 export type Workspace = z.infer<typeof workspaceSchema>;
 
 const gitWorkspaceSchema = z.object({
@@ -121,6 +129,10 @@ const gitWorkspaceSchema = z.object({
   pendingSnapshot: z.string().optional(),
 });
 
+/**
+ * A Git working copy's record in `~/.barndog/workspaces/`: the workspace and
+ * scope, the commit and files it started from, and its review branch.
+ */
 export type GitWorkingCopy = z.infer<typeof gitWorkspaceSchema>;
 
 /** The fields any working-copy record needs for saving and interrupted-write recovery. */
@@ -130,6 +142,7 @@ type StoredRecord = {
   pendingSnapshot?: string;
 };
 
+/** Package entries as base64 `Files`, to store or send as JSON. */
 export const encodeFiles = (entries: PackageEntry[]): Files =>
   entries.map((e) => ({
     path: e.path,
@@ -144,6 +157,10 @@ export const decodeFiles = (files: Files): PackageEntry[] =>
     executable: e.executable,
   }));
 
+/**
+ * `~/.barndog/workspaces/`: working-copy records, keyed by a hash of the folder
+ * path, with their lock and recovery snapshots.
+ */
 export function directory(home: string) {
   return join(home, ".barndog", "workspaces");
 }
@@ -155,6 +172,7 @@ function recordPath(root: string, home: string) {
   );
 }
 
+/** Writes a working-copy record atomically, replacing the previous one. */
 export async function save<T extends StoredRecord>(work: T, home: string) {
   await writeAtomic(recordPath(work.root, home), JSON.stringify(work));
 }
@@ -175,6 +193,11 @@ export function locked<T>(home: string, run: () => Promise<T>): Promise<T> {
 /** Root working-copy commands only make sense inside a pulled or created folder. */
 export class NoWorkingCopyError extends CliError {}
 
+/**
+ * The Cloud working copy containing `cwd`, searching up from it. Finishes an
+ * interrupted write first; throws `NoWorkingCopyError` when no folder above
+ * `cwd` is registered, and a fix when the record belongs to a Git workspace.
+ */
 export const find = (cwd: string, home: string): Promise<Workspace> =>
   findRecord(cwd, home, (value) => {
     if (value && typeof value === "object" && "git" in value) {
@@ -187,6 +210,7 @@ export const find = (cwd: string, home: string): Promise<Workspace> =>
     return workspaceSchema.parse(value);
   });
 
+/** The Git working copy containing `cwd`; `find()` for Git workspaces. */
 export const findGit = (cwd: string, home: string): Promise<GitWorkingCopy> =>
   findRecord(cwd, home, (value) => {
     if (!value || typeof value !== "object" || !("git" in value)) {
@@ -328,6 +352,11 @@ async function replaceFiles(root: string, entries: PackageEntry[]) {
   await writePackage(root, entries);
 }
 
+/**
+ * Replaces working files and saves the record. Saves the prior files and record
+ * in a recovery snapshot first; the next working-copy lookup finishes an
+ * interrupted write unless it detects additional local edits.
+ */
 export async function applyFiles<T extends StoredRecord>(
   work: T,
   entries: PackageEntry[],

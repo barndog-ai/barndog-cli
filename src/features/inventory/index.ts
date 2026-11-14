@@ -44,6 +44,10 @@ export type InventoryItem = {
   paths: string[];
 };
 
+/**
+ * Installation overview. Offline can indicate either a cached Git snapshot or a
+ * fallback to saved installation state.
+ */
 export type Inventory = {
   harnesses: Harness[];
   server: string | null;
@@ -112,6 +116,10 @@ function leftoverState(modified: boolean, offline: boolean): InventoryState {
   return offline ? "installed" : "removing";
 }
 
+/**
+ * Compares configured selections, catalog and installed files to report status;
+ * unreachable sources fall back to local state.
+ */
 export async function inventory(home = homedir()): Promise<Inventory> {
   const settings = await readSettings(home);
   if (!settings) {

@@ -226,6 +226,9 @@ export async function pickMany<T>(
   return prompt({ message, choices, multiple: true });
 }
 
+/**
+ * Prompts for exactly one typed choice; an empty list throws NothingToDoError.
+ */
 export async function pickOne<T>(
   message: string,
   choices: readonly PickChoice<T>[],

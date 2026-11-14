@@ -113,6 +113,10 @@ async function resolveHook(name: string, origin: string, home: string) {
   };
 }
 
+/**
+ * Hook adaptation guidance; prompt is null and targets are empty when no
+ * implementation is missing.
+ */
 export type Adaptation = {
   name: string;
   /** Tools the Hook has settings for. */

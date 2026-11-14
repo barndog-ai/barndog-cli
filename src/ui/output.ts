@@ -23,6 +23,10 @@ import { ApiError } from "@barndog-ai/api-contract";
 import { CliError, friendlyHint, friendlyMessage } from "../errors.js";
 import { assetKinds } from "../features/asset-kinds/index.js";
 
+/**
+ * Abbreviates paths inside the current user's home with ~, preserving platform
+ * separators.
+ */
 export function displayPath(path: string): string {
   const home = homedir();
   if (!isInside(home, path)) {
@@ -149,6 +153,10 @@ function rows(events: SyncEvent[]): Row[] {
   );
 }
 
+/**
+ * Returns terminal lines for synchronization events, with optional verbose
+ * detail or preview wording.
+ */
 export function renderSyncOutput(
   events: SyncEvent[],
   options: { title?: string; verbose?: boolean; preview?: boolean } = {},
@@ -267,6 +275,10 @@ function describeError(error: unknown): { message: string; fix?: string } {
   return { message: friendlyMessage(error), fix: friendlyHint(error) };
 }
 
+/**
+ * Formats an error and optional repair command using stderr color support; does
+ * not write to the stream.
+ */
 export function renderError(error: unknown): string {
   const stream = process.stderr;
   const { message, fix } = describeError(error);

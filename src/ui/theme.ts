@@ -1,9 +1,17 @@
 import { styleText } from "node:util";
 
+/**
+ * BarnDog brand accent, applied through `primary()` to headings, highlighted
+ * output and prompt accents.
+ */
 export const PRIMARY_COLOR = "#C54836";
 
 export const SELECTION_COLOR = "green";
 
+/**
+ * Applies the selection color using Node's color policy for the supplied stream
+ * (stdout by default).
+ */
 export function selected(
   text: string,
   stream: NodeJS.WriteStream = process.stdout,
@@ -66,6 +74,10 @@ export const promptTheme = {
   style: { answer: primary, highlight: primary, description: primary },
 };
 
+/**
+ * `promptTheme` with BarnDog's checked and unchecked circles, for multi-select
+ * prompts.
+ */
 export const checkboxTheme = {
   ...promptTheme,
   icon: { ...promptTheme.icon, checked: selected(" ◉"), unchecked: " ◯" },

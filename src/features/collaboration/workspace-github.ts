@@ -34,6 +34,11 @@ import type { CloudPushResult, UpdatedCloudWorkingCopy } from "./results.js";
 const publishedId = (work: { skillId?: string | null }) =>
   defined(work.skillId, "This working copy isn't published yet");
 
+/**
+ * The GitHub connection that is authoritative for this working copy's asset, if
+ * any. Throws when the authority changed since the copy was made, when the
+ * connection needs attention, or when an internal upload is still pending.
+ */
 export async function externalSource(work: Workspace, home: string) {
   if (!work.skillId) {
     return undefined;
@@ -74,6 +79,10 @@ export async function externalSource(work: Workspace, home: string) {
   return source;
 }
 
+/**
+ * `pull` for a GitHub-authoritative asset: merges edits made to its pull
+ * request, then newly published main content, into the folder.
+ */
 export async function pullExternal(
   work: Workspace,
   {
@@ -159,6 +168,13 @@ export async function pullExternal(
   };
 }
 
+/**
+ * `push` for a GitHub-authoritative asset: opens or revises its pull request
+ * with the complete package and, with `publish`, merges it. The request and
+ * retry key are saved first so an ambiguous failure retries exactly; a
+ * definitive refusal (400, 403, 404, 409, 413) drops it so local edits can be
+ * reconciled.
+ */
 export async function pushExternal(
   work: Workspace,
   source: GitConnection,

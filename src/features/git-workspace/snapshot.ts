@@ -5,6 +5,10 @@ import { join } from "node:path";
 import { git } from "./git.js";
 import { defined } from "../../shared/lookup.js";
 
+/**
+ * Repository-relative snapshot path with its Git mode and object hash; includes
+ * directory entries.
+ */
 export type SnapshotEntry = { path: string; mode: string; hash: string };
 
 /** One immutable view of a workspace: every path, with Git's object names. */
@@ -13,10 +17,22 @@ export type Snapshot = {
   readBlobs(hashes: readonly string[]): Promise<Map<string, Buffer>>;
 };
 
+/**
+ * Git tree mode as a six-digit string, used to distinguish directories from
+ * file entries.
+ */
 export const TREE_MODE = "040000";
 
+/**
+ * Recognizes regular-file Git modes, including executables; symlinks and trees
+ * are excluded.
+ */
 export const isBlob = (mode: string) => mode === "100644" || mode === "100755";
 
+/**
+ * Computes the hexadecimal SHA-1 Git object ID from a blob or tree's raw bytes,
+ * including its object header.
+ */
 export function gitObjectHash(type: "blob" | "tree", content: Buffer) {
   return createHash("sha1")
     .update(`${type} ${content.length}\0`)

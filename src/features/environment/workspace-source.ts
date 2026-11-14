@@ -15,6 +15,10 @@ export type SourceOptions = {
   refresh?: RefreshPolicy;
 };
 
+/**
+ * Builds a lazy Git or local-folder source from settings; returns undefined for
+ * a cloud-only setup.
+ */
 export function openRepoSource(
   settings: Settings,
   home: string,
@@ -31,6 +35,10 @@ export function openRepoSource(
   return undefined;
 }
 
+/**
+ * Builds the configured primary source and merges a retained local overlay when
+ * present.
+ */
 export function openWorkspaceSource(
   settings: Settings,
   home: string,

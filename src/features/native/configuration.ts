@@ -18,6 +18,10 @@ import { join } from "node:path";
 import type { Harness } from "../../harnesses/types.js";
 import { isRecord } from "../../shared/values.js";
 
+/**
+ * One owned native configuration entry, including its destination file and
+ * serialized value.
+ */
 export type NativeEntry = {
   id: string;
   kind: "mcp" | "hook" | "knowledge" | "sync";
@@ -41,6 +45,10 @@ const hookFiles: Record<Harness, string> = {
   cursor: ".cursor/hooks.json",
 };
 
+/**
+ * Resolves the native settings file under the supplied home; non-MCP entries
+ * use the harness Hook file.
+ */
 export const nativeFile = (
   harness: Harness,
   kind: NativeEntry["kind"],

@@ -116,6 +116,10 @@ function changeType(change: {
   return "updated";
 }
 
+/**
+ * Synchronization overrides for source reads, clash resolution and dry runs;
+ * checkpoint runs during transaction application.
+ */
 export type SyncOptions = {
   checkpoint?: (index: number) => Promise<void>;
   catalog?: AssetCatalog;
@@ -162,6 +166,10 @@ const stateFileSchema = z.looseObject({
 const readStateFile = (raw: string | null) =>
   stateFileSchema.parse(raw ? JSON.parse(raw) : {});
 
+/**
+ * Locks the environment, plans harness updates and applies journaled writes;
+ * dry runs return planned events.
+ */
 export async function synchronize(
   configPath?: string,
   home = homedir(),

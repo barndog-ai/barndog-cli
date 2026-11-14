@@ -26,6 +26,10 @@ async function currentAsset(
   return data;
 }
 
+/**
+ * Adapts an authenticated cloud connection to lazy catalog, package-cache and
+ * MCP reads for synchronization.
+ */
 export function cloudSource(conn: Connection, home: string): WorkspaceSource {
   return {
     cacheKey: cacheKey(conn),

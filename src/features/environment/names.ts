@@ -3,6 +3,10 @@ import { NAME, slugify } from "../../shared/patterns.js";
 /** Kinds whose installed name is a shared native namespace (Skill folders, MCP server keys). */
 export type NamedKind = "skill" | "mcp";
 
+/**
+ * An asset competing for an installed name. Clashes are resolved separately for
+ * each asset kind, so a Skill and an MCP server may share a name.
+ */
 export type NamedAsset = {
   id: string;
   kind: NamedKind;
@@ -30,6 +34,10 @@ export function originLabel(origin: {
     : `${origin.type}/${origin.slug ?? origin.id ?? "unknown"}`;
 }
 
+/**
+ * Two assets competing for an installed name, with suggested renames built from
+ * origin type, slug (or ID) and asset name.
+ */
 export type Clash = {
   kind: NamedKind;
   name: string;
@@ -39,12 +47,20 @@ export type Clash = {
   incomingRename: string;
 };
 
+/**
+ * How the developer settles a clash: rename either asset, skip the newcomer, or
+ * replace the installed one. Skip and replace are saved as disables.
+ */
 export type ClashChoice =
   | "rename-incoming"
   | "rename-installed"
   | "skip-incoming"
   | "replace-installed";
 
+/**
+ * Callback for deciding a name clash. Without a resolver, the newcomer is
+ * skipped for the current run.
+ */
 export type ClashResolver = (clash: Clash) => Promise<ClashChoice>;
 
 const rank: Record<string, number> = {
@@ -66,10 +82,18 @@ export function prefixedName(asset: Pick<NamedAsset, "name" | "origin">) {
   );
 }
 
+/**
+ * Whether `name` can be an installed folder or MCP key: the name pattern, at
+ * most 64 characters.
+ */
 export function validInstalledName(name: string) {
   return NAME.test(name) && name.length <= 64;
 }
 
+/**
+ * The name an asset installs under: its saved rename from `localNames`, else
+ * its published name.
+ */
 export const installedName = (
   asset: Pick<NamedAsset, "id" | "name">,
   localNames: Record<string, string>,
@@ -224,6 +248,10 @@ export function findClash(
   return undefined;
 }
 
+/**
+ * The renames and disables to save after settling clashes, and the clashes
+ * skipped for this run only.
+ */
 export type ClashOutcome = {
   localNames: Record<string, string>;
   disabledAssetIds: string[];

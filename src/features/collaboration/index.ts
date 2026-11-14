@@ -66,14 +66,26 @@ export function selectedText(text: string, lines?: number) {
     : text;
 }
 
+/**
+ * A published Skill or Hook, addressed as commands address it: name and origin
+ * selector. `kind` defaults to Skill.
+ */
 export type PackageTarget = {
   kind?: PackageKind;
   name: string;
   origin: string;
 };
 
+/**
+ * An asset to pull or create, and the new folder to put it in (`./<name>` by
+ * default).
+ */
 export type WorkingCopyTarget = PackageTarget & { directory?: string };
 
+/**
+ * What `push` sends. `name` and `origin` register a folder that isn't a working
+ * copy yet; `publish` merges at once where the developer may publish directly.
+ */
 export type PushOptions = {
   kind?: PackageKind;
   /** Only for a working copy that isn't published yet. */
@@ -85,12 +97,17 @@ export type PushOptions = {
   title?: string;
 };
 
+/**
+ * A proposal at the revision the caller inspected; reviews and merges are
+ * refused once a newer revision exists.
+ */
 export type ChangeRevision = {
   kind?: PackageKind;
   id: string;
   revision: number;
 };
 
+/** A discussion thread on a proposal, at the revision the caller inspected. */
 export type ThreadRevision = ChangeRevision & { thread: string };
 
 export type ThreadResolution = ThreadRevision & { resolved: boolean };
@@ -100,6 +117,7 @@ export type VersionTarget = PackageTarget & { version?: number };
 
 export type VersionRange = PackageTarget & { from: number; to: number };
 
+/** Which proposals to list: Skills by default. */
 export type ChangeListOptions = { kind?: PackageKind };
 
 export type ChangeTarget = { kind?: PackageKind; id: string };
@@ -110,8 +128,18 @@ export type ChangeDiffTarget = ChangeTarget & {
   fromRevision?: number;
 };
 
+/**
+ * A review's verdict as the CLI spells it; the server's API says
+ * `request_changes`.
+ */
 export type ReviewDecision = "approve" | "request-changes";
 
+/**
+ * A comment on a proposal: a new general or inline discussion, or with
+ * `thread`, a reply. `body` or `bodyFile` gives the text; `replacementFile` and
+ * `expectedFile` turn an inline comment into a suggested replacement of lines
+ * `startLine`–`endLine`.
+ */
 export type CommentOptions = ChangeRevision & {
   body?: string;
   bodyFile?: string;
@@ -129,6 +157,10 @@ export type CommentOptions = ChangeRevision & {
 /** Outside a working copy, status and diff describe the machine-wide environment instead. */
 export type EnvironmentStatus = { mode: "environment" };
 
+/**
+ * `diff` outside a working copy: what the next sync would change on this
+ * machine.
+ */
 export type EnvironmentPreview = {
   mode: "environment-preview";
   events: SyncEvent[];
@@ -183,6 +215,11 @@ async function cloudConnection(home: string, origin?: string) {
   return connection(home);
 }
 
+/**
+ * `create` for a new Skill or Hook: a working copy from the kind's scaffold, in
+ * Git or Cloud as the workspace is set up. Local workspaces have no review
+ * step, so they are refused with a fix.
+ */
 export async function createPackage(
   target: WorkingCopyTarget,
   cwd = process.cwd(),
@@ -208,6 +245,10 @@ export async function createPackage(
   );
 }
 
+/**
+ * `pull <name>`: a new working folder holding the published asset, in Git or
+ * Cloud as the workspace is set up. Refused in a local workspace.
+ */
 export async function pullPackage(
   target: WorkingCopyTarget,
   cwd = process.cwd(),
@@ -233,6 +274,10 @@ export async function pullPackage(
   );
 }
 
+/**
+ * `pull` inside a working copy: merges what changed remotely into the folder.
+ * Refused in a local workspace.
+ */
 export async function updateWorkingCopy(
   cwd = process.cwd(),
   home = homedir(),
@@ -247,6 +292,10 @@ export async function updateWorkingCopy(
     : updateWorkspace(cwd, home);
 }
 
+/**
+ * `status` inside a working copy; anywhere else, or in a local workspace, says
+ * to describe the machine-wide environment instead.
+ */
 export async function workingStatus(
   cwd = process.cwd(),
   home = homedir(),
@@ -269,6 +318,10 @@ export async function workingStatus(
   }
 }
 
+/**
+ * Returns working-copy edits, or outside a working copy, planned sync events.
+ * The dry-run path can still fetch and populate caches.
+ */
 export async function workingDiff(
   cwd = process.cwd(),
   home = homedir(),
@@ -284,6 +337,10 @@ export async function workingDiff(
   };
 }
 
+/**
+ * `push` inside a working copy, to a review branch or proposal as the workspace
+ * is set up. Refused in a local workspace.
+ */
 export async function pushWorkingCopy(
   options: PushOptions,
   cwd = process.cwd(),
@@ -299,6 +356,10 @@ export async function pushWorkingCopy(
     : pushWorkspace(options, cwd, home);
 }
 
+/**
+ * `resolve <path>`: marks one conflicted file resolved once its markers are
+ * gone. `path` is relative to `cwd`.
+ */
 export async function resolveFile(
   path: string,
   cwd = process.cwd(),
@@ -360,6 +421,10 @@ export async function packageVersions(
   }));
 }
 
+/**
+ * A published version's files, base64-encoded; the newest when `version` is
+ * left out.
+ */
 export async function versionFiles(
   target: VersionTarget,
   home = homedir(),
@@ -398,6 +463,10 @@ export async function diffVersions(
   );
 }
 
+/**
+ * Every proposal the developer can see, following the server's pages. Cloud
+ * only: a Git workspace reviews in pull requests on its host.
+ */
 export async function listChanges(
   { kind }: ChangeListOptions = {},
   home = homedir(),
@@ -431,6 +500,10 @@ export async function listChanges(
   return result;
 }
 
+/**
+ * A proposal with its files (base64-encoded), its base version number and
+ * developer names by ID. Cloud only.
+ */
 export async function showChange(
   target: ChangeTarget,
   home = homedir(),
@@ -471,6 +544,10 @@ export async function showChange(
   };
 }
 
+/**
+ * A proposal's diff at a revision (the newest by default), against
+ * `fromRevision` or the version it started from. Cloud only.
+ */
 export async function changeDiff(
   target: ChangeDiffTarget,
   home = homedir(),
@@ -508,6 +585,10 @@ async function changeAtRevision(target: ChangeRevision, home: string) {
   };
 }
 
+/**
+ * Approves or requests changes on the revision the reviewer inspected. Cloud
+ * only.
+ */
 export async function reviewChange(
   decision: ReviewDecision,
   target: ChangeRevision,
@@ -526,6 +607,10 @@ export async function reviewChange(
   );
 }
 
+/**
+ * Closes a proposal without publishing it; the author needs `push --new` to
+ * propose again. Cloud only.
+ */
 export async function rejectChange(
   target: ChangeRevision,
   home = homedir(),
@@ -540,6 +625,10 @@ export async function rejectChange(
   );
 }
 
+/**
+ * Publishes a proposal at the inspected revision, as its scope's review
+ * settings allow. Cloud only.
+ */
 export async function mergeChange(
   target: ChangeRevision,
   home = homedir(),
@@ -554,6 +643,11 @@ export async function mergeChange(
   );
 }
 
+/**
+ * Adds a comment to a proposal and returns the updated proposal. Reads
+ * `bodyFile`, `replacementFile` and `expectedFile` from disk; a file's closing
+ * newline isn't part of the selected lines. Cloud only.
+ */
 export async function commentOnChange(
   options: CommentOptions,
   home = homedir(),

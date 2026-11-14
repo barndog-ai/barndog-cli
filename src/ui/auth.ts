@@ -41,6 +41,10 @@ function describeIdentity(context: {
   return `${bold(context.developer.name)} ${dim(`@${context.developer.slug}`)} · ${context.organization.name}`;
 }
 
+/**
+ * Runs interactive device login, optionally opens a browser and saves
+ * credentials; reports an existing session unless forced.
+ */
 export async function runLogin(
   options: {
     server?: string;
@@ -131,6 +135,10 @@ export async function runLogin(
   }
 }
 
+/**
+ * Revokes the current session and removes local credentials, reporting whether
+ * remote revocation was confirmed.
+ */
 export async function runLogout(write: (message: string) => void) {
   const result = await logout();
   write(
@@ -140,6 +148,10 @@ export async function runLogout(write: (message: string) => void) {
   );
 }
 
+/**
+ * Fetches and writes authentication status in JSON or terminal form; signed-out
+ * status sets process.exitCode to 1.
+ */
 export async function showAuthStatus(
   output: Output,
   home = homedir(),

@@ -123,6 +123,10 @@ const addArguments: Record<AssetKind, string> = {
   hook: " <url>",
 };
 
+/**
+ * Registers environment selection and subscription commands using the supplied
+ * services.
+ */
 export function registerEnvironment(program: Command, context: CommandContext) {
   for (const kind of assetKindList) {
     const labels = assetKinds[kind];

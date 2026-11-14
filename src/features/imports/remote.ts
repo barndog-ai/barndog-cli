@@ -19,6 +19,10 @@ import {
   type Snapshot,
 } from "../git-workspace/snapshot.js";
 
+/**
+ * Parsed repository URL and unresolved tree/blob suffix; branch names may
+ * themselves contain slashes.
+ */
 export type RemoteLocation = {
   url: string;
   /** Everything after /tree/ or /blob/; branch names can contain slashes. */
@@ -59,6 +63,10 @@ export function parseLocation(input: string): RemoteLocation {
   return { url: checkRepositoryUrl(value.replace(/\/$/, "")), rest: null };
 }
 
+/**
+ * Resolved upstream commit, selected path and snapshot bytes used to discover
+ * and import repository content.
+ */
 export type RemoteRepo = {
   url: string;
   ref: string | null;

@@ -35,6 +35,10 @@ export type UpdatedCloudWorkingCopy = {
 export type UpdatedWorkingCopy =
   UpdatedGitWorkingCopy | UpdatedCloudWorkingCopy;
 
+/**
+ * A Git working copy and its edits. Git has no version numbers or proposals, so
+ * those fields are always null.
+ */
 export type GitWorkingCopyStatus = {
   root: string;
   name: string;
@@ -49,6 +53,10 @@ export type GitWorkingCopyStatus = {
   changes: FileDiff[];
 };
 
+/**
+ * A Cloud working copy, the version and proposal it is linked to, and its
+ * edits.
+ */
 export type CloudWorkingCopyStatus = {
   root: string;
   name: string;
@@ -86,6 +94,10 @@ export type CloudPushResult =
 
 export type PushResult = GitPushResult | CloudPushResult;
 
+/**
+ * The file just marked resolved and the conflicts still left, as paths inside
+ * the working copy.
+ */
 export type ConflictResolution = { resolved: string; remaining: string[] };
 
 /** One published version. Cloud also names who published it, when the server says. */

@@ -20,6 +20,10 @@ import type { RemoteRepo } from "./remote.js";
 import { defined } from "../../shared/lookup.js";
 import { asRecord, isRecord } from "../../shared/values.js";
 
+/**
+ * What imported Hook commands use for the installed package folder; BarnDog
+ * binds it when installing.
+ */
 export const ROOT_TOKEN = "${BARNDOG_HOOK_ROOT}";
 
 /** A link to a folder or file narrows everything to it; the rest of the repo is ignored. */
@@ -69,6 +73,11 @@ export type SkillCandidate = {
 
 export type Skipped = { path: string; reason: string };
 
+/**
+ * Every valid Skill folder (one holding `SKILL.md`) in the linked part of a
+ * fetched repository. Folders with symbolic links or invalid packages are
+ * skipped with a reason.
+ */
 export function discoverSkills(remote: RemoteRepo) {
   const skills: SkillCandidate[] = [];
   const skipped: Skipped[] = [];
@@ -98,6 +107,10 @@ export function discoverSkills(remote: RemoteRepo) {
   return { skills, skipped };
 }
 
+/**
+ * One hook command found in a harness's settings, rewritten to run its script
+ * from the package folder.
+ */
 export type DraftEvent = {
   event: string;
   matcher?: string;
@@ -107,6 +120,10 @@ export type DraftEvent = {
   command: string;
 };
 
+/**
+ * A Hook found in a repository: a ready package with `hook.yaml`, or a draft
+ * assembled from harness settings files.
+ */
 export type HookCandidate =
   | {
       type: "package";
@@ -247,6 +264,11 @@ function rewriteCommand(command: string, blobs: string[], scope: string) {
   return null;
 }
 
+/**
+ * The Hook packages in the linked part of a fetched repository. When there are
+ * none, builds one draft from the harness settings files it finds (named
+ * `fallbackName`), so a repository of plain hook scripts can still be imported.
+ */
 export function discoverHooks(remote: RemoteRepo, fallbackName: string) {
   const packages: HookCandidate[] = [];
   const skipped: Skipped[] = [];

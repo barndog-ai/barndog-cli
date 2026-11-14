@@ -157,6 +157,10 @@ export async function storePackage(
   return join(target, asset.name);
 }
 
+/**
+ * Returns a cached package or downloads and validates its revision, size and
+ * metadata before storing it.
+ */
 export async function cachedPackage(
   kind: PackageKind,
   asset: {

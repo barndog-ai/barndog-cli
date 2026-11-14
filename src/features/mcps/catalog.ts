@@ -3,6 +3,10 @@ import type { Connection } from "../../config/settings.js";
 import type { CatalogAsset } from "../catalog/index.js";
 import { request } from "../environment/remote.js";
 
+/**
+ * Fetches every MCP catalog page, rejecting organization mismatches and
+ * repeated pagination cursors.
+ */
 export async function mcpCatalog(
   conn: Connection,
   home: string,

@@ -1,7 +1,16 @@
 export type AssetKind = "skill" | "mcp" | "hook";
 
+/**
+ * Which of a scope's assets a subscription takes: those it marks `recommended`,
+ * those it marks `optional`, or `all`. Distributions mark each asset
+ * recommended or optional.
+ */
 export type SelectionMode = "recommended" | "optional" | "all";
 
+/**
+ * A subscribable scope: the organization, a team or a repository. Personal
+ * (`dev`) scopes can't be subscribed to, only picked from.
+ */
 export type Scope = Readonly<{
   type: "org" | "team" | "repo";
   id: string;
@@ -34,12 +43,20 @@ export type AssetCatalog = Readonly<{
   distributions: readonly Distribution[];
 }>;
 
+/**
+ * A disabled subscription stays saved and keeps its assets selected, but does
+ * not enable them on its own.
+ */
 export type Subscription = Readonly<{
   scope: Scope;
   mode: SelectionMode;
   enabled: boolean;
 }>;
 
+/**
+ * Persisted environment choices in config.yaml: subscriptions, individual
+ * picks, exclusions and individually disabled assets. IDs must be UUIDv4.
+ */
 export type SelectionState = Readonly<{
   subscriptions: readonly Subscription[];
   individualAssetIds: readonly string[];
@@ -47,6 +64,9 @@ export type SelectionState = Readonly<{
   disabledAssetIds: readonly string[];
 }>;
 
+/**
+ * Why an asset is selected: picked individually, or supplied by a subscription.
+ */
 export type Contribution =
   | Readonly<{ type: "individual" }>
   | Readonly<{
@@ -56,6 +76,10 @@ export type Contribution =
       enabled: boolean;
     }>;
 
+/**
+ * One selected asset with every reason for its selection. It is enabled unless
+ * individually disabled or selected only through disabled subscriptions.
+ */
 export type EffectiveAsset = Readonly<{
   asset: AssetReference;
   enabled: boolean;
@@ -63,6 +87,7 @@ export type EffectiveAsset = Readonly<{
   contributions: readonly Contribution[];
 }>;
 
+/** A selection that points at something the catalog no longer has. */
 export type SelectionDiagnostic =
   | Readonly<{ type: "missing-scope"; scope: Scope }>
   | Readonly<{ type: "missing-asset"; assetId: string }>;
@@ -94,12 +119,17 @@ export type SelectionAction =
       enabled: boolean;
     }>;
 
+/** An asset whose exclusion or individual disable a change would undo. */
 export type OverrideConflict = Readonly<{
   asset: AssetReference;
   excluded: boolean;
   individuallyDisabled: boolean;
 }>;
 
+/**
+ * What to do with override conflicts: keep or clear them all, or decide per
+ * asset.
+ */
 export type OverrideResolution =
   | Readonly<{ type: "preserve-all" | "clear-all" }>
   | Readonly<{

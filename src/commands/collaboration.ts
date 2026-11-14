@@ -79,6 +79,10 @@ function reviewError(
     : error;
 }
 
+/**
+ * Registers working-copy and review commands; handlers use the supplied
+ * services and output mode.
+ */
 export function registerCollaboration(
   program: Command,
   context: CommandContext,

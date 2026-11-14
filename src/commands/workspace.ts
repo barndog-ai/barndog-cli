@@ -24,6 +24,10 @@ const migrationActionStyles: Record<
   "missing-scope": warn,
 };
 
+/**
+ * Registers workspace validation, local asset movement and migration commands
+ * using the supplied services.
+ */
 export function registerWorkspace(program: Command, context: CommandContext) {
   program
     .command("validate [directory]")

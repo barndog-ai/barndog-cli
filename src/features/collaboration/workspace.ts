@@ -91,6 +91,11 @@ export type WorkingFolderOptions = {
   home?: string;
 };
 
+/**
+ * `pull <name>` in Cloud: downloads the published Skill or Hook into a new
+ * working folder (`target`, default `./<name>`) and registers it under
+ * `~/.barndog/workspaces/`. Refuses a folder that already exists.
+ */
 export async function pullSkill(
   {
     name,
@@ -144,6 +149,10 @@ export async function pullSkill(
   });
 }
 
+/**
+ * The Cloud working copy containing `cwd`, with its edits as diffs against the
+ * version it started from. Throws `NoWorkingCopyError` outside one.
+ */
 export async function workspaceStatus(
   cwd = process.cwd(),
   home = homedir(),
@@ -177,6 +186,12 @@ export async function workspaceStatus(
   });
 }
 
+/**
+ * `pull` in a Cloud working copy: merges edits made to its open proposal, then
+ * the newest published version, into the folder. Hands over to GitHub
+ * reconciliation when GitHub is authoritative. Refuses while a submission
+ * awaits a retry; conflicting text gets markers and is listed in `conflicts`.
+ */
 export async function updateWorkspace(
   cwd = process.cwd(),
   home = homedir(),
@@ -329,6 +344,10 @@ export async function updateWorkspace(
   });
 }
 
+/**
+ * Marks one conflicted file in a Cloud working copy resolved, after checking
+ * its conflict markers are gone.
+ */
 export async function resolveConflict(
   path: string,
   cwd = process.cwd(),
@@ -348,6 +367,9 @@ export async function resolveConflict(
  */
 const CONFLICT_MARKER = /^(?:<{7}|\|{7}|={7}|>{7})(?: |$)/m;
 
+/**
+ * Whether text still holds a line the three-way merge wrote around a conflict.
+ */
 export const hasConflictMarkers = (text: string) => CONFLICT_MARKER.test(text);
 
 /** Clears one conflict once its markers are gone; shared by cloud and Git working copies. */
@@ -386,6 +408,11 @@ export async function markResolved(
   return { resolved: conflict, remaining: work.conflicts };
 }
 
+/**
+ * Packs base64-encoded files into the gzipped tarball the server's upload
+ * routes take. Fails with `PACKAGE_TOO_LARGE` above the compressed size limit;
+ * uses a temporary folder under `~/.barndog/workspaces/`.
+ */
 export async function archive(files: Files, home: string) {
   const temp = join(directory(home), `upload-${randomUUID()}`);
   const tar = temp + ".tar.gz";
@@ -409,6 +436,15 @@ export async function archive(files: Files, home: string) {
   }
 }
 
+/**
+ * `push` in Cloud: creates or revises the working copy's proposal and, with
+ * `publish`, merges it at once (scope or organization admins and personal
+ * owners only). Inside
+ * a folder that isn't a working copy yet, `origin` registers it first. The
+ * upload, retry key and payload are saved before sending, so an ambiguous
+ * failure can be retried exactly. GitHub-authoritative assets go to a pull
+ * request instead.
+ */
 export async function pushWorkspace(
   options: {
     origin?: string;
@@ -665,6 +701,10 @@ export async function pushWorkspace(
   });
 }
 
+/**
+ * Starts a Cloud working copy from the kind's scaffold. Contacts the server to
+ * validate the connection and origin; asset content is uploaded only on `push`.
+ */
 export async function createWorkspace(
   {
     name,

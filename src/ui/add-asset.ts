@@ -138,6 +138,10 @@ export const terminalPrompts = (write: (line: string) => void): AddPrompts => ({
   paste: () => pasteJson(write),
 });
 
+/**
+ * Where the add commands write and how they ask; `interactive` false means no
+ * prompts, so choices must come from flags.
+ */
 export type AddContext = {
   home?: string;
   interactive: boolean;
@@ -306,6 +310,10 @@ async function folderTransfer(
   );
 }
 
+/**
+ * `skills add <url>`: copies Skills from a repository, a harness folder or a
+ * plain folder into the local workspace.
+ */
 export async function addSkills(
   url: string,
   options: AddOptions,
@@ -511,6 +519,10 @@ async function reportCoverage(
   );
 }
 
+/**
+ * `hooks add <url>`: copies a Hook package, or a draft built from harness
+ * settings, into the local workspace.
+ */
 export async function addHook(
   url: string,
   options: AddOptions,
@@ -776,6 +788,10 @@ async function serversToAdd(
     : fromHarness();
 }
 
+/**
+ * `mcp add`: imports MCP servers from a harness's configuration or pasted JSON
+ * into the local workspace.
+ */
 export async function addMcp(
   name: string | undefined,
   options: AddOptions,

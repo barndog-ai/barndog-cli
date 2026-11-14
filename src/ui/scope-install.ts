@@ -12,6 +12,10 @@ type InstallMode = "recommended" | "all" | "custom";
 type SetInstallContext = SelectionContext &
   Pick<CommandContext, "installSet" | "previewSet" | "installSetAssets">;
 
+/**
+ * Installs a scope using an explicit mode or interactive asset selection, then
+ * renders the selection result.
+ */
 export async function runSetInstall(
   context: SetInstallContext,
   options: {

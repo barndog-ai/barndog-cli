@@ -29,6 +29,10 @@ export type DeveloperAssets = {
   assets: DeveloperAssetPage["assets"];
 };
 
+/**
+ * Fetches every page of visible developers, optionally filtered by search;
+ * repeated cursors are rejected.
+ */
 export async function developers(
   search?: string,
   home = homedir(),
@@ -66,6 +70,10 @@ export async function developers(
   return people;
 }
 
+/**
+ * Resolves a developer by ID or slug and fetches all pages of their visible
+ * assets, optionally filtered by search.
+ */
 export async function developerAssets(
   selector: string,
   search?: string,
@@ -117,6 +125,10 @@ export async function developerAssets(
   return { developer, assets };
 }
 
+/**
+ * Source and destination selectors for creating a scope-owned asset, with an
+ * optional retry key.
+ */
 export type PromoteInput = {
   kind: AssetKind;
   name: string;
@@ -136,6 +148,10 @@ const promotionSchema = z.object({
 
 export type Promotion = z.infer<typeof promotionSchema>;
 
+/**
+ * Distinguishes a server promotion from a local asset move so callers can
+ * render either outcome.
+ */
 export type PromoteResult =
   | { outcome: "promoted"; promotion: Promotion }
   | { outcome: "moved"; move: MoveResult };

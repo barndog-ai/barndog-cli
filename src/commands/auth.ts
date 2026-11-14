@@ -1,6 +1,10 @@
 import type { Command } from "commander";
 import type { CommandContext } from "./context.js";
 
+/**
+ * Registers login, logout and session-status handlers on the supplied Commander
+ * program.
+ */
 export function registerAuth(program: Command, context: CommandContext) {
   program
     .command("login")

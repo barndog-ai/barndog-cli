@@ -32,6 +32,10 @@ export const reviewCommands = [
   /^mcp versions$/,
 ];
 
+/**
+ * Workspace modes whose storage limits command availability; cloud setups have
+ * no such restriction.
+ */
 export type SetupMode = "local" | "git";
 
 /** The setup this machine runs on, when that setup limits what commands can do. */

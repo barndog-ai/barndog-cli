@@ -171,6 +171,10 @@ export function inventoryHints(items: readonly InventoryItem[]): string[] {
   return output;
 }
 
+/**
+ * Returns a filtered catalog table and paging hints, marking selected IDs; does
+ * not write output.
+ */
 export function renderCatalog(
   rows: CatalogAsset[],
   options: ListOptions,

@@ -132,6 +132,11 @@ export function collaborationClient(
   });
 }
 
+/**
+ * A package's metadata: the `SKILL.md` front matter, or the parsed `hook.yaml`
+ * manifest. Throws when the manifest is missing or invalid, or a Hook script it
+ * names is missing.
+ */
 export function metadata(entries: PackageEntry[], kind: PackageKind = "skill") {
   if (kind === "skill") {
     return packageMetadata(entries);

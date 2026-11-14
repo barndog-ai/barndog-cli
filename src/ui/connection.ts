@@ -5,6 +5,9 @@ import { normalizeServer } from "../features/auth/transport.js";
 import { checkRepositoryUrl } from "../features/git-workspace/git.js";
 import { promptTheme } from "./theme.js";
 
+/**
+ * Asks for the workspace URL, offering `current` or the build's default server.
+ */
 export async function promptServer(current?: string): Promise<string> {
   return normalizeServer(
     await input({
@@ -30,6 +33,7 @@ export type SetupChoice =
   | { kind: "git"; url: string }
   | { kind: "cloud"; server: string };
 
+/** Asks where to keep assets, defaulting to `current`. */
 export async function chooseConnection(
   current?: SetupChoice,
 ): Promise<SetupChoice> {
@@ -94,6 +98,10 @@ export async function chooseConnection(
   };
 }
 
+/**
+ * What happens to local assets when the machine connects to a workspace: keep
+ * them active beside it, move them in, or leave them inactive.
+ */
 export type LocalAssetChoice = "keep" | "move" | "leave";
 
 export function chooseLocalAssets(count: number): Promise<LocalAssetChoice> {

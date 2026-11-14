@@ -43,6 +43,10 @@ export function slugify(text: string): string {
  */
 const FRONT_MATTER = /^(\uFEFF?---\r?\n)([\s\S]*?)(\r?\n---(?:\r?\n|$))/;
 
+/**
+ * Front matter split into original fences, YAML and body so edits can preserve
+ * surrounding text.
+ */
 export type FrontMatter = {
   /** The opening `---` line, including any byte-order mark and its line break. */
   open: string;

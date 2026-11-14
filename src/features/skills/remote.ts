@@ -11,6 +11,10 @@ import type { CatalogAsset } from "../catalog/index.js";
 
 export { normalizeServer } from "../auth/transport.js";
 
+/**
+ * A typed client for the BarnDog API that sends the saved credential for
+ * `server`, refusing redirects and requests to other origins.
+ */
 export function apiClient(server: string, home = homedir()) {
   return createApiClient({
     baseUrl: normalizeServer(server),
@@ -18,6 +22,10 @@ export function apiClient(server: string, home = homedir()) {
   });
 }
 
+/**
+ * The organization and developer the saved credential signs in as on `server`;
+ * one request to the server.
+ */
 export async function connectionContext(
   server: string,
   home = homedir(),
@@ -34,6 +42,11 @@ export async function connectionContext(
   };
 }
 
+/**
+ * Every published Skill the developer can see, page by page. Throws when the
+ * server now reports another organization or developer than `connection`, or
+ * answers with a broken page.
+ */
 export async function catalog(
   connection: Connection,
   home = homedir(),

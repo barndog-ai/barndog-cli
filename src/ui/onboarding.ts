@@ -126,6 +126,10 @@ async function chooseSource(
   return choose(savedChoice(previous, server));
 }
 
+/**
+ * Runs setup prompts and connection preparation, saves settings and applies the
+ * chosen environment when confirmed.
+ */
 export async function runSetup(
   options: {
     restart?: boolean;

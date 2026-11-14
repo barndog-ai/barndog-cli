@@ -21,6 +21,11 @@ import { errorCode } from "../../shared/values.js";
 import { fileText, writeAtomic } from "../../shared/files.js";
 import { withPidLock } from "../../shared/lock.js";
 
+/**
+ * One journaled sync change. File values are text, link values are targets and
+ * tree values are fingerprints; null means absent. Recovery checks file and
+ * link values, but can overwrite a partially applied tree.
+ */
 export type Write =
   | {
       kind: "file" | "link";
@@ -76,6 +81,11 @@ const journalSchema = z
 
 const locks = new AsyncLocalStorage<ReadonlySet<string>>();
 
+/**
+ * Where the Skill link at `path` points, or null when nothing is there. Throws
+ * when something other than a symbolic link sits at `path`: BarnDog never takes
+ * over a folder it didn't create.
+ */
 export async function linkTarget(path: string): Promise<string | null> {
   try {
     const info = await lstat(path);
@@ -255,6 +265,11 @@ async function apply(
   }
 }
 
+/**
+ * Rolls forward an interrupted sync from ~/.barndog/pending-sync.json and
+ * reports whether a journal existed. Rejects a cloud journal when its
+ * authenticated organization or developer has changed.
+ */
 export async function recover(home: string) {
   const path = join(home, ".barndog/pending-sync.json");
   const text = await fileText(path);
@@ -280,6 +295,13 @@ export async function recover(home: string) {
   return true;
 }
 
+/**
+ * Applies `writes` as one journaled operation: records them in
+ * `~/.barndog/pending-sync.json`, applies them in order and removes the
+ * journal, so `recover()` can finish the job after a crash. Backs up the
+ * previous `config.yaml` under `~/.barndog/migrations/` before changing it.
+ * `checkpoint` runs after each write is applied. Call it inside `locked()`.
+ */
 export async function transact(
   home: string,
   writes: Write[],

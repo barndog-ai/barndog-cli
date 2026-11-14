@@ -9,6 +9,10 @@ import { treeFingerprint } from "../features/environment/installed.js";
 import { isRecord } from "../shared/values.js";
 import { NAME, UUID_V4 } from "../shared/patterns.js";
 
+/**
+ * Ownership record linking an asset and harness to an absolute source and
+ * installed target.
+ */
 export type Link = {
   id: string;
   harness: Harness;
@@ -16,6 +20,10 @@ export type Link = {
   target: string;
 };
 
+/**
+ * Version-one installation ownership journal; links identify destinations
+ * BarnDog may reconcile.
+ */
 export type State = { version: 1; links: Link[] };
 
 /**
@@ -63,6 +71,10 @@ async function withoutRepeatedLinks(links: unknown[], installed: unknown) {
   return kept;
 }
 
+/**
+ * Reads installation ownership and checks targets against the supplied home;
+ * missing state yields no links.
+ */
 export async function readState(path: string, home: string): Promise<State> {
   let value: unknown;
   try {

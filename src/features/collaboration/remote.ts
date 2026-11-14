@@ -23,6 +23,12 @@ import { CliError } from "../../errors.js";
 import { only } from "../../shared/lookup.js";
 import { splitOrigin } from "../../shared/patterns.js";
 
+/**
+ * The saved Cloud connection, after asking the server who is signed in and
+ * checking it is still that organization and developer. Pass `expected` to also
+ * require a particular connection, such as the one a working copy was made
+ * with. Fails with a fix in a Git or local workspace, which has no server.
+ */
 export async function connection(home = homedir(), expected?: Connection) {
   const settings = await readSettings(home);
   if (
@@ -73,6 +79,11 @@ export async function connection(home = homedir(), expected?: Connection) {
   return saved;
 }
 
+/**
+ * Whether an asset or scope belongs to the origin `selector` names: `org`,
+ * `me`, `local`, `team/<slug>`, `repo/<slug>`, `dev/<slug>`, or a type with an
+ * ID instead of a slug.
+ */
 export function matchesOrigin(
   origin: { type: string; id: string; slug?: string; localOnly?: boolean },
   selector: string,
@@ -95,6 +106,10 @@ export function matchesOrigin(
   return origin.type === type && [origin.id, origin.slug].includes(value);
 }
 
+/**
+ * The one published Skill or Hook named `name` in the origin `selector`; throws
+ * the usual not-found error when none or several match.
+ */
 export async function selectSkill(
   {
     name,
@@ -117,6 +132,10 @@ export async function selectSkill(
   return match;
 }
 
+/**
+ * The scope an origin selector names, among those the developer can use.
+ * Organization admins can also name any member's personal scope.
+ */
 export async function selectOrigin(
   selector: string,
   conn: Connection,
@@ -172,6 +191,11 @@ export async function selectOrigin(
   return match;
 }
 
+/**
+ * Downloads and unpacks a package from the server, within the package size
+ * limits and a 30-second timeout. With `commit`, refuses a package whose ETag
+ * names another revision.
+ */
 export async function download(
   path: string,
   conn: Connection,

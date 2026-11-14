@@ -45,6 +45,11 @@ import type {
 import { localOverlay } from "./overlay.js";
 import type { PackageKind } from "../asset-kinds/index.js";
 
+/**
+ * What `migrate` does with one asset or knowledge document: publish it, leave
+ * it (`exists` in Cloud already), or stop because it is invalid or its scope
+ * doesn't exist in Cloud yet.
+ */
 export type MigrationRow = {
   kind: string;
   name: string;
@@ -62,6 +67,11 @@ const sameScope = (cloud: ApiScope, local: RepoScope) =>
   cloud.type === local.type &&
   (local.type === "org" || cloud.slug === local.slug);
 
+/**
+ * Publishes a Skill or Hook to a Cloud scope by proposing it and merging the
+ * proposal at once. The retry key comes from the asset and version, so re-
+ * running after a failure repeats the upload instead of duplicating it.
+ */
 export async function publishPackage(
   asset: PublishableAsset & { kind: PackageKind },
   scope: ApiScope,
@@ -92,6 +102,10 @@ export async function publishPackage(
   });
 }
 
+/**
+ * Publishes an MCP configuration to a Cloud scope, with a retry key from the
+ * asset and version.
+ */
 export const publishMcp = (
   asset: PublishableAsset,
   scope: ApiScope,
@@ -202,6 +216,10 @@ function keepLocalChoices(
 /** Publishes current content to a cloud workspace; Git history stays in the repo. */
 export type MigrateOptions = { server: string; dryRun?: boolean };
 
+/**
+ * What `migrate` found and, unless `dryRun`, did. `migrated` is true once the
+ * machine switched to the server.
+ */
 export type MigrationReport = {
   server: string;
   dryRun: boolean;
@@ -209,6 +227,12 @@ export type MigrationReport = {
   migrated: boolean;
 };
 
+/**
+ * `migrate --to <server>`: publishes every asset and knowledge document of the
+ * Git workspace to Cloud, then switches this machine's settings to the server,
+ * translating the selection to Cloud IDs. Publishes nothing while any asset is
+ * invalid or lacks its scope in Cloud. Takes the sync lock.
+ */
 export async function migrate(
   options: MigrateOptions,
   home = homedir(),

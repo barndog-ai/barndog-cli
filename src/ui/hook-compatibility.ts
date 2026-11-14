@@ -20,6 +20,10 @@ function runtimeLabel(status: string, runtimeIssue: string | null | undefined) {
   return runtimeIssue ? `${bad("✖")} ${runtimeIssue}` : ok("✔");
 }
 
+/**
+ * Returns Hook support and runtime-readiness table lines, abbreviating content
+ * hashes to seven characters.
+ */
 export function renderHookCompatibility(
   name: string,
   result: HookCompatibility,

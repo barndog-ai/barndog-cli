@@ -44,6 +44,10 @@ import { z } from "zod";
 
 const SOURCES_FILE = ".barndog-sources.json";
 
+/**
+ * Imported-content update policy: independent fork, explicit manual updates, or
+ * automatic updates.
+ */
 export type UpdateMode = "fork" | "manual" | "auto";
 
 const importRecordSchema = z.looseObject({
@@ -163,6 +167,10 @@ async function assertFree(root: string, kind: PackageKind, name: string) {
   );
 }
 
+/**
+ * Writes imported package files into the local workspace and records upstream
+ * tracking unless the mode is fork.
+ */
 export async function saveImported(
   input: {
     kind: "skill" | "hook";

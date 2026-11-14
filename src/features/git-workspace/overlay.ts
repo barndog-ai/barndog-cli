@@ -31,8 +31,16 @@ const movedSchema = z.array(
   }),
 );
 
+/**
+ * Persisted local path and shared destination metadata used to track moved
+ * assets.
+ */
 export type MovedAsset = z.infer<typeof movedSchema>[number];
 
+/**
+ * Reads and validates movement records in a workspace folder; an absent file
+ * means nothing has moved.
+ */
 export async function readMoved(folder: string): Promise<MovedAsset[]> {
   try {
     return movedSchema.parse(
@@ -47,6 +55,10 @@ export async function readMoved(folder: string): Promise<MovedAsset[]> {
   }
 }
 
+/**
+ * Writes movement records in the folder, replacing prior entries with the same
+ * local path.
+ */
 export async function recordMoved(folder: string, added: MovedAsset[]) {
   const kept = (await readMoved(folder)).filter(
     (entry) => !added.some((asset) => asset.path === entry.path),
@@ -100,6 +112,10 @@ export async function activeLocal(
   };
 }
 
+/**
+ * Adds active local assets and their recommended distribution to a shared
+ * catalog without mutating the input.
+ */
 export async function mergeLocalCatalog(
   catalog: AssetCatalog,
   overlay: RepoSource,

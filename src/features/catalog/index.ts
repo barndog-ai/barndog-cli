@@ -29,6 +29,10 @@ const catalogFetchers: Record<AssetKind, CatalogFetcher> = {
   hook: hookCatalog,
 };
 
+/**
+ * Combines the shared Git or Cloud catalog with valid active local assets of
+ * the requested kind.
+ */
 export async function searchCatalog(
   kind: AssetKind,
   home = homedir(),

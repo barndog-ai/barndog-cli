@@ -20,6 +20,10 @@ export const expandHome = (path: string, home = homedir()) =>
  */
 const LOCAL_PATH = /^(?:\/|\.{1,2}(?:\/|$)|~(?:\/|$))/;
 
+/**
+ * Recognizes path-like import inputs after trimming whitespace; does not check
+ * filesystem existence.
+ */
 export const looksLocal = (source: string) => LOCAL_PATH.test(source.trim());
 
 /** The plain folder a source points at; Git repos return null and are fetched instead. */

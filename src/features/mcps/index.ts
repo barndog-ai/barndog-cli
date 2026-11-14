@@ -44,6 +44,10 @@ export type McpVersion = z.infer<typeof mcpVersionSchema>;
 /** What to do, or what was done, to sign in to an MCP server. */
 export type McpAuthentication = { message: string };
 
+/**
+ * MCP replacement input requiring the inspected version ID to guard against
+ * concurrent changes.
+ */
 export type McpUpdateInput = McpWriteInput & {
   /** The version ID that was inspected; the update is refused if another landed since. */
   expectedVersion: string;
@@ -158,6 +162,10 @@ const installedMcpSchema = z.looseObject({
     .default([]),
 });
 
+/**
+ * Guides MCP authentication or starts the native harness login command;
+ * credentials remain in native storage.
+ */
 export async function authenticateMcp(
   name: string,
   origin: string,

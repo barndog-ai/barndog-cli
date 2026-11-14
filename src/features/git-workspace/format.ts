@@ -27,6 +27,10 @@ import { assetKinds } from "../asset-kinds/index.js";
 import { defined } from "../../shared/lookup.js";
 import { NAME, splitFrontMatter } from "../../shared/patterns.js";
 
+/**
+ * The file at a Git or local workspace's root naming the workspace and
+ * declaring its teams and repositories.
+ */
 export const CONFIG_FILE = "barndog.yaml";
 
 export const NAME_RULE =
@@ -60,6 +64,10 @@ const configSchema = z
 
 export type WorkspaceConfig = z.infer<typeof configSchema>;
 
+/**
+ * The `barndog.yaml` a new workspace starts with: format version 1, its ID and
+ * name, and no teams or repositories yet.
+ */
 export function renderConfig(
   config: Pick<WorkspaceConfig, "workspaceId" | "name">,
 ) {
@@ -73,6 +81,10 @@ export function renderConfig(
   });
 }
 
+/**
+ * Parses barndog.yaml and reports schema-invalid fields in a CliError.
+ * Malformed YAML can throw a parser error before schema validation.
+ */
 export function parseConfig(text: string): WorkspaceConfig {
   const parsed = configSchema.safeParse(parse(text));
   if (!parsed.success) {
@@ -99,6 +111,11 @@ export function stableId(...parts: string[]) {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
+/**
+ * A scope as a Git or local workspace lays it out: the organization at the
+ * root, teams under `teams/<slug>`, repositories under `repos/<slug>`. IDs are
+ * hashes formatted as UUIDv4 so they look like Cloud IDs.
+ */
 export type RepoScope = {
   type: "org" | "team" | "repo";
   id: string;
@@ -111,6 +128,10 @@ export type RepoScope = {
   localOnly?: true;
 };
 
+/**
+ * An asset read from a workspace folder. `invalid` says why it can't be
+ * installed; it is still listed so the problem shows up.
+ */
 export type RepoAsset = AssetReference & {
   origin: RepoScope;
   path: string;
@@ -120,6 +141,10 @@ export type RepoAsset = AssetReference & {
   invalid?: string;
 };
 
+/**
+ * A knowledge document read from a workspace folder; `version` is its Git blob
+ * hash.
+ */
 export type RepoKnowledge = {
   id: string;
   version: string;
@@ -129,6 +154,10 @@ export type RepoKnowledge = {
 
 export type Problem = { path: string; reason: string };
 
+/**
+ * Everything a Git or local workspace holds at one commit, with the same
+ * catalog shape Cloud returns, plus what couldn't be read.
+ */
 export type WorkspaceModel = {
   config: WorkspaceConfig;
   organizationId: string;
@@ -463,6 +492,10 @@ export async function loadWorkspace(
   };
 }
 
+/**
+ * Whether `name` can be an asset's folder and installed name: the name pattern,
+ * at most 64 characters.
+ */
 export function validAssetName(name: string) {
   return slug.safeParse(name).success && name.length <= 64;
 }

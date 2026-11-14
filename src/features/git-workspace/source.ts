@@ -105,6 +105,10 @@ function repoSource(
   };
 }
 
+/**
+ * The local folder workspace (`~/.barndog/workspace` by default) as a workspace
+ * source. Reads the folder directly; nothing is fetched.
+ */
 export function localRepoSource(
   workspace: LocalWorkspace,
   home: string,
@@ -132,12 +136,20 @@ const fetchStateSchema = z.looseObject({
 
 type FetchState = z.infer<typeof fetchStateSchema>;
 
+/**
+ * The bare clone a Git workspace is read from:
+ * `~/.barndog/git/<workspaceId>.git`. Nothing is checked out of it.
+ */
 export const gitDirectory = (workspaceId: string, home: string) =>
   join(home, ".barndog", "git", `${workspaceId}.git`);
 
 const statePath = (workspaceId: string, home: string) =>
   join(home, ".barndog", "git", `${workspaceId}.json`);
 
+/**
+ * The commit this machine last accepted from the Git host and when it fetched;
+ * empty before the first fetch.
+ */
 export async function readFetchState(
   workspaceId: string,
   home: string,
@@ -170,6 +182,11 @@ export async function ensureBareClone(repo: string, url: string) {
   await git(["config", "remote.origin.url", url], { repo });
 }
 
+/**
+ * Fetches one branch into the bare clone's tracking ref, without tags.
+ * Credential prompts stay off unless `allowPrompt`, so a missing login fails
+ * instead of hanging.
+ */
 export const fetchBranch = (
   repo: string,
   branch: string,
@@ -187,6 +204,7 @@ export const fetchBranch = (
     { repo, allowPrompt },
   );
 
+/** The ref the bare clone keeps a fetched branch in. */
 export function trackingRef(branch: string) {
   return `refs/remotes/origin/${branch}`;
 }
@@ -210,6 +228,11 @@ const age = (fetchedAt: string | undefined) => {
   return hours < 48 ? `${hours} hours` : `${Math.round(hours / 24)} days`;
 };
 
+/**
+ * Reads a Git workspace, fetching by default. Auto refresh reuses a successful
+ * fetch for five minutes; none uses only the accepted commit. A failed branch
+ * fetch falls back to that commit when available and adds a notice.
+ */
 export function gitRepoSource(
   workspace: GitWorkspace,
   home: string,
@@ -287,6 +310,10 @@ export function gitRepoSource(
   );
 }
 
+/**
+ * Records an accepted workspace commit and fetch timestamp after setup or
+ * publication. Auto-refresh readers can reuse it without another fetch.
+ */
 export async function recordFetch(
   workspace: GitWorkspace,
   commit: string,

@@ -15,6 +15,10 @@ import { only } from "../../shared/lookup.js";
 
 const execute = promisify(execFile);
 
+/**
+ * Inspects the Git root and normalized fetch remotes at cwd without contacting
+ * hosts; missing Git or repository yields no root.
+ */
 export async function localRepository(cwd = process.cwd()) {
   const git = async (...args: string[]) =>
     (
@@ -57,6 +61,10 @@ export async function localRepository(cwd = process.cwd()) {
   return { root, remotes: [...remotes] };
 }
 
+/**
+ * Matches local remotes to server repositories and returns owning team and
+ * policy scopes; multiple matches remain ambiguous.
+ */
 export async function repositoryContext(
   home = homedir(),
   cwd = process.cwd(),

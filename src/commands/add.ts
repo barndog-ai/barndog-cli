@@ -23,6 +23,10 @@ const updates = () =>
     "auto",
   ] satisfies UpdateMode[]);
 
+/**
+ * Adds import and update commands to existing asset groups using the supplied
+ * command services.
+ */
 export function registerAdd(program: Command, context: CommandContext) {
   const group = (name: string) =>
     defined(

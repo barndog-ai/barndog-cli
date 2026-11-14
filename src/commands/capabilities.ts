@@ -99,6 +99,10 @@ function knowledgeListing(listedAtStart: boolean, accessMode: string) {
   return accessMode === "always" ? dim("off") : dim("on demand");
 }
 
+/**
+ * Registers catalog, asset, diagnostic and GitHub commands using the supplied
+ * services and output mode.
+ */
 export function registerCapabilities(
   program: Command,
   context: CommandContext,

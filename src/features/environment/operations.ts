@@ -52,6 +52,10 @@ export type Overrides = {
   resolution?: OverrideResolution;
 };
 
+/**
+ * One asset by name (or ID), as commands address it. `origin` is needed only
+ * when several origins publish that name.
+ */
 export type AssetTarget = { kind: AssetKind; name: string; origin?: string };
 
 /** Picker selections, applied in one synchronization. */
@@ -59,6 +63,10 @@ export type AssetIds = { kind: AssetKind; ids: string[] };
 
 export type AssetChange = "install" | "remove" | "enable" | "disable";
 
+/**
+ * An asset to install under another name, or with `reset`, under its published
+ * name again.
+ */
 export type AssetRename = AssetTarget & {
   /** The new installed name. */
   as?: string;
@@ -76,12 +84,21 @@ export type SetChange = "remove" | "enable" | "disable";
 
 export type SetTarget = { origin: string } & Overrides;
 
+/**
+ * A selection change that was saved and synced. `events` is what the sync did;
+ * `state` is the new selection, when it changed.
+ */
 export type Applied = {
   status: "applied";
   events: SyncEvent[];
   state?: SelectionState;
 };
 
+/**
+ * A change that would undo exclusions or disables the developer made, so
+ * nothing was saved; ask, then retry with `overrides`, `decisions` or
+ * `resolution`.
+ */
 export type DecisionRequired = {
   status: "decision-required";
   conflicts: readonly OverrideConflict[];
@@ -89,12 +106,21 @@ export type DecisionRequired = {
 
 export type SelectionOutcome = Applied | DecisionRequired;
 
+/**
+ * `sets list`: the scopes the developer can subscribe to (personal scopes
+ * aside), current subscriptions, and problems such as a subscribed scope that
+ * no longer exists.
+ */
 export type SetsList = {
   available: ApiScope[];
   subscriptions: readonly Subscription[];
   diagnostics: readonly SelectionDiagnostic[];
 };
 
+/**
+ * A set's assets and which of them the current selection already installs; what
+ * the custom-install picker shows.
+ */
 export type SetPreview = {
   assets: AssetCatalog["assets"][number][];
   selectedAssetIds: string[];
@@ -313,6 +339,10 @@ function assetId(
   return id;
 }
 
+/**
+ * Installs, removes, enables or disables one asset, then syncs. Removing an
+ * asset a subscribed set still supplies also excludes it. Takes the sync lock.
+ */
 export function changeAsset(
   change: AssetChange,
   target: AssetTarget & Overrides,
@@ -481,6 +511,10 @@ export function previewSet(
   }));
 }
 
+/**
+ * Subscribes to a set in recommended, optional or all mode, then syncs. Returns
+ * a decision-required outcome when existing overrides need an explicit choice.
+ */
 export function installSet(
   options: SetSelection,
   home = homedir(),
@@ -548,6 +582,10 @@ export function installSetAssets(
   });
 }
 
+/**
+ * Removes, enables or disables a subscription, then syncs. A removed set's
+ * assets go unless something else selects them.
+ */
 export function changeSet(
   change: SetChange,
   options: SetTarget,

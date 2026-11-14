@@ -155,6 +155,10 @@ export async function knowledgeProblems(
   ];
 }
 
+/**
+ * Lists shared and retained local knowledge, optionally restricting to always-
+ * access documents, and marks session-start visibility.
+ */
 export async function knowledgeList(
   always = false,
   home = homedir(),
@@ -180,6 +184,10 @@ export async function knowledgeList(
   }));
 }
 
+/**
+ * Retrieves shared knowledge by name, falling back to a retained local document
+ * if the shared lookup fails.
+ */
 export async function knowledgeGet(
   name: string,
   home = homedir(),
@@ -199,6 +207,10 @@ export async function knowledgeGet(
   }
 }
 
+/**
+ * Formats a newline-separated session-start index with single-line
+ * descriptions; no documents produce an empty string.
+ */
 export function knowledgeIndexText(documents: KnowledgeListing[]) {
   if (!documents.length) {
     return "";

@@ -19,6 +19,10 @@ import type {
   Subscription,
 } from "../asset-selection/types.js";
 
+/**
+ * What setup offers: the catalog, the scopes the developer can use, the teams
+ * they belong to and the selection saved by a previous setup, used as defaults.
+ */
 export type OnboardingChoices = {
   catalog: EnvironmentCatalog;
   scopes: ApiScope[];
@@ -29,6 +33,10 @@ export type OnboardingChoices = {
   previous: SelectionState;
 };
 
+/**
+ * Gathers what setup offers, from the Git or local workspace as last fetched
+ * (without fetching again) or from the server.
+ */
 export async function onboardingEnvironment(
   settings: Settings,
   home: string,
@@ -99,12 +107,24 @@ export async function onboardingEnvironment(
 
 export type EnvironmentChoices = OnboardingChoices;
 
+/**
+ * Asks the developer which sources and assets to install and returns the new
+ * selection; replaced by a fake in tests.
+ */
 export type ChooseEnvironment = (
   choices: EnvironmentChoices,
 ) => Promise<SelectionState>;
 
+/**
+ * How much of one source to install. `custom` means picked assets, recorded one
+ * by one rather than as a subscription.
+ */
 export type SetupMode = "all" | "recommended" | "custom";
 
+/**
+ * One source setup lists (the organization, a team, a repository or the
+ * developer's own assets), with what is preselected.
+ */
 export type SetupSource = {
   scope: { type: "org" | "team" | "repo" | "dev"; id: string };
   label: string;
@@ -140,6 +160,11 @@ function initialMode(
   return scopeType === "dev" ? "all" : "recommended";
 }
 
+/**
+ * Builds setup choices from visible scopes, catalog and previous selections.
+ * Saved all/recommended modes are retained; optional subscriptions are
+ * presented as custom picks.
+ */
 export function onboardingSources(choices: EnvironmentChoices): SetupSource[] {
   const { catalog, previous, developerId, memberTeamIds, firstSetup } = choices;
   const subscribed = (scope: { type: string; id: string }) =>
@@ -278,6 +303,10 @@ export function selectOnboardingSources(
   };
 }
 
+/**
+ * The settings with their selection replaced by `selection`, after checking it
+ * names only scopes and assets setup offered. Writes nothing.
+ */
 export function selectedEnvironment(
   settings: Settings,
   choices: EnvironmentChoices,

@@ -7,6 +7,10 @@ export class LoginRequiredError extends Error {
   }
 }
 
+/**
+ * Validates a bare HTTP(S) origin; HTTP is allowed only on loopback, and
+ * credentials or URL suffixes are rejected.
+ */
 export function normalizeServer(value: string) {
   const url = new URL(value);
   if (
@@ -30,6 +34,10 @@ export function normalizeServer(value: string) {
   return url.origin;
 }
 
+/**
+ * Creates an origin-bound fetch with optional saved credentials, redirect
+ * rejection and a 30-second request timeout.
+ */
 export function serverFetch(
   server: string,
   home = homedir(),

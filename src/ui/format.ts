@@ -9,6 +9,10 @@ type Style = Parameters<typeof styleText>[0];
 const paint = (style: Style, text: string) =>
   styleText(style, text, { stream: process.stdout });
 
+/**
+ * Emphasis for commands, names and values, using Node's stream-aware color
+ * policy for stdout.
+ */
 export const bold = (text: string) => paint("bold", text);
 
 export const dim = (text: string) => paint("dim", text);
@@ -24,6 +28,11 @@ export function clean(value: unknown): string {
   return safe(value).replace(/\s+/g, " ").trim();
 }
 
+/**
+ * Counts Unicode code points after stripping terminal control sequences. This
+ * is a layout approximation, not the display-cell width of wide characters or
+ * emoji.
+ */
 export function visibleWidth(text: string): number {
   return [...stripVTControlCharacters(text)].length;
 }
@@ -74,6 +83,10 @@ function truncate(text: string, width: number): string {
   return output;
 }
 
+/**
+ * A command's title line: the brand name in the primary color, then `title` in
+ * bold.
+ */
 export function heading(title: string): string {
   return `${primary(bold("BarnDog"))} ${bold(title)}`;
 }
@@ -82,6 +95,7 @@ export function section(title: string): string {
   return bold(title);
 }
 
+/** A `Next:`, `Fix:` or `Tip:` line suggesting a command to run. */
 export function hint(command: string, label: "Next" | "Fix" | "Tip" = "Next") {
   return `${dim(`${label}:`)} ${bold(command)}`;
 }
@@ -103,6 +117,7 @@ export function fields(
   );
 }
 
+/** Layout for `table()`. `width` defaults to the terminal's width. */
 export type TableOptions = {
   header?: readonly string[];
   indent?: number;
@@ -189,16 +204,22 @@ export function badge(state: string, label: string = state): string {
 
 export { originLabel } from "../features/environment/names.js";
 
+/** `1 skill`, `2 skills`; pass `many` for irregular plurals. */
 export function plural(count: number, noun: string, many = `${noun}s`) {
   return `${count} ${count === 1 ? noun : many}`;
 }
 
+/** `up_to_date` → `Up to date`: a server or state code as a label. */
 export function humanize(value: string): string {
   const text = value.replaceAll("_", " ");
 
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+/**
+ * The `--json` rendering of a result: two-space indented JSON, without a
+ * trailing newline.
+ */
 export function json(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }

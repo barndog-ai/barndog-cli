@@ -31,6 +31,10 @@ export const assetKindList = [
 export const isAssetKind = (value: unknown): value is AssetKind =>
   assetKindList.some((kind) => kind === value);
 
+/**
+ * Asset kinds delivered as file packages; MCP definitions use separate
+ * configuration handling.
+ */
 export const packageKindList = [
   "skill",
   "hook",

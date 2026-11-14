@@ -9,6 +9,10 @@ import { writeAtomic } from "../../shared/files.js";
 /** A BarnDog session token: 32 random bytes in unpadded base64url, 43 characters. */
 export const SESSION_TOKEN = /^[\w-]{43}$/;
 
+/**
+ * Secret session token, expiry and actor identity stored for one server; never
+ * include it in output.
+ */
 export type Credential = {
   token: string;
   expiresAt: string;
@@ -32,6 +36,10 @@ const credentialsSchema = z.looseObject({
 
 type Credentials = z.infer<typeof credentialsSchema>;
 
+/**
+ * Reads saved sessions under the supplied home; rejects insecure POSIX
+ * permissions and returns empty state if absent.
+ */
 export async function readCredentials(home = homedir()): Promise<Credentials> {
   const path = join(home, ".barndog", "credentials.json");
   try {
@@ -60,6 +68,10 @@ export async function readCredentials(home = homedir()): Promise<Credentials> {
   }
 }
 
+/**
+ * Locks credentials under the supplied home, applies a synchronous update and
+ * atomically saves the result.
+ */
 export async function updateCredentials(
   home: string,
   update: (credentials: Credentials) => void,

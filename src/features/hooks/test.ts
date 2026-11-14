@@ -46,6 +46,10 @@ export type HookTestResult = {
   stderr: string;
 };
 
+/**
+ * Executes the selected Hook command in a POSIX shell with supplied native
+ * input, enforcing runtime and output limits.
+ */
 export async function testHook(
   name: string,
   origin: string,

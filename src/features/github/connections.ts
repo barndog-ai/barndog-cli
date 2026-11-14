@@ -41,6 +41,10 @@ export type GithubRepositoryOptions = {
   repository: string;
 };
 
+/**
+ * An asset to connect to an existing GitHub repository, and who stays
+ * authoritative.
+ */
 export type GithubConnectOptions = GithubRepositoryOptions & {
   /** `mirror` keeps BarnDog authoritative; the others hand authority to GitHub. */
   mode?: "connect" | "transfer" | "mirror";
@@ -48,10 +52,15 @@ export type GithubConnectOptions = GithubRepositoryOptions & {
   expectedVersion?: string;
 };
 
+/** A repository to copy once into a new BarnDog-owned asset. */
 export type GithubImportCopyOptions = GithubRepositoryOptions & {
   key: RetryKey;
 };
 
+/**
+ * A new GitHub repository for a published asset. `mode` defaults to `mirror`,
+ * `visibility` to private.
+ */
 export type GithubCreateRepositoryOptions = GithubRepositoryOptions & {
   key: RetryKey;
   /** Defaults to the asset's current version. */
@@ -60,6 +69,11 @@ export type GithubCreateRepositoryOptions = GithubRepositoryOptions & {
   visibility?: "private" | "public";
 };
 
+/**
+ * How to settle a mirror that diverged from BarnDog, refused if either side
+ * moved since `expectedVersion` and `expectedRemoteCommit` were inspected. A
+ * random retry key is used when `key` is left out.
+ */
 export type GithubResolveMirrorOptions = {
   connectionId: string;
   action: "use-barndog" | "use-mirror" | "disconnect";
