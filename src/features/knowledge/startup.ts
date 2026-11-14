@@ -1,3 +1,4 @@
+import { adapters, isHarness } from "../../harnesses/registry.js";
 import { knowledgeList, knowledgeIndexText } from "./index.js";
 
 /** Keep knowledge delivery from blocking harness startup beyond five seconds. */
@@ -15,19 +16,9 @@ const timer = setTimeout(() => {
 
 try {
   const text = knowledgeIndexText(await knowledgeList(true, process.argv[3]));
-  if (text) {
-    console.log(
-      JSON.stringify(
-        process.argv[2] === "cursor"
-          ? { additional_context: text }
-          : {
-              hookSpecificOutput: {
-                hookEventName: "SessionStart",
-                additionalContext: text,
-              },
-            },
-      ),
-    );
+  const harness = process.argv[2];
+  if (text && isHarness(harness)) {
+    console.log(JSON.stringify(adapters[harness].hooks.sessionContext(text)));
   }
 } catch {
   console.error(

@@ -697,10 +697,11 @@ export async function addHook(
     );
 
     context.write(`${ok("✔")} Added ${bold(name)}`);
-    if (plan.codex?.length) {
-      context.write(
-        dim("Codex skips new Hooks until you trust them with /hooks."),
-      );
+    for (const harness of harnesses) {
+      const { trustNote } = adapters[harness].hooks;
+      if (trustNote && plan[harness]?.length) {
+        context.write(dim(trustNote));
+      }
     }
 
     // Scripts placed by hand were given their tools on purpose.

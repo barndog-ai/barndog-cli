@@ -1,4 +1,5 @@
 import { Option, type Command } from "commander";
+import { harnesses } from "../harnesses/registry.js";
 import { stripVTControlCharacters } from "node:util";
 
 import type { UpdateMode } from "../features/imports/local.js";
@@ -92,11 +93,9 @@ export function registerAdd(program: Command, context: CommandContext) {
     .option("--config <json>", "Server configuration as JSON text")
     .option("--file <path>", "Read the configuration from a file")
     .addOption(
-      new Option("--from <harness>", "Import from a coding tool").choices([
-        "claude",
-        "codex",
-        "cursor",
-      ]),
+      new Option("--from <harness>", "Import from a coding tool").choices(
+        harnesses,
+      ),
     )
     .option("--replace", "Replace an existing entry in your coding tools")
     .option("--oauth", "The server signs in through your coding tool (OAuth)")

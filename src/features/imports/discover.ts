@@ -14,7 +14,11 @@ import { parse as parseToml } from "smol-toml";
 import { stringify } from "yaml";
 
 import { CliError, friendlyMessage } from "../../errors.js";
-import { harnesses, hookSettingsOwner } from "../../harnesses/registry.js";
+import {
+  adapters,
+  harnesses,
+  hookSettingsOwner,
+} from "../../harnesses/registry.js";
 import type { Harness } from "../../harnesses/types.js";
 import type { RemoteRepo } from "./remote.js";
 import { defined } from "../../shared/lookup.js";
@@ -445,12 +449,7 @@ export function buildHookPackage(
       );
 
       (byEvent[draft.event] ??= []).push(
-        harness === "cursor"
-          ? { command, ...(draft.matcher ? { matcher: draft.matcher } : {}) }
-          : {
-              ...(draft.matcher ? { matcher: draft.matcher } : {}),
-              hooks: [{ type: "command", command }],
-            },
+        adapters[harness].hooks.entry(command, draft.matcher),
       );
     }
 

@@ -55,7 +55,8 @@ import {
   showMcp,
   updateMcp,
 } from "./features/mcps/index.js";
-import { adaptHook } from "./features/hooks/adapt.js";
+import { adaptHook, toolNames } from "./features/hooks/adapt.js";
+import { harnesses } from "./harnesses/registry.js";
 import { hookCompatibility } from "./features/hooks/compatibility.js";
 import { testHook } from "./features/hooks/test.js";
 import {
@@ -435,7 +436,7 @@ export function createProgram(options: ProgramOptions = {}): Command {
   const program = new Command()
     .name("barndog")
     .description(
-      `${primary(styleText("bold", "BarnDog"))} keeps your team's Skills, MCP servers and Hooks in sync across Claude Code, Codex and Cursor.`,
+      `${primary(styleText("bold", "BarnDog"))} keeps your team's Skills, MCP servers and Hooks in sync across ${toolNames(harnesses)}.`,
     )
     .exitOverride()
     .configureOutput({

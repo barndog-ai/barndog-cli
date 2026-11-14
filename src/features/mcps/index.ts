@@ -24,6 +24,7 @@ import {
 } from "../workspace/assets.js";
 import { gitVersions } from "../collaboration/workspace-git.js";
 import type { PackageVersion } from "../collaboration/results.js";
+import { adapters } from "../../harnesses/registry.js";
 import type { Harness } from "../../harnesses/types.js";
 import { patchNative, type NativeEntry } from "../native/configuration.js";
 import { fileText } from "../../shared/files.js";
@@ -215,16 +216,22 @@ export async function authenticateMcp(
 
   const entry: NativeEntry = { ...installed, kind: "mcp", harness };
   patchNative(await fileText(entry.file), [entry], [entry]);
-  if (harness === "cursor") {
+  const { name: tool, mcp } = adapters[harness];
+  if ("settings" in mcp.login) {
     return {
-      message: `Open Cursor → Settings → MCP and authenticate ${asset.name}. Cursor manages this login locally.`,
+      message: `Open ${tool} → ${mcp.login.settings} and authenticate ${asset.name}. ${tool} manages this login locally.`,
     };
+  }
+
+  const [command, ...loginArguments] = mcp.login.command;
+  const login = mcp.login.command.join(" ");
+  if (!command) {
+    throw new Error(`The ${tool} adapter has an empty MCP login command`);
   }
 
   const cwd = barndogPaths(home).nativeAuth;
   await mkdir(cwd, { recursive: true, mode: POSIX_MODE.privateDirectory });
-  const command = harness === "claude" ? "claude" : "codex";
-  const child = spawn(command, ["mcp", "login", asset.name], {
+  const child = spawn(command, [...loginArguments, asset.name], {
     cwd,
     stdio: "inherit",
     env: process.env,
@@ -237,8 +244,8 @@ export async function authenticateMcp(
 
   if (code) {
     throw new CliError(
-      `${command} mcp login exited with code ${code}, so sign-in didn't finish.`,
-      `${command} mcp login ${asset.name}`,
+      `${login} exited with code ${code}, so sign-in didn't finish.`,
+      `${login} ${asset.name}`,
     );
   }
 

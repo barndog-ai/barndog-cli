@@ -23,7 +23,11 @@ import {
 } from "./names.js";
 import { originLabel } from "../server/origin.js";
 import { selectionState, withSelection } from "../../config/environment.js";
-import { skillDirectory, nativeFile } from "../../harnesses/registry.js";
+import {
+  adapters,
+  skillDirectory,
+  nativeFile,
+} from "../../harnesses/registry.js";
 import type { SyncEvent } from "./events.js";
 import { resolveAssets } from "../asset-selection/index.js";
 import { pruneCache } from "../workspace/packages.js";
@@ -140,25 +144,21 @@ export async function synchronize(
     }
 
     if (home === homedir()) {
-      if (
-        settings.harnesses.includes("claude") &&
-        process.env.CLAUDE_CONFIG_DIR
-      ) {
-        throw new CliError(
-          "BarnDog can't install into a custom CLAUDE_CONFIG_DIR yet; it uses ~/.claude.",
-          "unset CLAUDE_CONFIG_DIR",
-        );
-      }
+      for (const harness of settings.harnesses) {
+        const { configHome } = adapters[harness];
+        const custom = configHome && process.env[configHome.variable];
+        if (!configHome || !custom) {
+          continue;
+        }
 
-      if (
-        settings.harnesses.includes("codex") &&
-        process.env.CODEX_HOME &&
-        resolve(process.env.CODEX_HOME) !== join(home, ".codex")
-      ) {
-        throw new CliError(
-          "BarnDog can't install into a custom CODEX_HOME yet; it uses ~/.codex.",
-          "unset CODEX_HOME",
-        );
+        const isDefault = resolve(custom) === join(home, configHome.directory);
+
+        if (!isDefault || !configHome.defaultIsSupported) {
+          throw new CliError(
+            `BarnDog can't install into a custom ${configHome.variable} yet; it uses ~/${configHome.directory}.`,
+            `unset ${configHome.variable}`,
+          );
+        }
       }
     }
 
@@ -552,11 +552,8 @@ export async function synchronize(
           kind: "knowledge",
           harness,
           file: nativeFile(harness, "knowledge", home),
-          key: harness === "cursor" ? "sessionStart" : "SessionStart",
-          value:
-            harness === "cursor"
-              ? { command }
-              : { hooks: [{ type: "command", command }] },
+          key: adapters[harness].hooks.sessionStart,
+          value: adapters[harness].hooks.entry(command),
         });
       }
     }
@@ -577,11 +574,8 @@ export async function synchronize(
           kind: "sync",
           harness,
           file: nativeFile(harness, "sync", home),
-          key: harness === "cursor" ? "sessionStart" : "SessionStart",
-          value:
-            harness === "cursor"
-              ? { command }
-              : { hooks: [{ type: "command", command }] },
+          key: adapters[harness].hooks.sessionStart,
+          value: adapters[harness].hooks.entry(command),
         });
       }
     }

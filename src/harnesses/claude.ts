@@ -1,3 +1,8 @@
+import {
+  hookSpecificContext,
+  jsonMcpServer,
+  nestedHookEntry,
+} from "./formats.js";
 import type { HarnessAdapter } from "./types.js";
 
 const toolMatcher =
@@ -15,6 +20,10 @@ export const claude: HarnessAdapter = {
       /(^|\/)hooks\/hooks\.json$/,
     ],
     rootVariables: ["CLAUDE_PLUGIN_ROOT"],
+    file: ".claude/settings.json",
+    sessionStart: "SessionStart",
+    entry: nestedHookEntry,
+    sessionContext: hookSpecificContext,
     events: [
       {
         name: "SessionStart",
@@ -57,5 +66,19 @@ export const claude: HarnessAdapter = {
         matcher: "Why the session ended",
       },
     ],
+  },
+  mcp: {
+    file: ".claude.json",
+    server: (definition) =>
+      jsonMcpServer(definition, {
+        reference: (variable) => `\${${variable}}`,
+        typed: true,
+      }),
+    login: { command: ["claude", "mcp", "login"] },
+  },
+  configHome: {
+    variable: "CLAUDE_CONFIG_DIR",
+    directory: ".claude",
+    defaultIsSupported: false,
   },
 };

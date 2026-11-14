@@ -81,76 +81,16 @@ export function mcpEntry(
   definition: McpDefinition,
   home: string,
 ): NativeEntry {
-  const refs =
-    definition.transport === "stdio"
-      ? definition.environment
-      : definition.headers;
-
-  const env = Object.fromEntries(
-    Object.entries(refs).map(([name, ref]) => [
-      name,
-      harness === "cursor"
-        ? `\${env:${ref.secretRef}}`
-        : `\${${ref.secretRef}}`,
-    ]),
-  );
-
-  let value: Record<string, unknown>;
-  if (definition.transport === "http") {
-    value =
-      harness === "codex"
-        ? {
-            url: definition.url,
-            ...(Object.keys(refs).length
-              ? {
-                  env_http_headers: Object.fromEntries(
-                    Object.entries(refs).map(([k, v]) => [k, v.secretRef]),
-                  ),
-                }
-              : {}),
-          }
-        : {
-            ...(harness === "claude" ? { type: "http" } : {}),
-            url: definition.url,
-            ...(Object.keys(env).length ? { headers: env } : {}),
-          };
-  } else if (harness === "codex") {
-    // Native forwarding preserves reference-only storage. Renamed variables are
-    // bound by a tiny local launcher, without writing their values to disk.
-    const renamed = Object.entries(refs).some(
-      ([key, ref]) => key !== ref.secretRef,
-    );
-
-    value = renamed
-      ? {
-          command: process.execPath,
-          args: [
-            fileURLToPath(new URL("./mcp-launch.js", import.meta.url)),
-            Buffer.from(JSON.stringify(definition)).toString("base64url"),
-          ],
-          env_vars: Object.values(refs).map((v) => v.secretRef),
-        }
-      : {
-          command: definition.command,
-          args: definition.args,
-          env_vars: Object.values(refs).map((v) => v.secretRef),
-        };
-  } else {
-    value = {
-      ...(harness === "claude" ? { type: "stdio" } : {}),
-      command: definition.command,
-      args: definition.args,
-      ...(Object.keys(env).length ? { env } : {}),
-    };
-  }
-
   return {
     id: asset.id,
     kind: "mcp",
     harness,
     file: nativeFile(harness, "mcp", home),
     key: asset.name,
-    value,
+    value: adapters[harness].mcp.server(
+      definition,
+      fileURLToPath(new URL("./mcp-launch.js", import.meta.url)),
+    ),
   };
 }
 

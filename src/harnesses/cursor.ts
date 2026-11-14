@@ -1,3 +1,4 @@
+import { jsonMcpServer } from "./formats.js";
 import type { HarnessAdapter } from "./types.js";
 
 const toolMatcher = "Tool type, such as Shell, Read or Write";
@@ -14,6 +15,14 @@ export const cursor: HarnessAdapter = {
       /(^|\/)hooks\/hooks-cursor\.json$/,
     ],
     rootVariables: ["CURSOR_PLUGIN_ROOT"],
+    file: ".cursor/hooks.json",
+    fileVersion: 1,
+    sessionStart: "sessionStart",
+    entry: (command, matcher) => ({
+      command,
+      ...(matcher ? { matcher } : {}),
+    }),
+    sessionContext: (text) => ({ additional_context: text }),
     events: [
       { name: "sessionStart" },
       { name: "sessionEnd" },
@@ -43,5 +52,14 @@ export const cursor: HarnessAdapter = {
       { name: "preCompact" },
       { name: "stop" },
     ],
+  },
+  mcp: {
+    file: ".cursor/mcp.json",
+    server: (definition) =>
+      jsonMcpServer(definition, {
+        reference: (variable) => `\${env:${variable}}`,
+        typed: false,
+      }),
+    login: { settings: "Settings → MCP" },
   },
 };

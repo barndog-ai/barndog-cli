@@ -15,6 +15,7 @@ import { stringify } from "yaml";
 import { readSettings, SetupRequiredError } from "../../config/settings.js";
 import { CliError } from "../../errors.js";
 import {
+  adapters,
   harnesses,
   type Harness,
   nativeFile,
@@ -321,18 +322,18 @@ export async function harnessServers(
   };
 
   const claude = await jsonFile(nativeFile("claude", "mcp", home));
-  add("claude", "Claude Code", claude.mcpServers);
+  add("claude", adapters.claude.name, claude.mcpServers);
   for (const [project, value] of Object.entries(asRecord(claude.projects))) {
     add(
       "claude",
-      `Claude Code, ${basename(project)} project`,
+      `${adapters.claude.name}, ${basename(project)} project`,
       asRecord(value).mcpServers,
     );
   }
 
   add(
     "cursor",
-    "Cursor",
+    adapters.cursor.name,
     (await jsonFile(nativeFile("cursor", "mcp", home))).mcpServers,
   );
 
@@ -341,7 +342,7 @@ export async function harnessServers(
   );
 
   if (codex) {
-    add("codex", "Codex", parseToml(codex).mcp_servers);
+    add("codex", adapters.codex.name, parseToml(codex).mcp_servers);
   }
 
   return found;

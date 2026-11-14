@@ -15,7 +15,7 @@ import { parse as parseToml, stringify as stringifyToml } from "smol-toml";
 import { parseForESLint } from "toml-eslint-parser";
 import { isDeepStrictEqual } from "node:util";
 import type { Harness } from "../../harnesses/types.js";
-import type { NativeKind } from "../../harnesses/registry.js";
+import { adapters, type NativeKind } from "../../harnesses/registry.js";
 import { isRecord } from "../../shared/values.js";
 import { CliError } from "../../errors.js";
 
@@ -146,11 +146,15 @@ export function patchNative(
   }
 
   const toml = sample.file.endsWith(".toml");
+  // Only the hook settings file carries a version; MCP files never do.
+  const version =
+    sample.kind === "mcp"
+      ? undefined
+      : adapters[sample.harness].hooks.fileVersion;
+
   let output =
     text ??
-    (sample.harness === "cursor" && sample.kind !== "mcp"
-      ? '{\n  "version": 1\n}\n'
-      : "{}\n");
+    `${JSON.stringify(version === undefined ? {} : { version }, null, 2)}\n`;
 
   const read = () =>
     toml
@@ -356,14 +360,9 @@ export function patchNative(
     }
   }
 
-  if (
-    !toml &&
-    sample.harness === "cursor" &&
-    sample.kind !== "mcp" &&
-    data.version !== 1
-  ) {
+  if (version !== undefined && data.version !== version) {
     throw new CliError(
-      `${sample.file} has a version BarnDog doesn't support (it expects "version": 1), so it was left unchanged.`,
+      `${sample.file} has a version BarnDog doesn't support (it expects "version": ${version}), so it was left unchanged.`,
     );
   }
 

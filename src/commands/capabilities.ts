@@ -36,6 +36,7 @@ import type {
   GithubPullsReviewOptions,
   GithubPullsReviseOptions,
 } from "../features/github/pulls.js";
+import { harnesses } from "../harnesses/registry.js";
 import type { Harness } from "../harnesses/types.js";
 import { defined } from "../shared/lookup.js";
 import { positiveInteger } from "../ui/options.js";
@@ -370,7 +371,7 @@ export function registerCapabilities(
     .option("--origin <origin>", ORIGIN_HELP)
     .addOption(
       new Option("--harness <harness>", "Native login owner")
-        .choices(["claude", "codex", "cursor"])
+        .choices(harnesses)
         .makeOptionMandatory(),
     )
     .description("Enter native authentication without sharing credentials")
@@ -403,7 +404,7 @@ export function registerCapabilities(
     .option("--origin <origin>", ORIGIN_HELP)
     .addOption(
       new Option("--harness <harness>", "Chosen implementation")
-        .choices(["claude", "codex", "cursor"])
+        .choices(harnesses)
         .makeOptionMandatory(),
     )
     .requiredOption("--input <file>", "Native JSON test input")
@@ -494,7 +495,7 @@ export function registerCapabilities(
       new Option(
         "--for <tools...>",
         "Coding tools to adapt it for (default: the ones this machine uses that it doesn't cover)",
-      ).choices(["claude", "codex", "cursor"]),
+      ).choices(harnesses),
     )
     .description(
       "Print a prompt for an AI agent to adapt a Hook to coding tools it wasn't written for",
