@@ -38,7 +38,7 @@ function restrictLiterals(owner) {
 }
 
 export default defineConfig([
-  { ignores: ["dist/**", "node_modules/**", ".barndog/**"] },
+  { ignores: ["dist/**", "node_modules/**", ".barndog/**", "coverage/**"] },
   {
     files: ["**/*.{js,ts}"],
     extends: [

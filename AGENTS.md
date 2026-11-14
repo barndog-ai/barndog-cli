@@ -16,9 +16,12 @@ pnpm typecheck         # tsc over src/, tests included, without emitting
 pnpm knip              # unused files, exports and dependencies; test-only use doesn't count
 pnpm test              # Vitest; builds dist/ first for tests that start the CLI
 pnpm test:watch        # Vitest in watch mode
+pnpm test:coverage     # pnpm test with V8 coverage of src/; fails below the thresholds
 ```
 
 This repository uses pnpm (pinned in `packageManager`); don't commit a `package-lock.json`. pnpm refuses packages published less than a day ago; `pnpm-workspace.yaml` exempts only our own `@barndog-ai/*` scope, so a fresh `@barndog-ai/api-contract` installs at once. Don't widen that exemption for third-party packages. Before finishing a code change, run `pnpm lint`, `pnpm format:check`, `pnpm typecheck`, `pnpm knip`, and `pnpm test`. Unit tests use temporary home directories and need no server. End-to-end tests that drive the built CLI against a real BarnDog server, PostgreSQL, and Git run in the BarnDog server repository against a published release, so keep the public surface (commands, options, `--json` output, and the files under `~/.barndog/`) stable or change it deliberately.
+
+`pnpm test:coverage` (what CI runs) measures V8 coverage of `src/`, tests excluded, and writes an HTML report to `coverage/`. `coverage.thresholds` in `vitest.config.ts` sit just below the measured totals, so a change that lowers coverage fails. When you fill a gap, raise the thresholds to just below the new numbers; never lower them to make a change pass. Code that only runs inside the built CLI started as a child process (such as `src/cli.ts`) isn't counted.
 
 The command reference at [barndog.dev/docs/cli](https://barndog.dev/docs/cli) is checked against `createProgram()`: every runnable command needs documentation, and every long option must be mentioned in its command's section. Adding, renaming, or removing a command or option needs a matching docs update.
 

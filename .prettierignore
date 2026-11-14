@@ -3,3 +3,4 @@ dist/
 .barndog/
 pnpm-lock.yaml
 fixtures/
+coverage/
