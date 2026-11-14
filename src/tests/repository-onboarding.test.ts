@@ -12,7 +12,6 @@ import { initialize } from "../features/onboarding/setup.js";
 import {
   readSettings,
   saveSettings,
-  settingsPath,
   type Settings,
 } from "../config/settings.js";
 import { updateCredentials } from "../features/auth/credentials.js";
@@ -22,6 +21,7 @@ import {
 } from "../features/repositories/context.js";
 import { createProgram } from "../program.js";
 import { workingDiff, workingStatus } from "../features/collaboration/index.js";
+import { barndogPaths } from "../config/paths.js";
 
 const org = randomUUID(),
   developer = randomUUID(),
@@ -218,7 +218,7 @@ test("connected onboarding loads actual membership without using repository sugg
     "optional",
   );
 
-  const before = await readFile(settingsPath(home), "utf8");
+  const before = await readFile(barndogPaths(home).settings, "utf8");
   await expect(
     initialize({
       home,
@@ -232,7 +232,7 @@ test("connected onboarding loads actual membership without using repository sugg
     }),
   ).rejects.toThrow(/cancelled/);
 
-  expect(await readFile(settingsPath(home), "utf8")).toBe(before);
+  expect(await readFile(barndogPaths(home).settings, "utf8")).toBe(before);
   const unrelated = await localRepository(home);
   expect(unrelated.root).toBe(null);
   ambiguous = true;
@@ -286,7 +286,7 @@ test("local-only environment inspection and synchronization preview need no serv
   const home = await mkdtemp(join(tmpdir(), "barndog-local-inspect-"));
   t.onTestFinished(() => rm(home, { recursive: true, force: true }));
   await saveSettings({ harnesses: ["claude", "codex"] }, home);
-  const before = await readFile(settingsPath(home), "utf8");
+  const before = await readFile(barndogPaths(home).settings, "utf8");
   const diff = (await workingDiff(home, home)) as {
     mode: string;
     events: unknown[];
@@ -294,5 +294,5 @@ test("local-only environment inspection and synchronization preview need no serv
 
   expect(diff.mode).toBe("environment-preview");
   expect(diff.events).toStrictEqual([]);
-  expect(await readFile(settingsPath(home), "utf8")).toBe(before);
+  expect(await readFile(barndogPaths(home).settings, "utf8")).toBe(before);
 });

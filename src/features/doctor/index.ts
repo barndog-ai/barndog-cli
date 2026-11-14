@@ -1,9 +1,5 @@
 import { homedir } from "node:os";
-import {
-  readSettings,
-  settingsPath,
-  type GitWorkspace,
-} from "../../config/settings.js";
+import { readSettings, type GitWorkspace } from "../../config/settings.js";
 import { remoteHead } from "../workspace/git.js";
 import { branchProtected } from "../workspace/publish.js";
 import { readFetchState } from "../workspace/repo-source.js";
@@ -14,6 +10,7 @@ import { authStatus } from "../auth/session.js";
 import { LoginRequiredError } from "../auth/transport.js";
 import { synchronize } from "../environment/sync.js";
 import { assetKinds } from "../asset-kinds/index.js";
+import { barndogPaths } from "../../config/paths.js";
 
 export type Check = {
   name: string;
@@ -97,7 +94,7 @@ export async function doctor(home = homedir()): Promise<Check[]> {
   checks.push({
     name: "Configuration",
     status: "ok",
-    detail: settingsPath(home),
+    detail: barndogPaths(home).settings,
   });
 
   const detected = await detectHarnesses({ home });

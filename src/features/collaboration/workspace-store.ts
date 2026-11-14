@@ -1,18 +1,8 @@
-import { POSIX_MODE } from "../../shared/constants.js";
 import { CliError, PackageError } from "../../errors.js";
-import { errorCode } from "../../shared/values.js";
 import { randomUUID, createHash } from "node:crypto";
 
 import { join, dirname, isAbsolute } from "node:path";
-import {
-  mkdir,
-  readFile,
-  writeFile,
-  readdir,
-  realpath,
-  rm,
-  lstat,
-} from "node:fs/promises";
+import { readFile, readdir, realpath, rm, lstat } from "node:fs/promises";
 import { z } from "zod";
 
 import { changeUploadSchema } from "@barndog-ai/api-contract";
@@ -24,8 +14,9 @@ import {
 import { readDirectory } from "@barndog-ai/api-contract/collaboration";
 import { packageKindList } from "../../config/selection.js";
 import { GIT_OBJECT_ID } from "../../shared/patterns.js";
-import { writeAtomic } from "../../shared/files.js";
+import { readIfExists, writeAtomic } from "../../shared/files.js";
 import { withPidLock } from "../../shared/lock.js";
+import { barndogPaths } from "../../config/paths.js";
 
 const filesSchema = z.array(
   z.object({ path: z.string(), content: z.string(), executable: z.boolean() }),
@@ -158,17 +149,10 @@ export const decodeFiles = (files: Files): PackageEntry[] =>
     executable: e.executable,
   }));
 
-/**
- * `~/.barndog/workspaces/`: working-copy records, keyed by a hash of the folder
- * path, with their lock and recovery snapshots.
- */
-export function directory(home: string) {
-  return join(home, ".barndog", "workspaces");
-}
-
+/** A working copy's record, keyed by a hash of its folder's path. */
 function recordPath(root: string, home: string) {
   return join(
-    directory(home),
+    barndogPaths(home).workingCopies,
     createHash("sha256").update(root).digest("hex") + ".json",
   );
 }
@@ -181,7 +165,7 @@ export async function save<T extends StoredRecord>(work: T, home: string) {
 /** Serializes working-copy changes across processes. */
 export function locked<T>(home: string, run: () => Promise<T>): Promise<T> {
   return withPidLock(
-    join(directory(home), "lock"),
+    barndogPaths(home).workingCopiesLock,
     {
       starting:
         "Another BarnDog workspace operation is starting; retry shortly",
@@ -231,10 +215,9 @@ async function findRecord<T extends StoredRecord>(
 ): Promise<T> {
   let path = await realpath(cwd);
   while (true) {
-    try {
-      const work = parse(
-        JSON.parse(await readFile(recordPath(path, home), "utf8")),
-      );
+    const text = await readIfExists(recordPath(path, home));
+    if (text !== null) {
+      const work = parse(JSON.parse(text));
 
       if (work.root !== path) {
         throw new Error(
@@ -245,7 +228,7 @@ async function findRecord<T extends StoredRecord>(
       if (work.pendingWrite) {
         if (
           !work.pendingSnapshot?.startsWith(
-            join(directory(home), "snapshots") + "/",
+            barndogPaths(home).workingCopySnapshots + "/",
           )
         ) {
           throw new Error(
@@ -284,10 +267,6 @@ async function findRecord<T extends StoredRecord>(
       }
 
       return work;
-    } catch (error) {
-      if (errorCode(error) !== "ENOENT") {
-        throw error;
-      }
     }
 
     if (dirname(path) === path) {
@@ -374,24 +353,17 @@ export async function applyFiles<T extends StoredRecord>(
   }
 
   const snapshot = join(
-    directory(home),
-    "snapshots",
+    barndogPaths(home).workingCopySnapshots,
     `${Date.now()}-${randomUUID()}.json`,
   );
 
-  await mkdir(dirname(snapshot), {
-    recursive: true,
-    mode: POSIX_MODE.privateDirectory,
-  });
-
-  await writeFile(
+  await writeAtomic(
     snapshot,
     JSON.stringify({
       root: work.root,
       files: encodeFiles(local),
       workspace: previous,
     }),
-    { mode: 0o600 },
   );
 
   work.pendingWrite = encodeFiles(entries);

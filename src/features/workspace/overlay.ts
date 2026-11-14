@@ -1,6 +1,3 @@
-import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-
 import type { Settings } from "../../config/settings.js";
 import type { AssetCatalog, AssetReference } from "../asset-selection/types.js";
 import type { SelectionState } from "../../config/selection.js";
@@ -8,13 +5,13 @@ import { resolveAssets } from "../asset-selection/index.js";
 import type { WorkspaceSource } from "./source.js";
 import type { WorkspaceModel } from "./format.js";
 import { localRepoSource, type RepoSource } from "./repo-source.js";
-import { errorCode } from "../../shared/values.js";
 import { z } from "zod";
+import { localWorkspaceFiles } from "../../config/paths.js";
+import { readJsonIfExists, writeAtomic } from "../../shared/files.js";
+import { POSIX_MODE } from "../../shared/constants.js";
 
 /** How assets in the kept local folder are addressed next to a shared workspace. */
 export const LOCAL_ORIGIN = "local";
-
-const MOVED_FILE = ".barndog-moved.json";
 
 const movedSchema = z.array(
   z.looseObject({
@@ -39,17 +36,10 @@ export type MovedAsset = z.infer<typeof movedSchema>[number];
  * means nothing has moved.
  */
 export async function readMoved(folder: string): Promise<MovedAsset[]> {
-  try {
-    return movedSchema.parse(
-      JSON.parse(await readFile(join(folder, MOVED_FILE), "utf8")),
-    );
-  } catch (error) {
-    if (errorCode(error) === "ENOENT") {
-      return [];
-    }
-
-    throw error;
-  }
+  return (
+    (await readJsonIfExists(localWorkspaceFiles(folder).moved, movedSchema)) ??
+    []
+  );
 }
 
 /**
@@ -61,9 +51,10 @@ export async function recordMoved(folder: string, added: MovedAsset[]) {
     (entry) => !added.some((asset) => asset.path === entry.path),
   );
 
-  await writeFile(
-    join(folder, MOVED_FILE),
+  await writeAtomic(
+    localWorkspaceFiles(folder).moved,
     JSON.stringify([...kept, ...added], null, 2) + "\n",
+    { mode: POSIX_MODE.regularFile },
   );
 }
 

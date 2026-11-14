@@ -18,7 +18,6 @@ import {
   type Settings,
   readSettings,
   saveSettings,
-  settingsPath,
 } from "../../config/settings.js";
 import { homedir } from "node:os";
 import { detectHarnesses } from "../../harnesses/detect.js";
@@ -27,6 +26,7 @@ import type { DetectedHarness, Harness } from "../../harnesses/registry.js";
 import { connectionContext } from "../auth/session.js";
 import { defined } from "../../shared/lookup.js";
 import { CliError } from "../../errors.js";
+import { barndogPaths } from "../../config/paths.js";
 
 export type HarnessChoice = {
   value: Harness;
@@ -186,7 +186,7 @@ export async function initialize(options: {
 
     if (options.confirm && !(await options.confirm(next))) {
       return {
-        configPath: settingsPath(home),
+        configPath: barndogPaths(home).settings,
         harnesses: selected,
         cancelled: true,
       };
@@ -198,6 +198,6 @@ export async function initialize(options: {
       await saveSettings(next, home);
     }
 
-    return { configPath: settingsPath(home), harnesses: selected };
+    return { configPath: barndogPaths(home).settings, harnesses: selected };
   });
 }

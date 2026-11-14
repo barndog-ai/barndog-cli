@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -38,8 +38,9 @@ import { assetKinds } from "../asset-kinds/index.js";
 import { packageKindList, type PackageKind } from "../../config/selection.js";
 import { defined } from "../../shared/lookup.js";
 import { z } from "zod";
-
-const SOURCES_FILE = ".barndog-sources.json";
+import { localWorkspaceFiles } from "../../config/paths.js";
+import { readJsonIfExists, writeAtomic } from "../../shared/files.js";
+import { POSIX_MODE } from "../../shared/constants.js";
 
 /**
  * Imported-content update policy: independent fork, explicit manual updates, or
@@ -70,23 +71,19 @@ const sourcesSchema = z.looseObject({
 type Sources = z.infer<typeof sourcesSchema>;
 
 async function readSources(folder: string): Promise<Sources> {
-  try {
-    return sourcesSchema.parse(
-      JSON.parse(await readFile(join(folder, SOURCES_FILE), "utf8")),
-    );
-  } catch (error) {
-    if (errorCode(error) === "ENOENT") {
-      return { imports: [] };
-    }
-
-    throw error;
-  }
+  return (
+    (await readJsonIfExists(
+      localWorkspaceFiles(folder).sources,
+      sourcesSchema,
+    )) ?? { imports: [] }
+  );
 }
 
 const writeSources = (folder: string, sources: Sources) =>
-  writeFile(
-    join(folder, SOURCES_FILE),
+  writeAtomic(
+    localWorkspaceFiles(folder).sources,
     JSON.stringify(sources, null, 2) + "\n",
+    { mode: POSIX_MODE.regularFile },
   );
 
 /** The repository an asset still follows, or null for a fork or one made here. */

@@ -5,7 +5,6 @@ import { rmSync } from "node:fs";
 import { lstat, mkdir, readlink, rm, symlink, unlink } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { packageFingerprint } from "@barndog-ai/api-contract/package";
-import { settingsPath } from "../../config/settings.js";
 import {
   skillDirectory,
   harnesses,
@@ -16,12 +15,11 @@ import { connectionContext } from "../auth/session.js";
 import type { JournalIdentity } from "../workspace/source.js";
 import { NAME } from "../../shared/patterns.js";
 import { desiredEntries, mirrorTree } from "../workspace/installed.js";
-import { installedRoot } from "../../config/state.js";
 import { treeFingerprint } from "../../shared/tree.js";
-import { errorCode } from "../../shared/values.js";
-import { fileText, writeAtomic } from "../../shared/files.js";
+import { fileText, ifExists, writeAtomic } from "../../shared/files.js";
 import { withPidLock } from "../../shared/lock.js";
 import { CliError } from "../../errors.js";
+import { barndogPaths } from "../../config/paths.js";
 
 /**
  * One journaled sync change. File values are text, link values are targets and
@@ -89,29 +87,25 @@ const locks = new AsyncLocalStorage<ReadonlySet<string>>();
  * over a folder it didn't create.
  */
 export async function linkTarget(path: string): Promise<string | null> {
-  try {
-    const info = await lstat(path);
-    if (!info.isSymbolicLink()) {
-      throw new CliError(
-        `${path} is a Skill folder BarnDog didn't install, so it won't replace it. Move or rename it, then sync again.`,
-        "barndog sync",
-      );
-    }
-
-    return resolve(dirname(path), await readlink(path));
-  } catch (error) {
-    if (errorCode(error) === "ENOENT") {
-      return null;
-    }
-
-    throw error;
+  const info = await ifExists(lstat(path));
+  if (!info) {
+    return null;
   }
+
+  if (!info.isSymbolicLink()) {
+    throw new CliError(
+      `${path} is a Skill folder BarnDog didn't install, so it won't replace it. Move or rename it, then sync again.`,
+      "barndog sync",
+    );
+  }
+
+  return resolve(dirname(path), await readlink(path));
 }
 
 function validateWrites(writes: Write[], home: string) {
   const files = new Set([
-    settingsPath(home),
-    join(home, ".barndog/state.json"),
+    barndogPaths(home).settings,
+    barndogPaths(home).state,
     ...harnesses.flatMap((h) => [
       nativeFile(h, "mcp", home),
       nativeFile(h, "hook", home),
@@ -127,9 +121,10 @@ function validateWrites(writes: Write[], home: string) {
     paths.add(write.path);
     if (write.kind === "tree") {
       if (
-        ![installedRoot(home, "skill"), installedRoot(home, "hook")].includes(
-          dirname(write.path),
-        ) ||
+        ![
+          barndogPaths(home).installed("skill"),
+          barndogPaths(home).installed("hook"),
+        ].includes(dirname(write.path)) ||
         !NAME.test(basename(write.path)) ||
         (write.source !== null && !isAbsolute(write.source)) ||
         (write.after !== null) !== (write.source !== null) ||
@@ -286,7 +281,7 @@ async function apply(
  * has changed.
  */
 async function recover(home: string) {
-  const path = join(home, ".barndog/pending-sync.json");
+  const path = barndogPaths(home).pendingSync;
   const text = await fileText(path);
 
   if (text === null) {
@@ -330,11 +325,10 @@ export async function transact(
   }
 
   validateWrites(writes, home);
-  const config = writes.find((w) => w.path === settingsPath(home));
+  const config = writes.find((w) => w.path === barndogPaths(home).settings);
   if (config?.before) {
     const backup = join(
-      home,
-      ".barndog/migrations",
+      barndogPaths(home).migrations,
       `config-${createHash("sha256").update(config.before).digest("hex")}.yaml`,
     );
 
@@ -346,7 +340,7 @@ export async function transact(
     }
   }
 
-  const path = join(home, ".barndog/pending-sync.json");
+  const path = barndogPaths(home).pendingSync;
   await writeAtomic(
     path,
     JSON.stringify(
@@ -410,7 +404,7 @@ export async function locked<T>(
     return run();
   }
 
-  const path = join(home, ".barndog/sync.lock");
+  const path = barndogPaths(home).syncLock;
 
   return withPidLock(
     path,

@@ -1,6 +1,6 @@
 import { POSIX_MODE } from "../../shared/constants.js";
 import { readState } from "../../config/state.js";
-import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 
@@ -27,6 +27,7 @@ import { NAME_RULE, validAssetName } from "../workspace/format.js";
 import { LOCAL_ORIGIN } from "../workspace/overlay.js";
 import { ensureLocalWorkspace } from "../imports/local.js";
 import { asRecord, asStrings, isRecord } from "../../shared/values.js";
+import { barndogPaths } from "../../config/paths.js";
 
 /**
  * An MCP server entry as a harness or pasted JSON spells it, before conversion.
@@ -303,7 +304,7 @@ async function jsonFile(path: string) {
 export async function harnessServers(
   home = homedir(),
 ): Promise<HarnessServer[]> {
-  const { native } = await readState(join(home, ".barndog/state.json"), home);
+  const { native } = await readState(home);
   const owned = new Set(
     native
       .filter((entry) => entry.kind === "mcp")
@@ -413,17 +414,11 @@ export async function addMcpServers(
       for (const conflict of await conflictingEntries(name, home)) {
         const text = await readFile(conflict.file, "utf8");
         const backup = join(
-          home,
-          ".barndog/migrations",
+          barndogPaths(home).migrations,
           `${basename(conflict.file)}-${Date.now()}.bak`,
         );
 
-        await mkdir(join(home, ".barndog/migrations"), {
-          recursive: true,
-          mode: POSIX_MODE.privateDirectory,
-        });
-
-        await copyFile(conflict.file, backup);
+        await writeAtomic(backup, text);
         backups.push(backup);
         await writeAtomic(
           conflict.file,
@@ -444,10 +439,12 @@ export async function addMcpServers(
         );
       }
 
+      // The workspace's own folders keep default permissions; writeAtomic would make them private.
       await mkdir(join(workspace.path, "org/mcp"), { recursive: true });
-      await writeFile(
+      await writeAtomic(
         join(workspace.path, "org/mcp", `${name}.yaml`),
         stringify(definition),
+        { mode: POSIX_MODE.regularFile },
       );
     }
 

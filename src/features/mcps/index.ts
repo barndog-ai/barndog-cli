@@ -2,7 +2,6 @@ import { POSIX_MODE } from "../../shared/constants.js";
 import { readState } from "../../config/state.js";
 import { homedir } from "node:os";
 import { readFile, mkdir } from "node:fs/promises";
-import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { z } from "zod";
@@ -30,6 +29,7 @@ import { patchNative, type NativeEntry } from "../native/configuration.js";
 import { fileText } from "../../shared/files.js";
 import { defined } from "../../shared/lookup.js";
 import { CliError } from "../../errors.js";
+import { barndogPaths } from "../../config/paths.js";
 
 export type McpWriteInput = {
   name: string;
@@ -200,7 +200,7 @@ export async function authenticateMcp(
     };
   }
 
-  const { native } = await readState(join(home, ".barndog/state.json"), home);
+  const { native } = await readState(home);
 
   const installed = native.find(
     (e) => e.id === asset.id && e.kind === "mcp" && e.harness === harness,
@@ -221,7 +221,7 @@ export async function authenticateMcp(
     };
   }
 
-  const cwd = join(home, ".barndog/native-auth");
+  const cwd = barndogPaths(home).nativeAuth;
   await mkdir(cwd, { recursive: true, mode: POSIX_MODE.privateDirectory });
   const command = harness === "claude" ? "claude" : "codex";
   const child = spawn(command, ["mcp", "login", asset.name], {

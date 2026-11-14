@@ -1,8 +1,9 @@
 import { POSIX_MODE } from "./constants.js";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { errorCode } from "./values.js";
 import { CliError } from "./cli-error.js";
+import { writeAtomic } from "./files.js";
 
 /** What to tell a process that finds the lock taken. */
 export type LockMessages = {
@@ -58,7 +59,7 @@ export async function withPidLock<T>(
   }
 
   try {
-    await writeFile(join(path, "pid"), String(process.pid), { mode: 0o600 });
+    await writeAtomic(join(path, "pid"), String(process.pid));
 
     return await run();
   } finally {

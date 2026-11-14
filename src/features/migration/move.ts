@@ -47,7 +47,6 @@ import {
 } from "../workspace/publish.js";
 import {
   acceptedCommit,
-  gitDirectory,
   gitRepoSource,
   localRepoSource,
   recordFetch,
@@ -56,6 +55,7 @@ import {
 } from "../workspace/repo-source.js";
 import { defined } from "../../shared/lookup.js";
 import { setYamlName } from "../../shared/patterns.js";
+import { barndogPaths } from "../../config/paths.js";
 
 /** Three random bytes distinguish temporary move branches. */
 const MOVE_BRANCH_RANDOM_BYTES = 3;
@@ -278,7 +278,7 @@ async function moveToGit(
   );
 
   const scope = selectScope(shared, to ?? "org");
-  const repo = gitDirectory(workspace.workspaceId, home);
+  const repo = barndogPaths(home).bareClone(workspace.workspaceId);
   const rows: MoveRow[] = [];
   const moving: {
     item: Candidate;

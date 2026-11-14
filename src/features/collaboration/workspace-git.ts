@@ -38,7 +38,6 @@ import {
 import { isBlob, gitSnapshot, GIT_MODE } from "../workspace/snapshot.js";
 import {
   acceptedCommit,
-  gitDirectory,
   gitRepoSource,
   recordFetch,
   trackingRef,
@@ -72,6 +71,7 @@ import type {
   UpdatedGitWorkingCopy,
   VersionFiles,
 } from "./results.js";
+import { barndogPaths } from "../../config/paths.js";
 
 /** Three random bytes provide six hex characters to distinguish work branches. */
 const BRANCH_RANDOM_BYTES = 3;
@@ -313,7 +313,7 @@ async function branchFiles(work: GitWorkingCopy, head: string, home: string) {
     "This working copy has no review branch",
   );
 
-  const repo = gitDirectory(work.git.workspaceId, home);
+  const repo = barndogPaths(home).bareClone(work.git.workspaceId);
   await git(
     ["fetch", "--quiet", "--no-tags", "origin", `refs/heads/${branch}`],
     { repo },
@@ -349,7 +349,7 @@ export function updateGitWorkingCopy(
       );
     }
 
-    const repo = gitDirectory(work.git.workspaceId, home);
+    const repo = barndogPaths(home).bareClone(work.git.workspaceId);
     const { model, commit } = await latest(work.git, home);
     let entries = await readDirectory(work.root);
     const conflicts = new Set<string>();
@@ -502,7 +502,7 @@ export function pushGitWorkingCopy(
       );
     }
 
-    const repo = gitDirectory(workspace.workspaceId, home);
+    const repo = barndogPaths(home).bareClone(workspace.workspaceId);
     const path = assetPath(work.scope.path, work.kind, work.name);
     const change = {
       replace: path,
@@ -673,7 +673,7 @@ async function history(
     target.origin,
   );
 
-  const repo = gitDirectory(workspace.workspaceId, home);
+  const repo = barndogPaths(home).bareClone(workspace.workspaceId);
   const versions = await assetHistory(repo, commit, asset.path);
   const filesOf = (number = versions.length) => {
     const version = versions[number - 1];

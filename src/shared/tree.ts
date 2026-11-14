@@ -7,7 +7,7 @@ import {
 
 import { CliError } from "./cli-error.js";
 import { POSIX_MODE } from "./constants.js";
-import { errorCode } from "./values.js";
+import { ifExists } from "./files.js";
 
 /**
  * Every file in an installed folder. Not `readDirectory()` from the contract
@@ -45,17 +45,13 @@ export async function readTree(directory: string): Promise<PackageEntry[]> {
 
 /** Fingerprint of an installed folder, or null when it does not exist. */
 export async function treeFingerprint(directory: string) {
-  try {
-    const info = await lstat(directory);
-    if (!info.isDirectory()) {
-      return `not-a-directory:${info.mode}`;
-    }
-  } catch (error) {
-    if (errorCode(error) === "ENOENT") {
-      return null;
-    }
+  const info = await ifExists(lstat(directory));
+  if (!info) {
+    return null;
+  }
 
-    throw error;
+  if (!info.isDirectory()) {
+    return `not-a-directory:${info.mode}`;
   }
 
   try {

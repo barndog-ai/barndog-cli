@@ -1,14 +1,6 @@
 import { POSIX_MODE } from "../../shared/constants.js";
 import { createHash, randomUUID } from "node:crypto";
-import {
-  mkdir,
-  readdir,
-  readFile,
-  rename,
-  rm,
-  lstat,
-  writeFile,
-} from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, rm, lstat } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 import {
@@ -23,9 +15,10 @@ import type { Connection } from "../../config/settings.js";
 import { serverFetch } from "../auth/transport.js";
 import { assetKinds, metadata } from "../asset-kinds/index.js";
 import { type PackageKind } from "../../config/selection.js";
-import { errorCode } from "../../shared/values.js";
 import { GIT_OBJECT_ID } from "../../shared/patterns.js";
 import { CliError, PackageError } from "../../errors.js";
+import { barndogPaths, packageManifest } from "../../config/paths.js";
+import { ifExists, writeAtomic } from "../../shared/files.js";
 
 /** One identity's cache partition: server, organization and developer never mix. */
 export function cacheKey(conn: Connection) {
@@ -33,9 +26,6 @@ export function cacheKey(conn: Connection) {
 
   return join(server, conn.organizationId, conn.developerId);
 }
-
-const cacheRoot = (key: string, home: string) =>
-  join(home, ".barndog", "packages", key);
 
 /**
  * Deletes cached versions nothing installs any more. Every cached version was
@@ -47,19 +37,10 @@ export async function pruneCache(
   home: string,
   keep: ReadonlySet<string>,
 ) {
-  const root = cacheRoot(key, home);
+  const root = barndogPaths(home).packageCache(key);
   let removed = 0;
-  const children = async (path: string) => {
-    try {
-      return await readdir(path);
-    } catch (error) {
-      if (errorCode(error) === "ENOENT") {
-        return [];
-      }
-
-      throw error;
-    }
-  };
+  const children = async (path: string) =>
+    (await ifExists(readdir(path))) ?? [];
 
   for (const parent of [root, join(root, "hooks")]) {
     for (const asset of await children(parent)) {
@@ -101,7 +82,7 @@ export async function storePackage(
   load: () => Promise<PackageEntry[]>,
 ) {
   const parent = join(
-    cacheRoot(key, home),
+    barndogPaths(home).packageCache(key),
     ...assetKinds[kind].cachePath,
     asset.id,
   );
@@ -110,9 +91,7 @@ export async function storePackage(
   const check = async (root: string) => {
     const saved = z
       .object({ fingerprint: z.string() })
-      .safeParse(
-        JSON.parse(await readFile(join(root, "manifest.json"), "utf8")),
-      );
+      .safeParse(JSON.parse(await readFile(packageManifest(root), "utf8")));
 
     if (
       !saved.success ||
@@ -133,25 +112,19 @@ export async function storePackage(
   }
 
   const target = join(parent, asset.revision);
-  try {
-    await lstat(target);
+  if (await ifExists(lstat(target))) {
     await check(target);
 
     return join(target, asset.name);
-  } catch (error) {
-    if (errorCode(error) !== "ENOENT") {
-      throw error;
-    }
   }
 
   const entries = await load();
   const stage = join(parent, `.stage-${randomUUID()}`);
   try {
     await writePackage(join(stage, asset.name), entries);
-    await writeFile(
-      join(stage, "manifest.json"),
+    await writeAtomic(
+      packageManifest(stage),
       JSON.stringify({ fingerprint: packageFingerprint(entries) }),
-      { mode: 0o600 },
     );
 
     await rename(stage, target);

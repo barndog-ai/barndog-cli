@@ -2,7 +2,6 @@ import { HTTP_STATUS } from "../../shared/constants.js";
 
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
 
 import {
   ApiError,
@@ -13,6 +12,7 @@ import { z } from "zod";
 import { readSettings, type Connection } from "../../config/settings.js";
 import { request } from "../server/request.js";
 import { writeAtomic } from "../../shared/files.js";
+import { barndogPaths } from "../../config/paths.js";
 
 /** Background refresh policy: check at most every five minutes (milliseconds). */
 const CHECK_INTERVAL_MS = 300000;
@@ -28,10 +28,11 @@ const checkSchema = z.object({
 
 type Check = z.infer<typeof checkSchema>;
 
-const checkPath = (home: string) => join(home, ".barndog/cloud-check.json");
-
 async function readCheck(home: string, conn: Connection) {
-  const text = await readFile(checkPath(home), "utf8").catch(() => null);
+  const text = await readFile(barndogPaths(home).cloudCheck, "utf8").catch(
+    () => null,
+  );
+
   if (!text) {
     return undefined;
   }
@@ -55,7 +56,10 @@ async function readCheck(home: string, conn: Connection) {
 }
 
 async function writeCheck(home: string, check: Check) {
-  await writeAtomic(checkPath(home), `${JSON.stringify(check)}\n`);
+  await writeAtomic(
+    barndogPaths(home).cloudCheck,
+    `${JSON.stringify(check)}\n`,
+  );
 }
 
 /** A server from before the check existed answers 404; sync as if it changed. */

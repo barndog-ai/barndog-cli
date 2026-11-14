@@ -36,7 +36,6 @@ import { connection } from "../server/connection.js";
 import {
   encodeFiles,
   decodeFiles,
-  directory,
   save,
   locked,
   find,
@@ -63,6 +62,7 @@ import type {
   UpdatedCloudWorkingCopy,
 } from "./results.js";
 import { CliError, PackageError } from "../../errors.js";
+import { barndogPaths } from "../../config/paths.js";
 
 const publishedId = (work: { skillId?: string | null }) =>
   defined(work.skillId, "This working copy isn't published yet");
@@ -426,7 +426,7 @@ export async function markResolved(
  * uses a temporary folder under `~/.barndog/workspaces/`.
  */
 export async function archive(files: Files, home: string) {
-  const temp = join(directory(home), `upload-${randomUUID()}`);
+  const temp = join(barndogPaths(home).workingCopies, `upload-${randomUUID()}`);
   const tar = temp + ".tar.gz";
 
   try {

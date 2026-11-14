@@ -17,11 +17,8 @@ import { built } from "./built.js";
 import { detectHarnesses } from "../harnesses/detect.js";
 import { initialize } from "../features/onboarding/setup.js";
 import { runSetup } from "../ui/onboarding.js";
-import {
-  readSettings,
-  saveSettings,
-  settingsPath,
-} from "../config/settings.js";
+import { readSettings, saveSettings } from "../config/settings.js";
+import { barndogPaths } from "../config/paths.js";
 
 async function setup(t: TestContext) {
   const home = await realpath(
@@ -116,12 +113,12 @@ test("cancelling onboarding preserves previous settings or leaves first-time set
 
   expect(await readSettings(home)).toBe(null);
   await saveSettings({ harnesses: ["cursor"] }, home);
-  const original = await readFile(settingsPath(home), "utf8");
+  const original = await readFile(barndogPaths(home).settings, "utf8");
   await expect(initialize({ home, detected, choose })).rejects.toThrow(
     /cancelled/,
   );
 
-  expect(await readFile(settingsPath(home), "utf8")).toBe(original);
+  expect(await readFile(barndogPaths(home).settings, "utf8")).toBe(original);
 });
 
 test("empty selection persists and invalid settings never default to all harnesses", async (t) => {
@@ -136,7 +133,7 @@ test("empty selection persists and invalid settings never default to all harness
     "harnesses: [codex, codex]\n",
     "skills: []\n",
   ]) {
-    await writeFile(settingsPath(home), content);
+    await writeFile(barndogPaths(home).settings, content);
     await expect(readSettings(home)).rejects.toThrow(
       /isn't valid: harnesses must list/,
     );
@@ -164,7 +161,7 @@ test("CLI help is noninteractive; explicit onboarding refuses piped input withou
 test("bare invocation reports existing configuration without prompting or rewriting it", async (t) => {
   const home = await setup(t);
   await saveSettings({ harnesses: ["codex"] }, home);
-  const original = await readFile(settingsPath(home), "utf8");
+  const original = await readFile(barndogPaths(home).settings, "utf8");
   const messages: string[] = [];
   await runSetup({
     home,
@@ -180,13 +177,13 @@ test("bare invocation reports existing configuration without prompting or rewrit
 
   expect(messages.join("\n")).toMatch(/Configuration already exists/);
   expect(messages.join("\n")).toMatch(/barndog init/);
-  expect(await readFile(settingsPath(home), "utf8")).toBe(original);
+  expect(await readFile(barndogPaths(home).settings, "utf8")).toBe(original);
 });
 
 test("declining or cancelling restart leaves the configuration untouched", async (t) => {
   const home = await setup(t);
   await saveSettings({ harnesses: ["codex"] }, home);
-  const original = await readFile(settingsPath(home), "utf8");
+  const original = await readFile(barndogPaths(home).settings, "utf8");
   const messages: string[] = [];
   const options = {
     home,
@@ -209,7 +206,7 @@ test("declining or cancelling restart leaves the configuration untouched", async
     }),
   ).rejects.toThrow(/cancelled/);
 
-  expect(await readFile(settingsPath(home), "utf8")).toBe(original);
+  expect(await readFile(barndogPaths(home).settings, "utf8")).toBe(original);
 });
 
 test("confirmed restart reopens harness selection while preserving saved settings", async (t) => {
@@ -271,7 +268,7 @@ test("first setup skips restart confirmation and still requires an interactive t
 test("reinitializing harness selection preserves the rest of the home configuration", async (t) => {
   const home = await setup(t);
   await saveSettings({ harnesses: ["codex"], knowledge: false }, home);
-  expect(settingsPath(home)).toBe(join(home, ".barndog/config.yaml"));
+  expect(barndogPaths(home).settings).toBe(join(home, ".barndog/config.yaml"));
   await initialize({ home, detected: [], choose: async () => ["claude"] });
   expect(await readSettings(home)).toStrictEqual({
     harnesses: ["claude"],

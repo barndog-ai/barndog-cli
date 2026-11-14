@@ -10,12 +10,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, type TestContext } from "vitest";
 
-import {
-  saveSettings,
-  settingsPath,
-  SetupRequiredError,
-} from "../config/settings.js";
+import { saveSettings, SetupRequiredError } from "../config/settings.js";
 import { synchronize } from "../features/environment/sync.js";
+import { barndogPaths } from "../config/paths.js";
 
 async function temporaryHome(t: TestContext) {
   const home = await mkdtemp(join(tmpdir(), "barndog-sync-"));
@@ -31,7 +28,7 @@ test("sync needs setup and refuses invalid settings before writing anything", as
   );
 
   await mkdir(join(home, ".barndog"), { recursive: true });
-  await writeFile(settingsPath(home), "harnesses: [typo]\n");
+  await writeFile(barndogPaths(home).settings, "harnesses: [typo]\n");
   await expect(synchronize(undefined, home)).rejects.toThrow(
     /config\.yaml isn't valid/,
   );
@@ -44,9 +41,9 @@ test("sync needs setup and refuses invalid settings before writing anything", as
 test("an explicit config file is read instead and never changes the home configuration", async (t) => {
   const home = await temporaryHome(t);
   await saveSettings({ harnesses: ["claude"] }, home);
-  const before = await readFile(settingsPath(home), "utf8");
+  const before = await readFile(barndogPaths(home).settings, "utf8");
   const override = join(home, "override.yaml");
   await writeFile(override, "harnesses: [codex]\n");
   await synchronize(override, home);
-  expect(await readFile(settingsPath(home), "utf8")).toBe(before);
+  expect(await readFile(barndogPaths(home).settings, "utf8")).toBe(before);
 });

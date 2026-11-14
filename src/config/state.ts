@@ -1,5 +1,5 @@
-import { readFile, readlink } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join } from "node:path";
+import { readlink } from "node:fs/promises";
+import { basename, dirname, isAbsolute } from "node:path";
 import {
   harnesses,
   skillDirectory,
@@ -7,19 +7,11 @@ import {
   nativeKinds,
 } from "../harnesses/registry.js";
 import { treeFingerprint } from "../shared/tree.js";
-import { isRecord } from "../shared/values.js";
 import { z } from "zod";
-import {
-  assetFolders,
-  packageKindList,
-  type PackageKind,
-} from "./selection.js";
+import { packageKindList } from "./selection.js";
 import { NAME, UUID_V4 } from "../shared/patterns.js";
-
-/** Readable, stable folders that harnesses resolve; the commit-pinned cache stays internal. */
-export function installedRoot(home: string, kind: PackageKind) {
-  return join(home, ".barndog", "installed", assetFolders[kind]);
-}
+import { barndogPaths } from "./paths.js";
+import { readIfExists } from "../shared/files.js";
 
 const linkSchema = z.object({
   id: z.string().regex(UUID_V4),
@@ -103,19 +95,13 @@ async function withoutRepeatedLinks(
  * Reads installation ownership and checks targets against the supplied home;
  * missing state yields no links.
  */
-export async function readState(path: string, home: string): Promise<State> {
-  let value: unknown;
-  try {
-    value = JSON.parse(await readFile(path, "utf8"));
-  } catch (error) {
-    if (isRecord(error) && error.code === "ENOENT") {
-      return stateSchema.parse({ version: 1, links: [] });
-    }
-
-    throw error;
+export async function readState(home: string): Promise<State> {
+  const text = await readIfExists(barndogPaths(home).state);
+  if (text === null) {
+    return stateSchema.parse({ version: 1, links: [] });
   }
 
-  const parsed = stateSchema.safeParse(value);
+  const parsed = stateSchema.safeParse(JSON.parse(text));
   if (!parsed.success) {
     throw new Error(
       "Invalid installation state; refusing to modify harness files",
@@ -131,7 +117,7 @@ export async function readState(path: string, home: string): Promise<State> {
   }
 
   for (const entry of state.installed) {
-    if (dirname(entry.path) !== installedRoot(home, entry.kind)) {
+    if (dirname(entry.path) !== barndogPaths(home).installed(entry.kind)) {
       throw new Error("Invalid installed package state");
     }
   }

@@ -7,7 +7,6 @@ import { hookManifestSchema } from "@barndog-ai/api-contract";
 import { readState, type Link } from "../../config/state.js";
 import {
   readSettings,
-  settingsPath,
   settingsText,
   SetupRequiredError,
   type Settings,
@@ -48,6 +47,7 @@ import type { AssetCatalog } from "../asset-selection/types.js";
 import { assetKinds } from "../asset-kinds/index.js";
 import { type PackageKind } from "../../config/selection.js";
 import { defined } from "../../shared/lookup.js";
+import { barndogPaths } from "../../config/paths.js";
 
 /** The name an asset is installed under right now, whatever settings say it should be. */
 function heldName(
@@ -64,8 +64,7 @@ function heldName(
 
 /** Looks up installed names from state, for checks made outside a sync. */
 export async function installedNames(home: string) {
-  const path = join(home, ".barndog/state.json");
-  const { links, native } = await readState(path, home);
+  const { links, native } = await readState(home);
 
   return (id: string) => heldName(id, links, native);
 }
@@ -134,7 +133,7 @@ export async function synchronize(
   home = resolve(home);
 
   return locked(home, async () => {
-    const path = resolve(configPath ?? settingsPath(home));
+    const path = resolve(configPath ?? barndogPaths(home).settings);
     const settings = override ?? (await readSettings(home, path));
     if (!settings) {
       throw new SetupRequiredError();
@@ -163,10 +162,10 @@ export async function synchronize(
       }
     }
 
-    const stateFile = join(home, ".barndog/state.json");
+    const stateFile = barndogPaths(home).state;
     const rawState = await fileText(stateFile);
 
-    const before = await readState(stateFile, home);
+    const before = await readState(home);
     const { native: oldNative, installed: installedState } = before;
 
     let selection = selectionState(settings);
@@ -809,8 +808,8 @@ export async function synchronize(
 
       writes.push({
         kind: "file",
-        path: settingsPath(home),
-        before: await fileText(settingsPath(home)),
+        path: barndogPaths(home).settings,
+        before: await fileText(barndogPaths(home).settings),
         after: settingsText(next),
       });
     }

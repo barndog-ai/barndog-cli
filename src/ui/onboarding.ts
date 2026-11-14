@@ -23,7 +23,6 @@ import {
   cloneGitWorkspace,
   connectGitWorkspace,
   createGitWorkspace,
-  defaultLocalPath,
   inspectRepository,
   localWorkspace,
 } from "../features/workspace/setup.js";
@@ -42,12 +41,11 @@ import checkbox from "@inquirer/checkbox";
 import confirm from "@inquirer/confirm";
 import { existsSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, join } from "node:path";
+import { basename } from "node:path";
 import { styleText } from "node:util";
 import type { DetectedHarness, Harness } from "../harnesses/registry.js";
 import {
   readSettings,
-  settingsPath,
   type GitWorkspace,
   type Settings,
 } from "../config/settings.js";
@@ -58,6 +56,7 @@ import {
 } from "../features/onboarding/setup.js";
 import { checkboxTheme, promptTheme, selected } from "./theme.js";
 import { bold, dim, fields, heading, originLabel, table } from "./format.js";
+import { barndogPaths } from "../config/paths.js";
 
 /** Asks which coding tools to manage; tests pass their own answer. */
 type ChooseHarnesses = (choices: HarnessChoice[]) => Promise<Harness[]>;
@@ -159,7 +158,7 @@ export async function runSetup(
   const write = options.write ?? console.log;
   const previous = await readSettings(home);
   if (previous) {
-    write(`Configuration already exists at ${settingsPath(home)}.`);
+    write(`Configuration already exists at ${barndogPaths(home).settings}.`);
     write("");
     if (!options.restart) {
       write(`To start setup again, run ${styleText("bold", "barndog init")}.`);
@@ -217,7 +216,7 @@ export async function runSetup(
   let keepWorkspace = () => {};
 
   if (choice.kind === "local") {
-    const fresh = !existsSync(defaultLocalPath(home));
+    const fresh = !existsSync(barndogPaths(home).localWorkspace);
     const local = await localWorkspace(home);
     workspace = { kind: "local", local };
     // A folder made for this run shouldn't outlive a setup that didn't finish.
@@ -251,7 +250,7 @@ export async function runSetup(
         options.confirmClone ??
         (() =>
           confirm({
-            message: `Clone it now into ${join(home, ".barndog", "git")}? Git will ask for anything it needs.`,
+            message: `Clone it now into ${barndogPaths(home).git}? Git will ask for anything it needs.`,
             default: true,
             theme: promptTheme,
           }))

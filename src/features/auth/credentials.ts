@@ -2,12 +2,12 @@ import { POSIX_MODE } from "../../shared/constants.js";
 
 import { chmod, lstat, mkdir, readFile, rm } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
 import { contextSchema } from "@barndog-ai/api-contract";
 import { z } from "zod";
 import { errorCode } from "../../shared/values.js";
-import { writeAtomic } from "../../shared/files.js";
+import { ifExists, writeAtomic } from "../../shared/files.js";
 import { CliError } from "../../errors.js";
+import { barndogPaths } from "../../config/paths.js";
 
 /**
  * A BarnDog session token: 32 random bytes in unpadded base64url, 43 characters.
@@ -38,37 +38,42 @@ type Credentials = z.infer<typeof credentialsSchema>;
  * permissions and returns empty state if absent.
  */
 export async function readCredentials(home = homedir()): Promise<Credentials> {
-  const path = join(home, ".barndog", "credentials.json");
-  try {
-    const info = await lstat(path);
-    if (
-      !info.isFile() ||
-      (process.platform !== "win32" && info.mode & POSIX_MODE.groupAndOtherBits)
-    ) {
-      throw new CliError(
-        `${path} must be a regular file only you can read.`,
-        `chmod 600 ${path}`,
-      );
-    }
+  const path = barndogPaths(home).credentials;
+  const info = await ifExists(lstat(path));
+  if (!info) {
+    return { version: 1, servers: {} };
+  }
 
-    const parsed = credentialsSchema.safeParse(
-      JSON.parse(await readFile(path, "utf8")),
+  if (
+    !info.isFile() ||
+    (process.platform !== "win32" && info.mode & POSIX_MODE.groupAndOtherBits)
+  ) {
+    throw new CliError(
+      `${path} must be a regular file only you can read.`,
+      `chmod 600 ${path}`,
     );
+  }
 
-    if (!parsed.success) {
-      throw new CliError(
-        `${path} is damaged, so BarnDog can't read your sign-ins.`,
-        `rm ${path} && barndog login`,
-      );
-    }
+  const parsed = credentialsSchema.safeParse(
+    parseJson(await readFile(path, "utf8")),
+  );
 
-    return parsed.data;
-  } catch (error) {
-    if (errorCode(error) === "ENOENT") {
-      return { version: 1, servers: {} };
-    }
+  if (!parsed.success) {
+    throw new CliError(
+      `${path} is damaged, so BarnDog can't read your sign-ins.`,
+      `rm ${path} && barndog login`,
+    );
+  }
 
-    throw error;
+  return parsed.data;
+}
+
+/** JSON, or undefined when the text isn't JSON, so the schema reports it as damaged. */
+function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
   }
 }
 
@@ -80,7 +85,7 @@ export async function updateCredentials(
   home: string,
   update: (credentials: Credentials) => void,
 ) {
-  const root = join(home, ".barndog");
+  const root = barndogPaths(home).root;
   await mkdir(root, { recursive: true, mode: POSIX_MODE.privateDirectory });
   const info = await lstat(root);
   if (!info.isDirectory()) {
@@ -88,7 +93,7 @@ export async function updateCredentials(
   }
 
   await chmod(root, POSIX_MODE.privateDirectory);
-  const lock = join(root, "credentials.lock");
+  const lock = barndogPaths(home).credentialsLock;
   await mkdir(lock, { mode: POSIX_MODE.privateDirectory }).catch(
     (error: unknown) => {
       if (errorCode(error) === "EEXIST") {
@@ -105,7 +110,7 @@ export async function updateCredentials(
     const credentials = await readCredentials(home);
     update(credentials);
     await writeAtomic(
-      join(root, "credentials.json"),
+      barndogPaths(home).credentials,
       JSON.stringify(credentials, null, 2) + "\n",
     );
   } finally {

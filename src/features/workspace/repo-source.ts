@@ -6,12 +6,11 @@ import {
 } from "../../shared/constants.js";
 
 import { createHash } from "node:crypto";
-import { mkdir, readFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
 import type { GitWorkspace, LocalWorkspace } from "../../config/settings.js";
 import { CliError } from "../../errors.js";
-import { errorCode } from "../../shared/values.js";
 import type { AssetReference } from "../asset-selection/types.js";
 import { storePackage } from "./packages.js";
 import type { WorkspaceSource, SourceOptions } from "./source.js";
@@ -25,7 +24,8 @@ import { git, GitError, gitReason, gitText } from "./git.js";
 import { folderSnapshot, gitSnapshot, type Snapshot } from "./snapshot.js";
 import { defined } from "../../shared/lookup.js";
 import { z } from "zod";
-import { writeAtomic } from "../../shared/files.js";
+import { readJsonIfExists, writeAtomic } from "../../shared/files.js";
+import { barndogPaths } from "../../config/paths.js";
 
 /** Display ages of at least two days in days. */
 const AGE_IN_DAYS_THRESHOLD_HOURS = 48;
@@ -147,16 +147,6 @@ const fetchStateSchema = z.looseObject({
 type FetchState = z.infer<typeof fetchStateSchema>;
 
 /**
- * The bare clone a Git workspace is read from:
- * `~/.barndog/git/<workspaceId>.git`. Nothing is checked out of it.
- */
-export const gitDirectory = (workspaceId: string, home: string) =>
-  join(home, ".barndog", "git", `${workspaceId}.git`);
-
-const statePath = (workspaceId: string, home: string) =>
-  join(home, ".barndog", "git", `${workspaceId}.json`);
-
-/**
  * The commit this machine last accepted from the Git host and when it fetched;
  * empty before the first fetch.
  */
@@ -164,17 +154,12 @@ export async function readFetchState(
   workspaceId: string,
   home: string,
 ): Promise<FetchState> {
-  try {
-    return fetchStateSchema.parse(
-      JSON.parse(await readFile(statePath(workspaceId, home), "utf8")),
-    );
-  } catch (error) {
-    if (errorCode(error) === "ENOENT") {
-      return {};
-    }
-
-    throw error;
-  }
+  return (
+    (await readJsonIfExists(
+      barndogPaths(home).fetchState(workspaceId),
+      fetchStateSchema,
+    )) ?? {}
+  );
 }
 
 async function writeFetchState(
@@ -182,7 +167,10 @@ async function writeFetchState(
   home: string,
   state: FetchState,
 ) {
-  await writeAtomic(statePath(workspaceId, home), JSON.stringify(state));
+  await writeAtomic(
+    barndogPaths(home).fetchState(workspaceId),
+    JSON.stringify(state),
+  );
 }
 
 /** Creates or repairs the bare clone; nothing is ever checked out of it. */
@@ -253,7 +241,7 @@ export function gitRepoSource(
   home: string,
   options: SourceOptions = {},
 ): RepoSource {
-  const repo = gitDirectory(workspace.workspaceId, home);
+  const repo = barndogPaths(home).bareClone(workspace.workspaceId);
   const notices: string[] = [];
 
   async function currentCommit() {

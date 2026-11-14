@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { basename, join } from "node:path";
+import { basename } from "node:path";
 import { z } from "zod";
 import { readSettings, SetupRequiredError } from "../../config/settings.js";
 import { selectionState } from "../../config/environment.js";
@@ -102,8 +102,7 @@ export async function inventory(home = homedir()): Promise<Inventory> {
     throw new SetupRequiredError();
   }
 
-  const statePath = join(home, ".barndog/state.json");
-  const state = await readState(statePath, home);
+  const state = await readState(home);
   const { native, installed } = state;
   const conn = settings.connection;
   const localNames = settings.localNames ?? {};

@@ -9,6 +9,8 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { dirname, isAbsolute, relative, sep } from "node:path";
+import type { z } from "zod";
+
 import { errorCode } from "./values.js";
 import { CliError } from "./cli-error.js";
 
@@ -43,19 +45,12 @@ export async function writeAtomic(
 }
 
 /**
- * A regular file's text, or null when it doesn't exist. Refuses symlinks and
- * anything else that isn't a plain file, so a write can't be redirected.
+ * What `operation` returns, or null when the file or folder it touches doesn't
+ * exist (`ENOENT`). Any other failure is thrown.
  */
-export async function fileText(path: string): Promise<string | null> {
+export async function ifExists<T>(operation: Promise<T>): Promise<T | null> {
   try {
-    const info = await lstat(path);
-    if (!info.isFile() || info.isSymbolicLink()) {
-      throw new CliError(
-        `${path} is a link or not a regular file, so BarnDog won't edit it.`,
-      );
-    }
-
-    return await readFile(path, "utf8");
+    return await operation;
   } catch (error) {
     if (errorCode(error) === "ENOENT") {
       return null;
@@ -63,6 +58,40 @@ export async function fileText(path: string): Promise<string | null> {
 
     throw error;
   }
+}
+
+/** A file's text, or null when it doesn't exist. */
+export function readIfExists(path: string): Promise<string | null> {
+  return ifExists(readFile(path, "utf8"));
+}
+
+/** A JSON file checked against `schema`, or null when it doesn't exist. */
+export async function readJsonIfExists<T>(
+  path: string,
+  schema: z.ZodType<T>,
+): Promise<T | null> {
+  const text = await readIfExists(path);
+
+  return text === null ? null : schema.parse(JSON.parse(text));
+}
+
+/**
+ * A regular file's text, or null when it doesn't exist. Refuses symlinks and
+ * anything else that isn't a plain file, so a write can't be redirected.
+ */
+export async function fileText(path: string): Promise<string | null> {
+  const info = await ifExists(lstat(path));
+  if (!info) {
+    return null;
+  }
+
+  if (!info.isFile() || info.isSymbolicLink()) {
+    throw new CliError(
+      `${path} is a link or not a regular file, so BarnDog won't edit it.`,
+    );
+  }
+
+  return readIfExists(path);
 }
 
 /** Whether `child` is `parent` or somewhere below it; compares paths, not links. */

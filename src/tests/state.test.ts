@@ -2,32 +2,32 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, type TestContext } from "vitest";
-import { installedRoot, readState } from "../config/state.js";
+import { readState } from "../config/state.js";
 import { nativeFile } from "../harnesses/registry.js";
+import { barndogPaths } from "../config/paths.js";
 
 async function fixture(t: TestContext) {
   const home = await mkdtemp(join(tmpdir(), "barndog-state-"));
   t.onTestFinished(() => rm(home, { recursive: true, force: true }));
-  const path = join(home, ".barndog/state.json");
+  const path = barndogPaths(home).state;
   await mkdir(join(home, ".barndog"));
 
   return {
     home,
-    path,
     save: (value: unknown) => writeFile(path, JSON.stringify(value)),
   };
 }
 
 test("missing and legacy state return all sections", async (t) => {
-  const { home, path, save } = await fixture(t);
+  const { home, save } = await fixture(t);
   const empty = { version: 1, links: [], native: [], installed: [] };
-  expect(await readState(path, home)).toEqual(empty);
+  expect(await readState(home)).toEqual(empty);
   await save({ version: 1, links: [] });
-  expect(await readState(path, home)).toEqual(empty);
+  expect(await readState(home)).toEqual(empty);
 });
 
 test("reads complete state and preserves opaque native values", async (t) => {
-  const { home, path, save } = await fixture(t);
+  const { home, save } = await fixture(t);
   const state = {
     version: 1,
     links: [],
@@ -45,14 +45,14 @@ test("reads complete state and preserves opaque native values", async (t) => {
       {
         id: "asset",
         kind: "skill",
-        path: join(installedRoot(home, "skill"), "example"),
+        path: join(barndogPaths(home).installed("skill"), "example"),
         fingerprint: "hash",
       },
     ],
   };
 
   await save(state);
-  expect(await readState(path, home)).toEqual(state);
+  expect(await readState(home)).toEqual(state);
 });
 
 test.for([
@@ -82,13 +82,13 @@ test.for([
     ],
   },
 ])("rejects malformed or unsafe sections: %j", async (patch, t) => {
-  const { home, path, save } = await fixture(t);
+  const { home, save } = await fixture(t);
   await save({ version: 1, links: [], ...patch });
-  await expect(readState(path, home)).rejects.toThrow(/Invalid .*state/);
+  await expect(readState(home)).rejects.toThrow(/Invalid .*state/);
 });
 
 test("duplicate legacy links retain the actual symlink owner", async (t) => {
-  const { home, path, save } = await fixture(t);
+  const { home, save } = await fixture(t);
   await mkdir(join(home, ".claude/skills"), { recursive: true });
   const target = join(home, ".claude/skills/example");
   const first = {
@@ -106,5 +106,5 @@ test("duplicate legacy links retain the actual symlink owner", async (t) => {
 
   await symlink(second.source, target);
   await save({ version: 1, links: [first, second] });
-  expect((await readState(path, home)).links).toEqual([second]);
+  expect((await readState(home)).links).toEqual([second]);
 });

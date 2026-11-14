@@ -5,12 +5,12 @@ import { join } from "node:path";
 import { type PackageEntry } from "@barndog-ai/api-contract/package";
 import { type PackageKind } from "../../config/selection.js";
 import { readTree } from "../../shared/tree.js";
-import { installedRoot } from "../../config/state.js";
 import { setYamlName, splitFrontMatter } from "../../shared/patterns.js";
 import { writeAtomic } from "../../shared/files.js";
+import { barndogPaths } from "../../config/paths.js";
 
 export function installedPath(home: string, kind: PackageKind, name: string) {
-  return join(installedRoot(home, kind), name);
+  return join(barndogPaths(home).installed(kind), name);
 }
 
 /** Points SKILL.md's name at the installed folder name; harnesses require them to match. */

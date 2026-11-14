@@ -1,16 +1,15 @@
 import { MAX_ASSET_NAME_LENGTH } from "../shared/constants.js";
 
-import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { isAbsolute, join } from "node:path";
+import { isAbsolute } from "node:path";
 import { parse, stringify } from "yaml";
 import { z } from "zod";
 import { type SelectionState, selectionStateSchema } from "./selection.js";
 import { isHarness, type Harness } from "../harnesses/registry.js";
-import { errorCode } from "../shared/values.js";
 import { NAME, UUID_V4 } from "../shared/patterns.js";
-import { writeAtomic } from "../shared/files.js";
+import { readIfExists, writeAtomic } from "../shared/files.js";
 import { CliError } from "../errors.js";
+import { barndogPaths } from "./paths.js";
 
 export class SetupRequiredError extends Error {
   constructor() {
@@ -53,10 +52,6 @@ export type Settings = {
   /** Installed names that differ from the published name, keyed by asset ID. */
   localNames?: Record<string, string>;
 };
-
-export function settingsPath(home = homedir()): string {
-  return join(home, ".barndog", "config.yaml");
-}
 
 const uuid = z.string().regex(UUID_V4);
 
@@ -158,17 +153,11 @@ function validate(value: unknown): Settings {
  */
 export async function readSettings(
   home = homedir(),
-  path = settingsPath(home),
+  path = barndogPaths(home).settings,
 ): Promise<Settings | null> {
-  let text: string;
-  try {
-    text = await readFile(path, "utf8");
-  } catch (error) {
-    if (errorCode(error) === "ENOENT") {
-      return null;
-    }
-
-    throw error;
+  const text = await readIfExists(path);
+  if (text === null) {
+    return null;
   }
 
   try {
@@ -198,6 +187,6 @@ export async function saveSettings(
   home = homedir(),
 ): Promise<void> {
   const text = settingsText(settings);
-  const path = settingsPath(home);
+  const path = barndogPaths(home).settings;
   await writeAtomic(path, text);
 }

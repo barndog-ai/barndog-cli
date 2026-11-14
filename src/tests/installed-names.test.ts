@@ -29,7 +29,6 @@ import {
   mirrorTree,
   renameSkillEntries,
 } from "../features/workspace/installed.js";
-import { installedRoot } from "../config/state.js";
 import { locked, transact } from "../features/environment/transaction.js";
 import { cacheKey, pruneCache } from "../features/workspace/packages.js";
 import { packageFingerprint } from "@barndog-ai/api-contract/package";
@@ -42,6 +41,7 @@ import {
 import { updateCredentials } from "../features/auth/credentials.js";
 import { renderSyncOutput } from "../ui/output.js";
 import { table } from "../ui/format.js";
+import { barndogPaths } from "../config/paths.js";
 
 /** Each file under `directory` as [relative path, text, executable], sorted by path. */
 async function filesIn(directory: string) {
@@ -233,7 +233,7 @@ test("a folder in an installed package can become a file", async (t) => {
 test("a journal can't restore a kept folder that has vanished", async (t) => {
   const home = await mkdtemp(join(tmpdir(), "barndog-kept-"));
   t.onTestFinished(() => rm(home, { recursive: true, force: true }));
-  const path = join(installedRoot(home, "skill"), "gone");
+  const path = join(barndogPaths(home).installed("skill"), "gone");
   await mkdir(join(home, ".barndog"), { recursive: true });
   await writeFile(
     join(home, ".barndog", "pending-sync.json"),
@@ -550,7 +550,7 @@ test("installed folders are journaled and an interrupted copy is completed on re
     "---\nname: review\ndescription: Review\n---\n",
   );
 
-  const path = join(installedRoot(home, "skill"), "team-web-review");
+  const path = join(barndogPaths(home).installed("skill"), "team-web-review");
   const after = packageFingerprint(
     await desiredEntries(source, "team-web-review"),
   );

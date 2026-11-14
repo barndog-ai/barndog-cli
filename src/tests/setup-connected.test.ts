@@ -12,15 +12,12 @@ import {
   previewSet,
 } from "../features/environment/operations.js";
 import { runSetup } from "../ui/onboarding.js";
-import {
-  readSettings,
-  saveSettings,
-  settingsPath,
-} from "../config/settings.js";
+import { readSettings, saveSettings } from "../config/settings.js";
 import {
   readCredentials,
   updateCredentials,
 } from "../features/auth/credentials.js";
+import { barndogPaths } from "../config/paths.js";
 
 for (const state of ["missing", "expired", "valid", "revoked"] as const) {
   test(`connected first-run setup handles a ${state} session without a default server`, async (t) => {
@@ -226,14 +223,20 @@ for (const state of ["missing", "expired", "valid", "revoked"] as const) {
       await installSet({ origin: "org", mode: "all" }, home);
       const preview = await previewSet("org", home);
       expect(preview.assets.map((asset) => asset.id)).toStrictEqual([mcpId]);
-      const original = await readFile(settingsPath(home), "utf8");
+      const original = await readFile(barndogPaths(home).settings, "utf8");
       await expect(
         installSetAssets({ origin: "org", assetIds: [randomUUID()] }, home),
       ).rejects.toThrow(/listed twice or aren't in/);
 
-      expect(await readFile(settingsPath(home), "utf8")).toBe(original);
+      expect(await readFile(barndogPaths(home).settings, "utf8")).toBe(
+        original,
+      );
+
       await installSetAssets({ origin: "org", assetIds: [] }, home);
-      expect(await readFile(settingsPath(home), "utf8")).toBe(original);
+      expect(await readFile(barndogPaths(home).settings, "utf8")).toBe(
+        original,
+      );
+
       await installSetAssets({ origin: "org", assetIds: [mcpId] }, home);
       const custom = await readSettings(home);
       assert(custom);
@@ -241,13 +244,13 @@ for (const state of ["missing", "expired", "valid", "revoked"] as const) {
       expect(custom.environment?.individualAssetIds).toStrictEqual([mcpId]);
     }
 
-    const before = await readFile(settingsPath(home), "utf8");
+    const before = await readFile(barndogPaths(home).settings, "utf8");
     failCatalog = true;
     await expect(
       runSetup({ ...options, restart: true, confirmRestart: async () => true }),
     ).rejects.toThrow();
 
-    expect(await readFile(settingsPath(home), "utf8")).toBe(before);
+    expect(await readFile(barndogPaths(home).settings, "utf8")).toBe(before);
   });
 }
 

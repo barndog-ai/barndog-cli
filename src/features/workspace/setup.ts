@@ -1,11 +1,10 @@
 import { POSIX_MODE } from "../../shared/constants.js";
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import type { GitWorkspace, LocalWorkspace } from "../../config/settings.js";
 import { CliError } from "../../errors.js";
-import { errorCode } from "../../shared/values.js";
 import { CONFIG_FILE, parseConfig, skeleton } from "./format.js";
 import {
   git,
@@ -18,10 +17,11 @@ import { commitFiles, pushCommit } from "./publish.js";
 import {
   ensureBareClone,
   fetchBranch,
-  gitDirectory,
   recordFetch,
   trackingRef,
 } from "./repo-source.js";
+import { barndogPaths } from "../../config/paths.js";
+import { readIfExists } from "../../shared/files.js";
 
 /**
  * Branch name used when creating the first commit of an empty Git workspace.
@@ -36,10 +36,10 @@ export const inspectRepository = (url: string): Promise<RemoteHead> =>
   remoteHead(url, true);
 
 const stagingClone = (home: string) =>
-  join(home, ".barndog", "git", `.setup-${randomUUID()}.git`);
+  barndogPaths(home).setupClone(randomUUID());
 
 async function adoptClone(staging: string, workspaceId: string, home: string) {
-  const target = gitDirectory(workspaceId, home);
+  const target = barndogPaths(home).bareClone(workspaceId);
   await rm(target, { recursive: true, force: true });
   await rename(staging, target);
 }
@@ -184,24 +184,14 @@ export async function cloneGitWorkspace(
   }
 }
 
-export const defaultLocalPath = (home: string) =>
-  join(home, ".barndog", "workspace");
-
 /** Opens the folder that holds this machine's assets, creating it the first time. */
 export async function localWorkspace(
   home: string,
-  path = defaultLocalPath(home),
+  path = barndogPaths(home).localWorkspace,
 ): Promise<LocalWorkspace> {
-  try {
-    const { workspaceId } = parseConfig(
-      await readFile(join(path, CONFIG_FILE), "utf8"),
-    );
-
-    return { path, workspaceId };
-  } catch (error) {
-    if (errorCode(error) !== "ENOENT") {
-      throw error;
-    }
+  const config = await readIfExists(join(path, CONFIG_FILE));
+  if (config !== null) {
+    return { path, workspaceId: parseConfig(config).workspaceId };
   }
 
   const workspaceId = randomUUID();

@@ -1,4 +1,5 @@
 import { Command, Help, Option } from "commander";
+import { homedir } from "node:os";
 import { styleText } from "node:util";
 import { registerCollaboration } from "./commands/collaboration.js";
 import {
@@ -28,7 +29,6 @@ import { registerInit } from "./commands/init.js";
 import { registerSync } from "./commands/sync.js";
 import { registerStatus } from "./commands/status.js";
 import type { CommandContext, Mode } from "./commands/context.js";
-import { settingsPath } from "./config/settings.js";
 import { clashPrompt, synchronize } from "./features/environment/sync.js";
 import {
   changeAsset,
@@ -115,6 +115,7 @@ import { promptClash } from "./ui/clash.js";
 import { primary } from "./ui/theme.js";
 import { versionReport } from "./version.js";
 import { defined } from "./shared/lookup.js";
+import { barndogPaths } from "./config/paths.js";
 
 /** Keep command help readable at the conventional eighty-column terminal width. */
 const HELP_WIDTH = 80;
@@ -466,7 +467,7 @@ export function createProgram(options: ProgramOptions = {}): Command {
     )
     .addHelpText(
       "after",
-      `\nRun ${styleText("bold", "barndog <command> --help")} for details. Configuration: ${settingsPath()}`,
+      `\nRun ${styleText("bold", "barndog <command> --help")} for details. Configuration: ${barndogPaths(homedir()).settings}`,
     )
     .addHelpText("afterAll", ({ command }) =>
       options.setupMode ? unavailableHint(command, options.setupMode) : "",
