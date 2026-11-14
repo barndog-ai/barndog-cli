@@ -4,7 +4,7 @@ import type {
   InventoryItem,
   InventoryState,
 } from "../features/inventory/index.js";
-import type { CatalogAsset } from "../features/catalog/index.js";
+import type { CatalogAsset } from "../features/asset-kinds/index.js";
 import { assetPage, type ListOptions } from "./asset-list.js";
 import { displayPath } from "./output.js";
 import {

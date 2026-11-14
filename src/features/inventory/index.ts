@@ -4,9 +4,10 @@ import { z } from "zod";
 import { readSettings, SetupRequiredError } from "../../config/settings.js";
 import { selectionState } from "../../config/environment.js";
 import { readState } from "../../config/state.js";
-import { treeFingerprint } from "../environment/installed.js";
+import { treeFingerprint } from "../../shared/tree.js";
 import { linkTarget } from "../environment/transaction.js";
-import { environmentCatalog, request } from "../environment/remote.js";
+import { environmentCatalog } from "../server/catalog.js";
+import { request } from "../server/request.js";
 import { openRepoSource } from "../environment/workspace-source.js";
 import { localOverlay, mergeLocalCatalog } from "../git-workspace/overlay.js";
 import { scopeSchema } from "@barndog-ai/api-contract";
@@ -17,7 +18,7 @@ import {
   resolveClashes,
 } from "../environment/names.js";
 import type { Harness } from "../../harnesses/types.js";
-import type { AssetKind } from "../asset-selection/types.js";
+import type { AssetKind } from "../../config/selection.js";
 import { isAssetKind } from "../asset-kinds/index.js";
 import { isHarness } from "../../harnesses/registry.js";
 

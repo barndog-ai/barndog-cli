@@ -2,22 +2,19 @@ import { z } from "zod";
 import { scopeSchema, teamMemberSchema } from "@barndog-ai/api-contract";
 import {
   environmentCatalog,
-  request,
   type EnvironmentCatalog,
   type ApiScope,
-} from "../environment/remote.js";
+} from "../server/catalog.js";
+import { request } from "../server/request.js";
 import { openRepoSource } from "../environment/workspace-source.js";
+import { selectionState, withSelection } from "../../config/environment.js";
 import {
-  selectionState,
-  withSelection,
   selectionStateSchema,
-} from "../../config/environment.js";
+  type SelectionMode,
+  type SelectionState,
+  type Subscription,
+} from "../../config/selection.js";
 import type { Settings } from "../../config/settings.js";
-import type {
-  SelectionMode,
-  SelectionState,
-  Subscription,
-} from "../asset-selection/types.js";
 import { CliError } from "../../errors.js";
 
 /** Limit onboarding team requests to six concurrent operations. */

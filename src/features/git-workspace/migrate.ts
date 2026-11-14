@@ -18,20 +18,15 @@ import {
   type Connection,
 } from "../../config/settings.js";
 import { CliError } from "../../errors.js";
-import type {
-  AssetReference,
-  SelectionState,
-} from "../asset-selection/types.js";
+import type { AssetReference } from "../asset-selection/types.js";
+import type { SelectionState, PackageKind } from "../../config/selection.js";
 import { normalizeServer } from "../auth/transport.js";
 import { collaborationClient } from "../collaboration/domain.js";
 import { archive } from "../collaboration/workspace.js";
 import { encodeFiles } from "../collaboration/workspace-store.js";
 import { originLabel } from "../environment/names.js";
-import {
-  environmentCatalog,
-  request,
-  type ApiScope,
-} from "../environment/remote.js";
+import { environmentCatalog, type ApiScope } from "../server/catalog.js";
+import { request } from "../server/request.js";
 import { synchronize } from "../environment/sync.js";
 import { locked } from "../environment/transaction.js";
 import { openRepoSource } from "../environment/workspace-source.js";
@@ -43,7 +38,6 @@ import type {
   WorkspaceModel,
 } from "./format.js";
 import { localOverlay } from "./overlay.js";
-import type { PackageKind } from "../asset-kinds/index.js";
 
 /**
  * What `migrate` does with one asset or knowledge document: publish it, leave

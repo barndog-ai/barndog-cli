@@ -19,7 +19,7 @@ import {
 } from "@barndog-ai/api-contract/collaboration";
 
 import type { GitWorkspace } from "../../config/settings.js";
-import type { AssetKind } from "../asset-selection/types.js";
+import { type AssetKind, type PackageKind } from "../../config/selection.js";
 import { CliError } from "../../errors.js";
 import {
   assetPath,
@@ -43,13 +43,12 @@ import {
   recordFetch,
   trackingRef,
 } from "../git-workspace/source.js";
-import { metadata as packageMetadataFor } from "./domain.js";
 import {
+  metadata as packageMetadataFor,
   assetKinds,
   assetNotFound,
-  type PackageKind,
 } from "../asset-kinds/index.js";
-import { matchesOrigin } from "./remote.js";
+import { matchesOrigin } from "../server/origin.js";
 import { markResolved } from "./workspace.js";
 import {
   applyFiles,

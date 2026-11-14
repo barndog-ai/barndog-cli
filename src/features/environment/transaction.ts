@@ -6,18 +6,18 @@ import { lstat, mkdir, readlink, rm, symlink, unlink } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { packageFingerprint } from "@barndog-ai/api-contract/package";
 import { settingsPath } from "../../config/settings.js";
-import { skillDirectory, harnesses } from "../../harnesses/registry.js";
-import { nativeFile } from "../native/configuration.js";
+import {
+  skillDirectory,
+  harnesses,
+  nativeFile,
+} from "../../harnesses/registry.js";
 import { z } from "zod";
 import { connectionContext } from "../auth/session.js";
 import type { JournalIdentity } from "./source.js";
 import { NAME } from "../../shared/patterns.js";
-import {
-  desiredEntries,
-  installedRoot,
-  mirrorTree,
-  treeFingerprint,
-} from "./installed.js";
+import { desiredEntries, mirrorTree } from "./installed.js";
+import { installedRoot } from "../../config/state.js";
+import { treeFingerprint } from "../../shared/tree.js";
 import { errorCode } from "../../shared/values.js";
 import { fileText, writeAtomic } from "../../shared/files.js";
 import { withPidLock } from "../../shared/lock.js";

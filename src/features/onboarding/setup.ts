@@ -12,19 +12,17 @@ import { withLocalSubscription } from "../git-workspace/overlay.js";
 import { localRepoSource } from "../git-workspace/source.js";
 import { openRepoSource } from "../environment/workspace-source.js";
 import { locked } from "../environment/transaction.js";
-import type {
-  GitWorkspace,
-  LocalWorkspace,
-  Settings,
-} from "../../config/settings.js";
-import { homedir } from "node:os";
-import { detectHarnesses } from "../../harnesses/detect.js";
-import type { DetectedHarness, Harness } from "../../harnesses/registry.js";
 import {
+  type GitWorkspace,
+  type LocalWorkspace,
+  type Settings,
   readSettings,
   saveSettings,
   settingsPath,
 } from "../../config/settings.js";
+import { homedir } from "node:os";
+import { detectHarnesses } from "../../harnesses/detect.js";
+import type { DetectedHarness, Harness } from "../../harnesses/registry.js";
 
 import { connectionContext } from "../auth/session.js";
 import { defined } from "../../shared/lookup.js";

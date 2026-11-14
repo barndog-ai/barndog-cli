@@ -1,6 +1,5 @@
 import select from "@inquirer/select";
 import confirm from "@inquirer/confirm";
-import type { CommandContext, Mode } from "../commands/context.js";
 import { CliError } from "../errors.js";
 import type { SelectionOutcome } from "../features/environment/operations.js";
 import type { OverrideResolution } from "../features/asset-selection/types.js";
@@ -8,8 +7,10 @@ import { json } from "./format.js";
 import { renderSyncOutput } from "./output.js";
 import { promptTheme } from "./theme.js";
 
-export type SelectionContext = Pick<CommandContext, "write"> & {
-  mode?: Pick<Mode, "json">;
+/** What selection prompts need from the command running them. */
+export type SelectionContext = {
+  write: (message: string) => void;
+  mode?: { json: boolean };
 };
 
 /** A change that would undo exclusions or disabled assets runs again with the answer. */

@@ -13,7 +13,7 @@ import { readSettings, SetupRequiredError } from "../../config/settings.js";
 import { CliError } from "../../errors.js";
 import { adapters, harnesses } from "../../harnesses/registry.js";
 import type { Harness } from "../../harnesses/types.js";
-import { selectAsset } from "../environment/remote.js";
+import { selectAsset } from "../server/catalog.js";
 import { repoForOrigin, selectRepoAsset } from "../git-workspace/assets.js";
 import { LOCAL_ORIGIN } from "../git-workspace/overlay.js";
 import { importedFrom } from "../imports/local.js";

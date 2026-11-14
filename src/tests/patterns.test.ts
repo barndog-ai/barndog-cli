@@ -43,7 +43,7 @@ import {
   UUID_V4,
 } from "../shared/patterns.js";
 import { createProgram } from "../program.js";
-import { safe } from "../ui/collaboration.js";
+import { safe } from "../ui/format.js";
 
 const sha1 = "3f786850e387550fdab836ed7e6dc881de23001b";
 const sha256 = `${sha1}${"0".repeat(24)}`;

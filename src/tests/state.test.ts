@@ -2,9 +2,8 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, type TestContext } from "vitest";
-import { installedRoot } from "../features/environment/installed.js";
-import { readState } from "../config/state.js";
-import { nativeFile } from "../features/native/configuration.js";
+import { installedRoot, readState } from "../config/state.js";
+import { nativeFile } from "../harnesses/registry.js";
 
 async function fixture(t: TestContext) {
   const home = await mkdtemp(join(tmpdir(), "barndog-state-"));

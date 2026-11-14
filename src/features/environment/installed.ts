@@ -1,88 +1,16 @@
 import { POSIX_MODE } from "../../shared/constants.js";
 
-import {
-  chmod,
-  lstat,
-  mkdir,
-  readdir,
-  readFile,
-  rm,
-  rmdir,
-} from "node:fs/promises";
+import { chmod, lstat, mkdir, readdir, rm, rmdir } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  packageFingerprint,
-  type PackageEntry,
-} from "@barndog-ai/api-contract/package";
-import { assetKinds, type PackageKind } from "../asset-kinds/index.js";
-import { errorCode } from "../../shared/values.js";
+import { type PackageEntry } from "@barndog-ai/api-contract/package";
+import { type PackageKind } from "../../config/selection.js";
+import { readTree } from "../../shared/tree.js";
+import { installedRoot } from "../../config/state.js";
 import { setYamlName, splitFrontMatter } from "../../shared/patterns.js";
 import { writeAtomic } from "../../shared/files.js";
-import { CliError } from "../../errors.js";
-
-/** Readable, stable folders that harnesses resolve; the commit-pinned cache stays internal. */
-export function installedRoot(home: string, kind: PackageKind) {
-  return join(home, ".barndog", "installed", assetKinds[kind].folder);
-}
 
 export function installedPath(home: string, kind: PackageKind, name: string) {
   return join(installedRoot(home, kind), name);
-}
-
-/**
- * Every file in an installed folder. Not `readDirectory()` from the contract
- * package: that one reads a package to submit, so it skips `.git` and stops at
- * package size limits. Here everything counts: a `.git` or large file added by
- * hand must show up as a hand edit and be removed by mirroring.
- */
-async function readTree(directory: string): Promise<PackageEntry[]> {
-  const entries: PackageEntry[] = [];
-
-  async function visit(base: string) {
-    for (const child of (await readdir(join(directory, base))).sort()) {
-      const path = base ? `${base}/${child}` : child;
-      const info = await lstat(join(directory, path));
-      if (info.isDirectory()) {
-        await visit(path);
-      } else if (info.isFile()) {
-        entries.push({
-          path,
-          data: await readFile(join(directory, path)),
-          executable: !!(info.mode & POSIX_MODE.executableBits),
-        });
-      } else {
-        throw new CliError(
-          `${join(directory, path)} isn't a regular file or folder, so BarnDog can't read it.`,
-        );
-      }
-    }
-  }
-
-  await visit("");
-
-  return entries;
-}
-
-/** Fingerprint of an installed folder, or null when it does not exist. */
-export async function treeFingerprint(directory: string) {
-  try {
-    const info = await lstat(directory);
-    if (!info.isDirectory()) {
-      return `not-a-directory:${info.mode}`;
-    }
-  } catch (error) {
-    if (errorCode(error) === "ENOENT") {
-      return null;
-    }
-
-    throw error;
-  }
-
-  try {
-    return packageFingerprint(await readTree(directory));
-  } catch {
-    return "unreadable";
-  }
 }
 
 /** Points SKILL.md's name at the installed folder name; harnesses require them to match. */

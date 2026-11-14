@@ -51,11 +51,8 @@ The examples below use valid UUIDv4 values for teams and assets. Assume `catalog
 has both teams distributing the same `assetId`.
 
 ```ts
-import {
-  applySelectionAction,
-  resolveAssets,
-  type SelectionState,
-} from "./index.js";
+import type { SelectionState } from "../../config/selection.js";
+import { applySelectionAction, resolveAssets } from "./index.js";
 
 const frontend = {
   type: "team",

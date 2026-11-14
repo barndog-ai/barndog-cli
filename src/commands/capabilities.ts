@@ -1,8 +1,6 @@
 import { openBrowser } from "../ui/auth.js";
-import { safe } from "../ui/collaboration.js";
-import { renderMcp } from "../ui/mcp.js";
-import { runSelection } from "../ui/selection.js";
 import {
+  safe,
   bad,
   bold,
   clean,
@@ -16,14 +14,16 @@ import {
   renderValue,
   table,
   warn,
+  ORIGIN_HELP,
 } from "../ui/format.js";
+import { renderMcp } from "../ui/mcp.js";
+import { runSelection } from "../ui/selection.js";
 
 import { Option, type Command } from "commander";
-import { ORIGIN_HELP } from "../ui/format.js";
 import type { CommandContext } from "./context.js";
 import { pickInstalled, resolveOrigin } from "./origin.js";
 import { renderHookCompatibility } from "../ui/hook-compatibility.js";
-import type { AssetKind } from "../features/asset-selection/types.js";
+import { type AssetKind, packageKindList } from "../config/selection.js";
 import type {
   GithubConnectOptions,
   GithubCreateRepositoryOptions,
@@ -37,7 +37,6 @@ import type {
   GithubPullsReviseOptions,
 } from "../features/github/pulls.js";
 import type { Harness } from "../harnesses/types.js";
-import { packageKindList } from "../features/asset-kinds/index.js";
 import { defined } from "../shared/lookup.js";
 import { positiveInteger } from "../ui/options.js";
 import { CliError } from "../errors.js";

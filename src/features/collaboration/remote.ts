@@ -1,116 +1,23 @@
 import { homedir } from "node:os";
-import { z } from "zod";
 import {
   changeSchema,
-  contextSchema,
-  memberSchema,
-  scopeSchema,
   type Change,
   type Skill,
 } from "@barndog-ai/api-contract";
 import { parsePackage, defaultLimits } from "@barndog-ai/api-contract/package";
-import { apiClient } from "../auth/transport.js";
 import { publishedSkills } from "../skills/catalog.js";
-import { publishedHooks, type Hook } from "../hooks/catalog.js";
+import { publishedHooks } from "../hooks/catalog.js";
+import { type Hook, assetKinds, assetNotFound } from "../asset-kinds/index.js";
 import { serverFetch } from "../auth/transport.js";
 import { collaborationClient, packagePath } from "./domain.js";
-import {
-  assetKinds,
-  assetNotFound,
-  type PackageKind,
-} from "../asset-kinds/index.js";
-import { readSettings, type Connection } from "../../config/settings.js";
+import { type PackageKind } from "../../config/selection.js";
+import { type Connection } from "../../config/settings.js";
 import { CliError, PackageError } from "../../errors.js";
 import { only } from "../../shared/lookup.js";
-import { splitOrigin } from "../../shared/patterns.js";
+import { matchesOrigin } from "../server/origin.js";
 
 /** CLI policy: bound review writes to thirty seconds. */
 const REVIEW_REQUEST_TIMEOUT_MS = 30000;
-
-/**
- * The saved Cloud connection, after asking the server who is signed in and
- * checking it is still that organization and developer. Pass `expected` to also
- * require a particular connection, such as the one a working copy was made
- * with. Fails with a fix in a Git or local workspace, which has no server.
- */
-export async function connection(home = homedir(), expected?: Connection) {
-  const settings = await readSettings(home);
-  if (
-    settings &&
-    !settings.connection &&
-    (settings.gitWorkspace || settings.localWorkspace)
-  ) {
-    throw new CliError(
-      `This needs a BarnDog Cloud Workspace. This machine keeps its assets in ${settings.gitWorkspace ? "a Git repo" : "a local folder"}.`,
-      settings.gitWorkspace
-        ? "barndog migrate --to <server>"
-        : "barndog init --server <url>",
-    );
-  }
-
-  if (!settings || !settings.connection) {
-    throw new CliError(
-      "This machine isn't connected to a BarnDog workspace.",
-      "barndog init",
-    );
-  }
-
-  const saved = settings.connection;
-  if (
-    expected &&
-    (expected.server !== saved.server ||
-      expected.organizationId !== saved.organizationId ||
-      expected.developerId !== saved.developerId)
-  ) {
-    throw new CliError(
-      "This working copy belongs to another server, organization or developer than the one you're signed in to.",
-      "barndog whoami",
-    );
-  }
-
-  const actor = contextSchema.parse(
-    (await apiClient(saved.server, home).GET("/v1/context")).data,
-  );
-
-  if (
-    actor.organization.id !== saved.organizationId ||
-    actor.developer.id !== saved.developerId
-  ) {
-    throw new CliError(
-      "You're signed in as a different organization or developer than this machine was set up with.",
-      "barndog login",
-    );
-  }
-
-  return saved;
-}
-
-/**
- * Whether an asset or scope belongs to the origin `selector` names: `org`,
- * `me`, `local`, `team/<slug>`, `repo/<slug>`, `dev/<slug>`, or a type with an
- * ID instead of a slug.
- */
-export function matchesOrigin(
-  origin: { type: string; id: string; slug?: string; localOnly?: boolean },
-  selector: string,
-  conn: Pick<Connection, "organizationId"> & { developerId?: string },
-) {
-  if (selector === "local") {
-    return origin.localOnly === true;
-  }
-
-  if (selector === "org") {
-    return origin.type === "org" && origin.id === conn.organizationId;
-  }
-
-  if (selector === "me") {
-    return origin.type === "dev" && origin.id === conn.developerId;
-  }
-
-  const { type, value = "" } = splitOrigin(selector);
-
-  return origin.type === type && [origin.id, origin.slug].includes(value);
-}
 
 /**
  * The one published Skill or Hook named `name` in the origin `selector`; throws
@@ -133,65 +40,6 @@ export async function selectSkill(
   const match = only(matches);
   if (!match) {
     throw assetNotFound(kind, name, selector);
-  }
-
-  return match;
-}
-
-/**
- * The scope an origin selector names, among those the developer can use.
- * Organization admins can also name any member's personal scope.
- */
-export async function selectOrigin(
-  selector: string,
-  conn: Connection,
-  home = homedir(),
-) {
-  const scopes = z
-    .array(scopeSchema)
-    .parse((await apiClient(conn.server, home).GET("/v1/scopes")).data);
-
-  const matches = scopes.filter((s) => matchesOrigin(s, selector, conn));
-  const personal = splitOrigin(selector);
-  if (
-    !matches.length &&
-    personal.type === "dev" &&
-    personal.value !== undefined
-  ) {
-    const actor = contextSchema.parse(
-      (await apiClient(conn.server, home).GET("/v1/context")).data,
-    );
-
-    if (actor.developer.role === "organization_admin") {
-      const members = z
-        .array(memberSchema)
-        .parse(
-          (await apiClient(conn.server, home).GET("/v1/organization/members"))
-            .data,
-        );
-
-      for (const member of members) {
-        const origin = {
-          type: "dev" as const,
-          id: member.id,
-          slug: member.slug,
-          name: member.name,
-          canPublish: true,
-        };
-
-        if (matchesOrigin(origin, selector, conn)) {
-          matches.push(origin);
-        }
-      }
-    }
-  }
-
-  const match = only(matches);
-  if (!match) {
-    throw new CliError(
-      `No scope named ${selector} that you can use.`,
-      "barndog sets list",
-    );
   }
 
   return match;

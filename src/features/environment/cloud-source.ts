@@ -2,9 +2,10 @@ import { mcpSchema } from "@barndog-ai/api-contract";
 import { assetKinds } from "../asset-kinds/index.js";
 
 import type { Connection } from "../../config/settings.js";
-import type { AssetKind, AssetReference } from "../asset-selection/types.js";
+import type { AssetReference } from "../asset-selection/types.js";
+import type { AssetKind } from "../../config/selection.js";
 import { cacheKey, cachedPackage } from "./packages.js";
-import { environmentCatalog, getAsset } from "./remote.js";
+import { environmentCatalog, getAsset } from "../server/catalog.js";
 import type { WorkspaceSource } from "./source.js";
 import { CliError } from "../../errors.js";
 

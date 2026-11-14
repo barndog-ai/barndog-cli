@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { assetPage } from "../ui/asset-list.js";
 import { renderCatalog } from "../ui/assets.js";
-import type { CatalogAsset } from "../features/catalog/index.js";
+import type { CatalogAsset } from "../features/asset-kinds/index.js";
 import { table } from "../ui/format.js";
 import { createProgram } from "../program.js";
 import { CommanderError } from "commander";

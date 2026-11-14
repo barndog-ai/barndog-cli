@@ -23,7 +23,7 @@ import { assertCommandAvailable } from "../commands/availability.js";
 import { CliError } from "../errors.js";
 import { commentOnChange } from "../features/collaboration/index.js";
 import { updateCredentials } from "../features/auth/credentials.js";
-import { saveSettings } from "../config/settings.js";
+import { saveSettings, readSettings } from "../config/settings.js";
 import { synchronize } from "../features/environment/sync.js";
 import { assertSourceExists } from "../features/imports/folder.js";
 import { convertServer } from "../features/imports/mcp.js";
@@ -45,7 +45,6 @@ import {
   renderJsonError,
   renderSyncOutput,
 } from "../ui/output.js";
-import { readSettings } from "../config/settings.js";
 
 const plain = (lines: string[]) =>
   // eslint-disable-next-line no-control-regex

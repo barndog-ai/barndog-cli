@@ -19,9 +19,10 @@ import {
   mergeEntries,
   readDirectory,
 } from "@barndog-ai/api-contract/collaboration";
-import { metadata as packageMetadataFor } from "./domain.js";
+import { metadata as packageMetadataFor } from "../asset-kinds/index.js";
 import { download } from "./remote.js";
-import { request, getAsset } from "../environment/remote.js";
+import { getAsset } from "../server/catalog.js";
+import { request } from "../server/request.js";
 import {
   encodeFiles,
   decodeFiles,

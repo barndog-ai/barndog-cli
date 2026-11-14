@@ -34,11 +34,8 @@ import { localWorkspace } from "../git-workspace/setup.js";
 import { localRepoSource } from "../git-workspace/source.js";
 import { folderEntries, type SkillCandidate } from "./discover.js";
 import { fetchRemote, type RemoteRepo } from "./remote.js";
-import {
-  assetKinds,
-  packageKindList,
-  type PackageKind,
-} from "../asset-kinds/index.js";
+import { assetKinds } from "../asset-kinds/index.js";
+import { packageKindList, type PackageKind } from "../../config/selection.js";
 import { defined } from "../../shared/lookup.js";
 import { z } from "zod";
 

@@ -21,8 +21,8 @@ import {
 } from "@barndog-ai/api-contract/package";
 import type { Connection } from "../../config/settings.js";
 import { serverFetch } from "../auth/transport.js";
-import { assetKinds, type PackageKind } from "../asset-kinds/index.js";
-import { metadata } from "../collaboration/domain.js";
+import { assetKinds, metadata } from "../asset-kinds/index.js";
+import { type PackageKind } from "../../config/selection.js";
 import { errorCode } from "../../shared/values.js";
 import { GIT_OBJECT_ID } from "../../shared/patterns.js";
 import { CliError, PackageError } from "../../errors.js";

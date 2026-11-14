@@ -1,5 +1,5 @@
-import { POSIX_MODE } from "../../shared/constants.js";
 import {
+  POSIX_MODE,
   HOURS_PER_DAY,
   MILLISECONDS_PER_MINUTE,
   MINUTES_PER_HOUR,
@@ -14,8 +14,7 @@ import { CliError } from "../../errors.js";
 import { errorCode } from "../../shared/values.js";
 import type { AssetReference } from "../asset-selection/types.js";
 import { storePackage } from "../environment/packages.js";
-import type { WorkspaceSource } from "../environment/source.js";
-import type { SourceOptions } from "../environment/workspace-source.js";
+import type { WorkspaceSource, SourceOptions } from "../environment/source.js";
 import {
   loadWorkspace,
   type RepoAsset,

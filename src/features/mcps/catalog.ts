@@ -1,7 +1,8 @@
 import { mcpListSchema } from "@barndog-ai/api-contract";
 import type { Connection } from "../../config/settings.js";
-import type { CatalogAsset } from "../catalog/index.js";
-import { request } from "../environment/remote.js";
+import type { CatalogAsset } from "../asset-kinds/index.js";
+import { request } from "../server/request.js";
+import { allPages } from "../server/pages.js";
 
 /**
  * Fetches every MCP catalog page, rejecting organization mismatches and
@@ -11,10 +12,7 @@ export async function mcpCatalog(
   conn: Connection,
   home: string,
 ): Promise<CatalogAsset[]> {
-  const rows: CatalogAsset[] = [];
-  const seen = new Set<string>();
-  let cursor: string | undefined;
-  do {
+  return allPages(async (cursor) => {
     const page = await request(
       conn,
       `/v1/mcps?limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
@@ -22,14 +20,14 @@ export async function mcpCatalog(
       { home },
     );
 
-    for (const mcp of page.mcps) {
+    const items = page.mcps.map((mcp): CatalogAsset => {
       if (mcp.organizationId !== conn.organizationId) {
         throw new Error(
           "The server sent a catalog page for another organization",
         );
       }
 
-      rows.push({
+      return {
         id: mcp.id,
         kind: "mcp",
         name: mcp.name,
@@ -38,19 +36,9 @@ export async function mcpCatalog(
           number: mcp.version.number,
           description: mcp.version.definition.description,
         },
-      });
-    }
+      };
+    });
 
-    if (page.nextCursor && seen.has(page.nextCursor)) {
-      throw new Error("The server sent an invalid page of results");
-    }
-
-    if (page.nextCursor) {
-      seen.add(page.nextCursor);
-    }
-
-    cursor = page.nextCursor ?? undefined;
-  } while (cursor);
-
-  return rows;
+    return { items, nextCursor: page.nextCursor };
+  });
 }

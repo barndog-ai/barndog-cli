@@ -6,8 +6,9 @@ import {
 import { homedir } from "node:os";
 import type { Connection } from "../../config/settings.js";
 import { apiClient } from "../auth/transport.js";
-import type { CatalogAsset } from "../catalog/index.js";
+import type { CatalogAsset } from "../asset-kinds/index.js";
 import { CliError } from "../../errors.js";
+import { allPages } from "../server/pages.js";
 
 /**
  * Every published Skill the developer can see, page by page. Throws when the
@@ -30,10 +31,7 @@ export async function publishedSkills(
     );
   }
 
-  const skills: Skill[] = [];
-  const cursors = new Set<string>();
-  let cursor: string | undefined;
-  do {
+  const skills = await allPages(async (cursor) => {
     const page = listOutputSchema.parse(
       (
         await client.GET("/v1/skills", {
@@ -52,17 +50,8 @@ export async function publishedSkills(
       );
     }
 
-    skills.push(...page.skills);
-    if (page.nextCursor && cursors.has(page.nextCursor)) {
-      throw new Error("The server sent an invalid page of results");
-    }
-
-    if (page.nextCursor) {
-      cursors.add(page.nextCursor);
-    }
-
-    cursor = page.nextCursor ?? undefined;
-  } while (cursor);
+    return { items: page.skills, nextCursor: page.nextCursor };
+  });
 
   if (new Set(skills.map((skill) => skill.id)).size !== skills.length) {
     throw new Error("The server sent the same Skill twice in its catalog");

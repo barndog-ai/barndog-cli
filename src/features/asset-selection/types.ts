@@ -1,20 +1,9 @@
-export type AssetKind = "skill" | "mcp" | "hook";
-
-/**
- * Which of a scope's assets a subscription takes: those it marks `recommended`,
- * those it marks `optional`, or `all`. Distributions mark each asset
- * recommended or optional.
- */
-export type SelectionMode = "recommended" | "optional" | "all";
-
-/**
- * A subscribable scope: the organization, a team or a repository. Personal
- * (`dev`) scopes can't be subscribed to, only picked from.
- */
-export type Scope = Readonly<{
-  type: "org" | "team" | "repo";
-  id: string;
-}>;
+import type {
+  AssetKind,
+  Scope,
+  SelectionMode,
+  SelectionState,
+} from "../../config/selection.js";
 
 /** `localOnly` marks this machine's own folder, shown as the reserved `local` scope. */
 export type Origin = (Scope | Readonly<{ type: "dev"; id: string }>) &
@@ -41,27 +30,6 @@ export type Distribution = Readonly<{
 export type AssetCatalog = Readonly<{
   assets: readonly AssetReference[];
   distributions: readonly Distribution[];
-}>;
-
-/**
- * A disabled subscription stays saved and keeps its assets selected, but does
- * not enable them on its own.
- */
-export type Subscription = Readonly<{
-  scope: Scope;
-  mode: SelectionMode;
-  enabled: boolean;
-}>;
-
-/**
- * Persisted environment choices in config.yaml: subscriptions, individual
- * picks, exclusions and individually disabled assets. IDs must be UUIDv4.
- */
-export type SelectionState = Readonly<{
-  subscriptions: readonly Subscription[];
-  individualAssetIds: readonly string[];
-  excludedAssetIds: readonly string[];
-  disabledAssetIds: readonly string[];
 }>;
 
 /**

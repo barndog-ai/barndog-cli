@@ -4,9 +4,9 @@ import { fileURLToPath } from "node:url";
 import { coerce, satisfies, validRange } from "semver";
 import which from "which";
 import type { HookManifest, McpDefinition } from "@barndog-ai/api-contract";
-import { adapters } from "../../harnesses/registry.js";
+import { adapters, nativeFile } from "../../harnesses/registry.js";
 import type { Harness } from "../../harnesses/types.js";
-import { nativeFile, type NativeEntry } from "./configuration.js";
+import { type NativeEntry } from "./configuration.js";
 import { shellQuote } from "../../shared/shell.js";
 
 const execute = promisify(execFile);

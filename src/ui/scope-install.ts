@@ -1,16 +1,26 @@
 import checkbox from "@inquirer/checkbox";
 import select from "@inquirer/select";
 import { CliError } from "../errors.js";
-import type { Overrides } from "../features/environment/operations.js";
-import type { CommandContext } from "../commands/context.js";
+import type {
+  Applied,
+  Overrides,
+  SelectionOutcome,
+  SetAssets,
+  SetPreview,
+  SetSelection,
+} from "../features/environment/operations.js";
 import { runSelection, type SelectionContext } from "./selection.js";
 import { checkboxTheme, promptTheme } from "./theme.js";
 import type { ListAsset } from "./asset-list.js";
 
 type InstallMode = "recommended" | "all" | "custom";
 
-type SetInstallContext = SelectionContext &
-  Pick<CommandContext, "installSet" | "previewSet" | "installSetAssets">;
+/** The set operations installing a set calls; `CommandContext` provides them. */
+type SetInstallContext = SelectionContext & {
+  installSet: (options: SetSelection) => Promise<SelectionOutcome>;
+  previewSet: (origin: string) => Promise<SetPreview>;
+  installSetAssets: (options: SetAssets) => Promise<Applied>;
+};
 
 /**
  * Installs a scope using an explicit mode or interactive asset selection, then

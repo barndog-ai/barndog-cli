@@ -7,14 +7,17 @@ import {
   promotionInputSchema,
   forkInputSchema,
 } from "@barndog-ai/api-contract";
-import { connection, selectOrigin } from "../collaboration/remote.js";
-import { request, selectAsset, type RetryKey } from "../environment/remote.js";
-import type { AssetKind } from "../asset-selection/types.js";
+import { selectOrigin } from "../server/origin.js";
+import { connection } from "../server/connection.js";
+import { selectAsset } from "../server/catalog.js";
+import { type RetryKey, request } from "../server/request.js";
+import type { AssetKind } from "../../config/selection.js";
 import { randomUUID } from "node:crypto";
 import { moveLocalAssets, type MoveResult } from "../git-workspace/move.js";
 import { LOCAL_ORIGIN } from "../git-workspace/overlay.js";
 import { assetKindList } from "../asset-kinds/index.js";
 import { only } from "../../shared/lookup.js";
+import { allPages } from "../server/pages.js";
 
 type DeveloperList = z.infer<typeof developerListSchema>;
 
@@ -38,11 +41,9 @@ export async function developers(
   home = homedir(),
 ): Promise<Developer[]> {
   const conn = await connection(home);
-  const people: Developer[] = [];
-  const seen = new Set<string>();
-  let cursor: string | null = null;
-  do {
-    const query: URLSearchParams = new URLSearchParams({
+
+  return allPages(async (cursor) => {
+    const query = new URLSearchParams({
       limit: "100",
       ...(search ? { search } : {}),
       ...(cursor ? { cursor } : {}),
@@ -55,19 +56,8 @@ export async function developers(
       { home },
     );
 
-    people.push(...page.developers);
-    if (page.nextCursor && seen.has(page.nextCursor)) {
-      throw new Error("The server sent an invalid page of results");
-    }
-
-    if (page.nextCursor) {
-      seen.add(page.nextCursor);
-    }
-
-    cursor = page.nextCursor;
-  } while (cursor);
-
-  return people;
+    return { items: page.developers, nextCursor: page.nextCursor };
+  });
 }
 
 /**
@@ -93,11 +83,8 @@ export async function developerAssets(
   }
 
   const conn = await connection(home);
-  const assets: DeveloperAssets["assets"] = [];
-  const seen = new Set<string>();
-  let cursor: string | null = null;
-  do {
-    const query: URLSearchParams = new URLSearchParams({
+  const assets = await allPages(async (cursor) => {
+    const query = new URLSearchParams({
       limit: "100",
       ...(search ? { search } : {}),
       ...(cursor ? { cursor } : {}),
@@ -110,17 +97,8 @@ export async function developerAssets(
       { home },
     );
 
-    assets.push(...page.assets);
-    if (page.nextCursor && seen.has(page.nextCursor)) {
-      throw new Error("The server sent an invalid page of results");
-    }
-
-    if (page.nextCursor) {
-      seen.add(page.nextCursor);
-    }
-
-    cursor = page.nextCursor;
-  } while (cursor);
+    return { items: page.assets, nextCursor: page.nextCursor };
+  });
 
   return { developer, assets };
 }

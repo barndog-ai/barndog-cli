@@ -5,8 +5,8 @@ import {
   logout,
   authStatus,
   type AuthStatus,
+  configuredServer,
 } from "../features/auth/session.js";
-import { configuredServer } from "../features/auth/session.js";
 import { readCredentials } from "../features/auth/credentials.js";
 import { LoginRequiredError } from "../features/auth/transport.js";
 import { CliError } from "../errors.js";

@@ -8,8 +8,8 @@ import {
   teamSchema,
 } from "@barndog-ai/api-contract";
 import type { Connection } from "../../config/settings.js";
-import { connection } from "../collaboration/remote.js";
-import { request } from "../environment/remote.js";
+import { connection } from "../server/connection.js";
+import { request } from "../server/request.js";
 import { errorCode } from "../../shared/values.js";
 import { only } from "../../shared/lookup.js";
 

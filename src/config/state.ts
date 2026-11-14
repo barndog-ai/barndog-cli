@@ -1,13 +1,25 @@
 import { readFile, readlink } from "node:fs/promises";
-import { basename, dirname, isAbsolute } from "node:path";
-import { harnesses, skillDirectory } from "../harnesses/registry.js";
-import { treeFingerprint } from "../features/environment/installed.js";
+import { basename, dirname, isAbsolute, join } from "node:path";
+import {
+  harnesses,
+  skillDirectory,
+  nativeFile,
+  nativeKinds,
+} from "../harnesses/registry.js";
+import { treeFingerprint } from "../shared/tree.js";
 import { isRecord } from "../shared/values.js";
 import { z } from "zod";
-import { nativeFile } from "../features/native/configuration.js";
-import { installedRoot } from "../features/environment/installed.js";
-import { packageKindList } from "../features/asset-kinds/index.js";
+import {
+  assetFolders,
+  packageKindList,
+  type PackageKind,
+} from "./selection.js";
 import { NAME, UUID_V4 } from "../shared/patterns.js";
+
+/** Readable, stable folders that harnesses resolve; the commit-pinned cache stays internal. */
+export function installedRoot(home: string, kind: PackageKind) {
+  return join(home, ".barndog", "installed", assetFolders[kind]);
+}
 
 const linkSchema = z.object({
   id: z.string().regex(UUID_V4),
@@ -24,7 +36,7 @@ const stateSchema = z.looseObject({
     .array(
       z.strictObject({
         id: z.string(),
-        kind: z.enum(["mcp", "hook", "knowledge", "sync"]),
+        kind: z.enum(nativeKinds),
         harness: z.enum(harnesses),
         file: z.string(),
         key: z.string(),

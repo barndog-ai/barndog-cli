@@ -18,8 +18,10 @@ import {
   okSchema,
   type GitConnection,
 } from "@barndog-ai/api-contract";
-import { connection, selectOrigin } from "../collaboration/remote.js";
-import { request, selectAsset, type RetryKey } from "../environment/remote.js";
+import { selectOrigin } from "../server/origin.js";
+import { connection } from "../server/connection.js";
+import { selectAsset } from "../server/catalog.js";
+import { type RetryKey, request } from "../server/request.js";
 import { CliError } from "../../errors.js";
 
 /** A BarnDog-owned copy of a repository, with no connection left behind. */

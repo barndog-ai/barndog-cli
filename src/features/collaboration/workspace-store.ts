@@ -22,7 +22,7 @@ import {
   type PackageEntry,
 } from "@barndog-ai/api-contract/package";
 import { readDirectory } from "@barndog-ai/api-contract/collaboration";
-import { packageKindList } from "../asset-kinds/index.js";
+import { packageKindList } from "../../config/selection.js";
 import { GIT_OBJECT_ID } from "../../shared/patterns.js";
 import { writeAtomic } from "../../shared/files.js";
 import { withPidLock } from "../../shared/lock.js";

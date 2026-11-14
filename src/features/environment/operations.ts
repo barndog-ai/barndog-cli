@@ -15,19 +15,22 @@ import {
 } from "../asset-selection/index.js";
 import type {
   AssetCatalog,
-  AssetKind,
   OverrideConflict,
   OverrideResolution,
-  Scope,
   SelectionAction,
   SelectionDiagnostic,
+} from "../asset-selection/types.js";
+import type {
+  AssetKind,
+  Scope,
   SelectionMode,
   SelectionState,
   Subscription,
-} from "../asset-selection/types.js";
+} from "../../config/selection.js";
 import type { SyncEvent } from "./events.js";
-import { environmentCatalog, request, type ApiScope } from "./remote.js";
-import { matchesOrigin } from "../collaboration/remote.js";
+import { environmentCatalog, type ApiScope } from "../server/catalog.js";
+import { request } from "../server/request.js";
+import { matchesOrigin } from "../server/origin.js";
 import { locked } from "./transaction.js";
 import { installedNames, synchronize } from "./sync.js";
 import type { WorkspaceSource } from "./source.js";

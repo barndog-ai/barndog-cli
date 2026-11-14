@@ -5,13 +5,14 @@ import {
   knowledgeIndexSchema,
   type KnowledgeContent,
 } from "@barndog-ai/api-contract";
-import { connection } from "../collaboration/remote.js";
-import { request } from "../environment/remote.js";
+import { connection } from "../server/connection.js";
+import { request } from "../server/request.js";
 import { openRepoSource } from "../environment/workspace-source.js";
 import { activeLocal, localOverlay } from "../git-workspace/overlay.js";
 import { readSettings } from "../../config/settings.js";
 import { CliError } from "../../errors.js";
 import type { InvalidKnowledge } from "../git-workspace/format.js";
+import { allPages } from "../server/pages.js";
 
 type KnowledgeIndex = z.infer<typeof knowledgeIndexSchema>;
 
@@ -57,12 +58,9 @@ async function sharedKnowledge(
   }
 
   const conn = await connection(home);
-  const documents: KnowledgeSummary[] = [];
 
-  const seen = new Set<string>();
-  let cursor: string | null = null;
-  do {
-    const params: URLSearchParams = new URLSearchParams({
+  return allPages(async (cursor) => {
+    const params = new URLSearchParams({
       limit: "100",
       ...(always ? { accessMode: "always" } : {}),
       ...(cursor ? { cursor } : {}),
@@ -75,19 +73,8 @@ async function sharedKnowledge(
       { home },
     );
 
-    documents.push(...page.documents);
-    if (page.nextCursor && seen.has(page.nextCursor)) {
-      throw new Error("The server sent an invalid page of results");
-    }
-
-    if (page.nextCursor) {
-      seen.add(page.nextCursor);
-    }
-
-    cursor = page.nextCursor;
-  } while (cursor);
-
-  return documents;
+    return { items: page.documents, nextCursor: page.nextCursor };
+  });
 }
 
 async function sharedDocument(

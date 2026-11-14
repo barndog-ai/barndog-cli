@@ -11,7 +11,7 @@ import {
 import { z } from "zod";
 
 import { readSettings, type Connection } from "../../config/settings.js";
-import { request } from "./remote.js";
+import { request } from "../server/request.js";
 import { writeAtomic } from "../../shared/files.js";
 
 /** Background refresh policy: check at most every five minutes (milliseconds). */

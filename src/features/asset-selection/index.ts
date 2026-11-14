@@ -6,14 +6,16 @@ import type {
   EffectiveAsset,
   Origin,
   OverrideResolution,
-  Scope,
   SelectionAction,
   SelectionActionResult,
   SelectionDiagnostic,
-  SelectionMode,
   SelectionResult,
-  SelectionState,
 } from "./types.js";
+import type {
+  Scope,
+  SelectionMode,
+  SelectionState,
+} from "../../config/selection.js";
 import { defined } from "../../shared/lookup.js";
 import { UUID_V4 } from "../../shared/patterns.js";
 

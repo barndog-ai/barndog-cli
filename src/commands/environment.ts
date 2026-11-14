@@ -2,7 +2,7 @@ import { renderMove } from "../ui/move.js";
 import input from "@inquirer/input";
 import { Option, type Command } from "commander";
 import type { CommandContext } from "./context.js";
-import type { AssetKind } from "../features/asset-selection/types.js";
+import type { AssetKind } from "../config/selection.js";
 import type { InventoryItem } from "../features/inventory/index.js";
 import { prefixedName } from "../features/environment/names.js";
 import { CliError, friendlyMessage } from "../errors.js";

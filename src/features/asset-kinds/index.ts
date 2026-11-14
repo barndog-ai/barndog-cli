@@ -1,25 +1,31 @@
 import {
+  hookManifestSchema,
   hookSchema,
   mcpSchema,
   skillSchema,
   type Skill,
 } from "@barndog-ai/api-contract";
-import type { PackageEntry } from "@barndog-ai/api-contract/package";
+import {
+  packageMetadata,
+  type PackageEntry,
+} from "@barndog-ai/api-contract/package";
+import { parse } from "yaml";
 import type { z, ZodType } from "zod";
-import type { AssetKind } from "../asset-selection/types.js";
-import { CliError } from "../../errors.js";
-import type { Hook } from "../hooks/catalog.js";
+import {
+  assetFolders,
+  type AssetKind,
+  type PackageKind,
+} from "../../config/selection.js";
+import { CliError, PackageError } from "../../errors.js";
 
-export type { AssetKind };
+/** A Hook as the server describes it. */
+export type Hook = z.infer<typeof hookSchema>;
 
 /** An MCP configuration as the server describes it. */
 export type McpServer = z.infer<typeof mcpSchema>;
 
 /** A published asset as the server describes it, of any kind. */
 export type PublishedAsset = Skill | McpServer | Hook;
-
-/** Kinds published as a folder of files; MCP configurations are a single definition. */
-export type PackageKind = Exclude<AssetKind, "mcp">;
 
 /** In the order commands list them. */
 export const assetKindList = [
@@ -31,14 +37,14 @@ export const assetKindList = [
 export const isAssetKind = (value: unknown): value is AssetKind =>
   assetKindList.some((kind) => kind === value);
 
-/**
- * Asset kinds delivered as file packages; MCP definitions use separate
- * configuration handling.
- */
-export const packageKindList = [
-  "skill",
-  "hook",
-] as const satisfies readonly PackageKind[];
+/** One row of the published catalog, neutral across asset kinds. */
+export type CatalogAsset = {
+  id: string;
+  kind: AssetKind;
+  name: string;
+  origin: { type: string; id: string; slug: string; localOnly?: boolean };
+  version: { number: number; description: string; label?: string };
+};
 
 type KindFacts = {
   one: string;
@@ -91,7 +97,7 @@ export const assetKinds = {
     /** `/v1/skills/…` */
     route: "skills",
     /** Inside a workspace scope and `~/.barndog/installed/`. */
-    folder: "skills",
+    folder: assetFolders.skill,
     schema: skillSchema,
     manifest: "SKILL.md",
     // Skills predate Hooks, so their cached packages sit at the cache root.
@@ -109,7 +115,7 @@ export const assetKinds = {
     many: "MCP servers",
     command: "mcp",
     route: "mcps",
-    folder: "mcp",
+    folder: assetFolders.mcp,
     schema: mcpSchema,
   },
   hook: {
@@ -118,7 +124,7 @@ export const assetKinds = {
     many: "Hooks",
     command: "hooks",
     route: "hooks",
-    folder: "hooks",
+    folder: assetFolders.hook,
     schema: hookSchema,
     manifest: "hook.yaml",
     cachePath: ["hooks"],
@@ -139,3 +145,36 @@ export const assetNotFound = (kind: AssetKind, name: string, origin: string) =>
     `No ${assetKinds[kind].one} named ${name} in ${origin}.`,
     `barndog ${assetKinds[kind].command} search ${name}`,
   );
+
+/**
+ * A package's metadata: the `SKILL.md` front matter, or the parsed `hook.yaml`
+ * manifest. Throws when the manifest is missing or invalid, or a Hook script it
+ * names is missing.
+ */
+export function metadata(entries: PackageEntry[], kind: PackageKind = "skill") {
+  if (kind === "skill") {
+    return packageMetadata(entries);
+  }
+
+  if (!entries.some((e) => e.path === "hook.yaml")) {
+    throw new PackageError("MISSING_PACKAGE_MANIFEST", "hook.yaml");
+  }
+
+  const manifest = hookManifestSchema.parse(
+    parse(
+      entries.find((e) => e.path === "hook.yaml")?.data.toString("utf8") ?? "",
+    ),
+  );
+
+  for (const implementation of Object.values(manifest.implementations)) {
+    if (implementation) {
+      for (const script of implementation.scripts) {
+        if (!entries.some((e) => e.path === script)) {
+          throw new PackageError("MISSING_HOOK_SCRIPT", script);
+        }
+      }
+    }
+  }
+
+  return manifest;
+}

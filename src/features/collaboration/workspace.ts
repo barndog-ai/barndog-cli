@@ -23,19 +23,15 @@ import {
   readDirectory,
   textContent,
 } from "@barndog-ai/api-contract/collaboration";
+import { collaborationClient, responseData } from "./domain.js";
 import {
-  collaborationClient,
   metadata as packageMetadataFor,
-  responseData,
-} from "./domain.js";
-import { assetKinds, type PackageKind } from "../asset-kinds/index.js";
-import {
-  connection,
-  download,
-  getChange,
-  selectSkill,
-  selectOrigin,
-} from "./remote.js";
+  assetKinds,
+} from "../asset-kinds/index.js";
+import { type PackageKind } from "../../config/selection.js";
+import { download, getChange, selectSkill } from "./remote.js";
+import { selectOrigin } from "../server/origin.js";
+import { connection } from "../server/connection.js";
 
 import {
   encodeFiles,
@@ -47,6 +43,7 @@ import {
   applyFiles,
   type Workspace,
   type Files,
+  NoWorkingCopyError,
 } from "./workspace-store.js";
 import {
   externalSource,
@@ -54,7 +51,6 @@ import {
   pushExternal,
 } from "./workspace-github.js";
 
-import { NoWorkingCopyError } from "./workspace-store.js";
 import { defined } from "../../shared/lookup.js";
 import { NAME } from "../../shared/patterns.js";
 

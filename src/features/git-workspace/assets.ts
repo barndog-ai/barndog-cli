@@ -1,12 +1,15 @@
 import { runtimeRequirements } from "../native/adapters.js";
-import type { AssetKind } from "../asset-selection/types.js";
+import type { AssetKind } from "../../config/selection.js";
 import { hookMetadata } from "@barndog-ai/api-contract/package";
 import { CliError } from "../../errors.js";
-import { matchesOrigin } from "../collaboration/remote.js";
+import { matchesOrigin } from "../server/origin.js";
 import { originLabel } from "../environment/names.js";
-import type { RepoAsset, WorkspaceModel } from "./format.js";
+import {
+  type RepoAsset,
+  type WorkspaceModel,
+  loadWorkspace,
+} from "./format.js";
 import { folderSnapshot } from "./snapshot.js";
-import { loadWorkspace } from "./format.js";
 import { resolve } from "node:path";
 import type { Settings } from "../../config/settings.js";
 import { openRepoSource } from "../environment/workspace-source.js";
@@ -14,7 +17,7 @@ import { LOCAL_ORIGIN, localOverlay } from "./overlay.js";
 import { assetNotFound } from "../asset-kinds/index.js";
 import { only } from "../../shared/lookup.js";
 import type { HookManifest, McpDefinition } from "@barndog-ai/api-contract";
-import type { HookCompatibility } from "../hooks/compatibility.js";
+import type { HookCompatibility } from "../hooks/types.js";
 
 /** The repo-backed source that answers for an origin, if any. */
 export function repoForOrigin(

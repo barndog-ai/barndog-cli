@@ -1,10 +1,8 @@
-import { hookListSchema, type hookSchema } from "@barndog-ai/api-contract";
-import type { z } from "zod";
+import { hookListSchema } from "@barndog-ai/api-contract";
 import type { Connection } from "../../config/settings.js";
-import type { CatalogAsset } from "../catalog/index.js";
+import type { Hook, CatalogAsset } from "../asset-kinds/index.js";
 import { apiClient } from "../auth/transport.js";
-
-export type Hook = z.infer<typeof hookSchema>;
+import { allPages } from "../server/pages.js";
 
 /** Every published Hook you can see, as the server describes it. */
 export async function publishedHooks(
@@ -12,11 +10,8 @@ export async function publishedHooks(
   home: string,
 ): Promise<Hook[]> {
   const client = apiClient(conn.server, home);
-  const hooks: Hook[] = [];
-  const seen = new Set<string>();
 
-  let cursor: string | undefined;
-  do {
+  return allPages(async (cursor) => {
     const page = hookListSchema.parse(
       (
         await client.GET("/v1/hooks", {
@@ -33,19 +28,8 @@ export async function publishedHooks(
       );
     }
 
-    hooks.push(...page.hooks);
-    if (page.nextCursor && seen.has(page.nextCursor)) {
-      throw new Error("The server sent an invalid page of results");
-    }
-
-    if (page.nextCursor) {
-      seen.add(page.nextCursor);
-    }
-
-    cursor = page.nextCursor ?? undefined;
-  } while (cursor);
-
-  return hooks;
+    return { items: page.hooks, nextCursor: page.nextCursor };
+  });
 }
 
 export async function hookCatalog(

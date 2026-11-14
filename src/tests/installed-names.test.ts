@@ -26,10 +26,10 @@ import {
 } from "../features/environment/names.js";
 import {
   desiredEntries,
-  installedRoot,
   mirrorTree,
   renameSkillEntries,
 } from "../features/environment/installed.js";
+import { installedRoot } from "../config/state.js";
 import { locked, transact } from "../features/environment/transaction.js";
 import { cacheKey, pruneCache } from "../features/environment/packages.js";
 import { packageFingerprint } from "@barndog-ai/api-contract/package";

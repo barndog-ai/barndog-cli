@@ -3,6 +3,13 @@ import type { McpDefinition } from "@barndog-ai/api-contract";
 import type { Connection } from "../../config/settings.js";
 import type { AssetCatalog, AssetReference } from "../asset-selection/types.js";
 
+/** always: fetch now. auto: reuse a recent fetch. none: read only what's on disk. */
+export type RefreshPolicy = "always" | "auto" | "none";
+
+export type SourceOptions = {
+  refresh?: RefreshPolicy;
+};
+
 /** Who a pending sync journal belongs to. */
 export type JournalIdentity = Connection | { workspaceId: string };
 

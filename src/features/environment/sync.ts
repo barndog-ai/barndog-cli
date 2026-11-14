@@ -14,7 +14,8 @@ import {
 } from "../../config/settings.js";
 import { packageFingerprint } from "@barndog-ai/api-contract/package";
 import { CliError } from "../../errors.js";
-import { desiredEntries, installedPath, treeFingerprint } from "./installed.js";
+import { desiredEntries, installedPath } from "./installed.js";
+import { treeFingerprint } from "../../shared/tree.js";
 import {
   installedName,
   originLabel,
@@ -23,19 +24,15 @@ import {
   type ClashResolver,
 } from "./names.js";
 import { selectionState, withSelection } from "../../config/environment.js";
-import { skillDirectory } from "../../harnesses/registry.js";
+import { skillDirectory, nativeFile } from "../../harnesses/registry.js";
 import type { SyncEvent } from "./events.js";
 import { resolveAssets } from "../asset-selection/index.js";
 import { pruneCache } from "./packages.js";
 import { followImports } from "../imports/local.js";
 import { adoptMoved, localOverlay } from "../git-workspace/overlay.js";
-import { openWorkspaceSource, type RefreshPolicy } from "./workspace-source.js";
-import type { WorkspaceSource } from "./source.js";
-import {
-  nativeFile,
-  patchNative,
-  type NativeEntry,
-} from "../native/configuration.js";
+import { openWorkspaceSource } from "./workspace-source.js";
+import { type RefreshPolicy, type WorkspaceSource } from "./source.js";
+import { patchNative, type NativeEntry } from "../native/configuration.js";
 import {
   hookEntries,
   mcpEntry,
@@ -45,7 +42,8 @@ import { shellQuote } from "../../shared/shell.js";
 import { linkTarget, locked, transact, type Write } from "./transaction.js";
 import { fileText, isInside } from "../../shared/files.js";
 import type { AssetCatalog } from "../asset-selection/types.js";
-import { assetKinds, type PackageKind } from "../asset-kinds/index.js";
+import { assetKinds } from "../asset-kinds/index.js";
+import { type PackageKind } from "../../config/selection.js";
 import { defined } from "../../shared/lookup.js";
 
 /** The name an asset is installed under right now, whatever settings say it should be. */

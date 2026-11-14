@@ -5,8 +5,9 @@ import { z } from "zod";
 import { changeSchema, type Change } from "@barndog-ai/api-contract";
 import type { FileDiff } from "@barndog-ai/api-contract/collaboration";
 import { collaborationClient, responseData } from "./domain.js";
-import type { PackageKind } from "../asset-kinds/index.js";
-import { connection, download, getChange, selectSkill } from "./remote.js";
+import type { PackageKind } from "../../config/selection.js";
+import { download, getChange, selectSkill } from "./remote.js";
+import { connection } from "../server/connection.js";
 import { readSettings, type GitWorkspace } from "../../config/settings.js";
 import type { SyncEvent } from "../environment/events.js";
 import { CliError } from "../../errors.js";
@@ -44,6 +45,7 @@ import type {
   VersionFiles,
   WorkingCopyStatus,
 } from "./results.js";
+import { allPages } from "../server/pages.js";
 
 /** Who an ID is, when the server will say; IDs still print if it won't. */
 const developerNames = (home: string): Promise<Record<string, string>> =>
@@ -477,27 +479,16 @@ export async function listChanges(
     kind,
   );
 
-  const result: Change[] = [];
-  let cursor: string | undefined;
-  const seen = new Set<string>();
-  do {
+  return allPages(async (cursor) => {
     const page = responseData(
       await client.GET("/v1/skill-changes", { params: { query: { cursor } } }),
     );
 
-    result.push(...page.changes.map((c) => changeSchema.parse(c)));
-    if (page.nextCursor && seen.has(page.nextCursor)) {
-      throw new Error("The server sent an invalid page of results");
-    }
-
-    if (page.nextCursor) {
-      seen.add(page.nextCursor);
-    }
-
-    cursor = page.nextCursor ?? undefined;
-  } while (cursor);
-
-  return result;
+    return {
+      items: page.changes.map((c) => changeSchema.parse(c)),
+      nextCursor: page.nextCursor,
+    };
+  });
 }
 
 /**

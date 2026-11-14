@@ -1,5 +1,6 @@
 import type { CommandContext } from "./context.js";
-import { assetKinds, type AssetKind } from "../features/asset-kinds/index.js";
+import { assetKinds } from "../features/asset-kinds/index.js";
+import { type AssetKind } from "../config/selection.js";
 import { CliError } from "../errors.js";
 import { pickOne } from "../ui/pick.js";
 import { clean, originLabel } from "../ui/format.js";

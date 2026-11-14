@@ -14,8 +14,8 @@ import { parse as parseToml, stringify as stringifyToml } from "smol-toml";
 // that doesn't need ESLint) gives each table's range in the text. See tomlEdit().
 import { parseForESLint } from "toml-eslint-parser";
 import { isDeepStrictEqual } from "node:util";
-import { join } from "node:path";
 import type { Harness } from "../../harnesses/types.js";
+import type { NativeKind } from "../../harnesses/registry.js";
 import { isRecord } from "../../shared/values.js";
 import { CliError } from "../../errors.js";
 
@@ -25,36 +25,12 @@ import { CliError } from "../../errors.js";
  */
 export type NativeEntry = {
   id: string;
-  kind: "mcp" | "hook" | "knowledge" | "sync";
+  kind: NativeKind;
   harness: Harness;
   file: string;
   key: string;
   value: Record<string, unknown>;
 };
-
-/** Each harness's MCP configuration file, relative to the home directory. */
-const mcpFiles: Record<Harness, string> = {
-  claude: ".claude.json",
-  codex: ".codex/config.toml",
-  cursor: ".cursor/mcp.json",
-};
-
-/** Each harness's Hook settings file, relative to the home directory. */
-const hookFiles: Record<Harness, string> = {
-  claude: ".claude/settings.json",
-  codex: ".codex/hooks.json",
-  cursor: ".cursor/hooks.json",
-};
-
-/**
- * Resolves the native settings file under the supplied home; non-MCP entries
- * use the harness Hook file.
- */
-export const nativeFile = (
-  harness: Harness,
-  kind: NativeEntry["kind"],
-  home: string,
-) => join(home, (kind === "mcp" ? mcpFiles : hookFiles)[harness]);
 
 function object(value: unknown, file: string): Record<string, unknown> {
   if (!isRecord(value)) {

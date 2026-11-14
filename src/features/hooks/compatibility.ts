@@ -1,26 +1,14 @@
 import { homedir } from "node:os";
 import { hookSchema } from "@barndog-ai/api-contract";
 import { readSettings } from "../../config/settings.js";
-import { selectAsset } from "../environment/remote.js";
+import { selectAsset } from "../server/catalog.js";
 import {
   repoForOrigin,
   repoHookCompatibility,
   selectRepoAsset,
 } from "../git-workspace/assets.js";
 import { runtimeRequirements } from "../native/adapters.js";
-import type { Hook } from "./catalog.js";
-
-/** What a Hook declares for one coding tool, and what this machine lacks to run it. */
-type HarnessCompatibility = Hook["compatibility"][number] & {
-  /** Null when every requirement is met. */
-  runtimeIssue: string | null;
-};
-
-export type HookCompatibility = {
-  /** A version number in Cloud, a Git object name in a Git or local workspace. */
-  version: number | string;
-  compatibility: HarnessCompatibility[];
-};
+import type { HookCompatibility } from "./types.js";
 
 /**
  * What a Hook's current version declares for each coding tool, and whether

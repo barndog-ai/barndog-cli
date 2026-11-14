@@ -2,10 +2,14 @@ import { randomBytes } from "node:crypto";
 import { homedir } from "node:os";
 import { basename } from "node:path";
 
-import type { KnowledgeContent, McpDefinition } from "@barndog-ai/api-contract";
+import {
+  type KnowledgeContent,
+  type McpDefinition,
+  knowledgeIndexSchema,
+  scopeSchema,
+} from "@barndog-ai/api-contract";
 import type { PackageEntry } from "@barndog-ai/api-contract/package";
-import type { AssetKind } from "../asset-kinds/index.js";
-import { knowledgeIndexSchema, scopeSchema } from "@barndog-ai/api-contract";
+import type { AssetKind } from "../../config/selection.js";
 import { stringify } from "yaml";
 import { z } from "zod";
 
@@ -16,15 +20,13 @@ import {
   type GitWorkspace,
 } from "../../config/settings.js";
 import { CliError, friendlyMessage } from "../../errors.js";
-import {
-  connection,
-  matchesOrigin,
-  selectOrigin,
-} from "../collaboration/remote.js";
+import { matchesOrigin, selectOrigin } from "../server/origin.js";
+import { connection } from "../server/connection.js";
 import { selectScope } from "../collaboration/workspace-git.js";
 import { renameSkillEntries } from "../environment/installed.js";
 import { originLabel } from "../environment/names.js";
-import { environmentCatalog, request } from "../environment/remote.js";
+import { environmentCatalog } from "../server/catalog.js";
+import { request } from "../server/request.js";
 import { synchronize } from "../environment/sync.js";
 import { locked } from "../environment/transaction.js";
 import { assetPath, stableId, type RepoAsset } from "./format.js";

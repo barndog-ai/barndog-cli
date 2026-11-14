@@ -1,11 +1,30 @@
 import { stripVTControlCharacters, styleText } from "node:util";
-import { safe } from "./collaboration.js";
 import { danger, primary, selected } from "./theme.js";
 import { CONSTANT_CASE } from "../shared/patterns.js";
 import { isRecord } from "../shared/values.js";
+import { HEX_RADIX } from "../shared/constants.js";
 
 /** Keep the flexible table column readable when shrinking to terminal width. */
 const MIN_FLEX_COLUMN_WIDTH = 8;
+
+/** JavaScript Unicode escapes encode a UTF-16 code unit with four hex digits. */
+const UNICODE_ESCAPE_DIGITS = 4;
+
+/** C0 and C1 control characters other than tab and line feed, such as ESC (`\x1b`). */
+// eslint-disable-next-line no-control-regex -- finding control characters is the point
+const CONTROL_CHARACTERS = /[\x00-\x08\x0b-\x1f\x7f-\x9f]/g;
+
+/**
+ * Remote package text must not be able to emit terminal control sequences:
+ * `"\x1b[31mred"` → `"\\u001b[31mred"`.
+ */
+export function safe(value: unknown) {
+  return String(value).replace(
+    CONTROL_CHARACTERS,
+    (c) =>
+      `\\u${c.charCodeAt(0).toString(HEX_RADIX).padStart(UNICODE_ESCAPE_DIGITS, "0")}`,
+  );
+}
 
 type Style = Parameters<typeof styleText>[0];
 

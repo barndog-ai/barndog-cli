@@ -1,14 +1,9 @@
-import { createApiClient, hookManifestSchema } from "@barndog-ai/api-contract";
-import {
-  packageMetadata,
-  type PackageEntry,
-} from "@barndog-ai/api-contract/package";
-import { parse } from "yaml";
+import { createApiClient } from "@barndog-ai/api-contract";
 import { serverFetch, normalizeServer } from "../auth/transport.js";
 import { homedir } from "node:os";
-import { assetKinds, type PackageKind } from "../asset-kinds/index.js";
+import { assetKinds } from "../asset-kinds/index.js";
+import { type PackageKind } from "../../config/selection.js";
 import { defined } from "../../shared/lookup.js";
-import { PackageError } from "../../errors.js";
 
 /** The typed client speaks Skill routes; other package kinds swap in their own. */
 export function packagePath(path: string, kind: PackageKind) {
@@ -131,37 +126,4 @@ export function collaborationClient(
       });
     },
   });
-}
-
-/**
- * A package's metadata: the `SKILL.md` front matter, or the parsed `hook.yaml`
- * manifest. Throws when the manifest is missing or invalid, or a Hook script it
- * names is missing.
- */
-export function metadata(entries: PackageEntry[], kind: PackageKind = "skill") {
-  if (kind === "skill") {
-    return packageMetadata(entries);
-  }
-
-  if (!entries.some((e) => e.path === "hook.yaml")) {
-    throw new PackageError("MISSING_PACKAGE_MANIFEST", "hook.yaml");
-  }
-
-  const manifest = hookManifestSchema.parse(
-    parse(
-      entries.find((e) => e.path === "hook.yaml")?.data.toString("utf8") ?? "",
-    ),
-  );
-
-  for (const implementation of Object.values(manifest.implementations)) {
-    if (implementation) {
-      for (const script of implementation.scripts) {
-        if (!entries.some((e) => e.path === script)) {
-          throw new PackageError("MISSING_HOOK_SCRIPT", script);
-        }
-      }
-    }
-  }
-
-  return manifest;
 }

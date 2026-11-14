@@ -1,4 +1,8 @@
-import { GIT_MODE } from "../git-workspace/snapshot.js";
+import {
+  GIT_MODE,
+  isBlob,
+  type SnapshotEntry,
+} from "../git-workspace/snapshot.js";
 import {
   hookImplementationSchema,
   type HookManifest,
@@ -16,7 +20,6 @@ import { stringify } from "yaml";
 import { CliError, friendlyMessage } from "../../errors.js";
 import { harnesses, hookSettingsOwner } from "../../harnesses/registry.js";
 import type { Harness } from "../../harnesses/types.js";
-import { isBlob, type SnapshotEntry } from "../git-workspace/snapshot.js";
 import type { RemoteRepo } from "./remote.js";
 import { defined } from "../../shared/lookup.js";
 import { asRecord, isRecord } from "../../shared/values.js";

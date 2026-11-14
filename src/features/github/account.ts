@@ -12,8 +12,8 @@ import {
   gitAuthorizationSchema,
   gitInstallationSchema,
 } from "@barndog-ai/api-contract";
-import { connection } from "../collaboration/remote.js";
-import { request } from "../environment/remote.js";
+import { connection } from "../server/connection.js";
+import { request } from "../server/request.js";
 
 /** The developer's GitHub account link and what the BarnDog GitHub App allows. */
 export type GithubStatus = z.infer<typeof githubStatusSchema>;

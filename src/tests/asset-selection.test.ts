@@ -3,15 +3,17 @@ import {
   applySelectionAction,
   resolveAssets,
   type AssetCatalog,
-  type AssetKind,
   type AssetReference,
   type OverrideResolution,
-  type Scope,
   type SelectionAction,
+} from "../features/asset-selection/index.js";
+import {
+  type AssetKind,
+  type Scope,
   type SelectionMode,
   type SelectionState,
   type Subscription,
-} from "../features/asset-selection/index.js";
+} from "../config/selection.js";
 
 function uuid(n: number): string {
   return `00000000-0000-4000-8000-${n.toString(16).padStart(12, "0")}`;

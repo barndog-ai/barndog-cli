@@ -1,19 +1,12 @@
 import type { Settings } from "../../config/settings.js";
 import { cloudSource } from "./cloud-source.js";
-import type { WorkspaceSource } from "./source.js";
+import type { SourceOptions, WorkspaceSource } from "./source.js";
 import { localOverlay, withOverlay } from "../git-workspace/overlay.js";
 import {
   gitRepoSource,
   localRepoSource,
   type RepoSource,
 } from "../git-workspace/source.js";
-
-/** always: fetch now. auto: reuse a recent fetch. none: read only what's on disk. */
-export type RefreshPolicy = "always" | "auto" | "none";
-
-export type SourceOptions = {
-  refresh?: RefreshPolicy;
-};
 
 /**
  * Builds a lazy Git or local-folder source from settings; returns undefined for

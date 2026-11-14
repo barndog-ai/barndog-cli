@@ -20,8 +20,8 @@ import {
   type GitConnection,
 } from "@barndog-ai/api-contract";
 import { readDirectory } from "@barndog-ai/api-contract/collaboration";
-import { connection } from "../collaboration/remote.js";
-import { request, type RetryKey } from "../environment/remote.js";
+import { connection } from "../server/connection.js";
+import { type RetryKey, request } from "../server/request.js";
 import { connectionPath } from "./connections.js";
 
 export type GitPull = z.infer<typeof gitPullSchema>;

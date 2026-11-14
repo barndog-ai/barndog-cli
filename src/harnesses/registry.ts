@@ -1,4 +1,4 @@
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { claude } from "./claude.js";
 import { codex } from "./codex.js";
 import { cursor } from "./cursor.js";
@@ -34,3 +34,32 @@ export function hookSettingsOwner(path: string): Harness | undefined {
 export function skillDirectory(harness: Harness, home: string): string {
   return resolve(home, adapters[harness].skillRoot);
 }
+
+/**
+ * What BarnDog writes into a coding tool's own settings files: MCP servers,
+ * Hooks, the knowledge index and the sync reminder.
+ */
+export const nativeKinds = ["mcp", "hook", "knowledge", "sync"] as const;
+
+export type NativeKind = (typeof nativeKinds)[number];
+
+/** Each harness's MCP configuration file, relative to the home directory. */
+const mcpFiles: Record<Harness, string> = {
+  claude: ".claude.json",
+  codex: ".codex/config.toml",
+  cursor: ".cursor/mcp.json",
+};
+
+/** Each harness's Hook settings file, relative to the home directory. */
+const hookFiles: Record<Harness, string> = {
+  claude: ".claude/settings.json",
+  codex: ".codex/hooks.json",
+  cursor: ".cursor/hooks.json",
+};
+
+/**
+ * Resolves the native settings file under the supplied home; non-MCP entries
+ * use the harness Hook file.
+ */
+export const nativeFile = (harness: Harness, kind: NativeKind, home: string) =>
+  join(home, (kind === "mcp" ? mcpFiles : hookFiles)[harness]);

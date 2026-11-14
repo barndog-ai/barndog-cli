@@ -6,9 +6,9 @@ import { parse as parseToml } from "smol-toml";
 import { parse as parseJson } from "jsonc-parser";
 import {
   patchNative,
-  nativeFile,
   type NativeEntry,
 } from "../features/native/configuration.js";
+import { nativeFile } from "../harnesses/registry.js";
 import { locked, transact } from "../features/environment/transaction.js";
 import { fileText } from "../shared/files.js";
 import { mcpEntry, hookCommand } from "../features/native/adapters.js";

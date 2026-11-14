@@ -11,8 +11,10 @@ import {
   mcpSchema,
   mcpVersionSchema,
 } from "@barndog-ai/api-contract";
-import { connection, selectOrigin } from "../collaboration/remote.js";
-import { request, selectAsset, type RetryKey } from "../environment/remote.js";
+import { selectOrigin } from "../server/origin.js";
+import { connection } from "../server/connection.js";
+import { selectAsset } from "../server/catalog.js";
+import { type RetryKey, request } from "../server/request.js";
 import { readSettings } from "../../config/settings.js";
 import type { McpServer, PublishedAsset } from "../asset-kinds/index.js";
 import {

@@ -18,7 +18,8 @@ import { parse, stringify } from "yaml";
 import { z } from "zod";
 
 import { CliError, friendlyMessage, PackageError } from "../../errors.js";
-import type { AssetKind, AssetReference } from "../asset-selection/types.js";
+import type { AssetReference } from "../asset-selection/types.js";
+import type { AssetKind } from "../../config/selection.js";
 import {
   isBlob,
   GIT_MODE,

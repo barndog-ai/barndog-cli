@@ -2,11 +2,8 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import type { Settings } from "../../config/settings.js";
-import type {
-  AssetCatalog,
-  AssetReference,
-  SelectionState,
-} from "../asset-selection/types.js";
+import type { AssetCatalog, AssetReference } from "../asset-selection/types.js";
+import type { SelectionState } from "../../config/selection.js";
 import { resolveAssets } from "../asset-selection/index.js";
 import type { WorkspaceSource } from "../environment/source.js";
 import type { WorkspaceModel } from "./format.js";

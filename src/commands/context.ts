@@ -46,12 +46,12 @@ import type {
   SetTarget,
 } from "../features/environment/operations.js";
 import type { Inventory } from "../features/inventory/index.js";
-import type { CatalogAsset } from "../features/catalog/index.js";
 import type {
+  CatalogAsset,
   McpServer,
   PublishedAsset,
 } from "../features/asset-kinds/index.js";
-import type { AssetKind } from "../features/asset-selection/types.js";
+import type { AssetKind } from "../config/selection.js";
 import type { Harness } from "../harnesses/types.js";
 import type { Check } from "../features/doctor/index.js";
 import type { RepositoryStatus } from "../features/inspection/index.js";
@@ -76,7 +76,7 @@ import type {
   McpWriteInput,
 } from "../features/mcps/index.js";
 import type { Adaptation } from "../features/hooks/adapt.js";
-import type { HookCompatibility } from "../features/hooks/compatibility.js";
+import type { HookCompatibility } from "../features/hooks/types.js";
 import type {
   HookTestOptions,
   HookTestResult,

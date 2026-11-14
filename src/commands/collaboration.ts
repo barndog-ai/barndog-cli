@@ -15,11 +15,8 @@ import type {
   CommentOptions,
   PushOptions,
 } from "../features/collaboration/index.js";
-import {
-  assetKinds,
-  packageKindList,
-  type PackageKind,
-} from "../features/asset-kinds/index.js";
+import { assetKinds } from "../features/asset-kinds/index.js";
+import { packageKindList, type PackageKind } from "../config/selection.js";
 import { pickOne } from "../ui/pick.js";
 import { resolveOrigin } from "./origin.js";
 import { clean, json, ORIGIN_HELP, originLabel, warn } from "../ui/format.js";

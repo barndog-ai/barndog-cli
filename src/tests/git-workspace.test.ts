@@ -49,7 +49,7 @@ import {
   listLocalAssets,
   moveLocalAssets,
 } from "../features/git-workspace/move.js";
-import { updateImported } from "../features/imports/local.js";
+import { updateImported, saveImported } from "../features/imports/local.js";
 import { repoStatus } from "../features/inspection/index.js";
 import {
   changeAsset,
@@ -90,7 +90,6 @@ import {
 } from "../features/imports/mcp.js";
 import { parse } from "yaml";
 
-import { saveImported } from "../features/imports/local.js";
 import { adaptHook } from "../features/hooks/adapt.js";
 import { folderDivergence } from "../features/hooks/divergence.js";
 import { hookCommand } from "../features/native/adapters.js";

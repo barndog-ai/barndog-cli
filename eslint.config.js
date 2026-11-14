@@ -3,6 +3,8 @@ import stylistic from "@stylistic/eslint-plugin";
 import { defineConfig } from "eslint/config";
 import prettier from "eslint-config-prettier";
 import globals from "globals";
+import { createTypeScriptImportResolver } from "eslint-import-resolver-typescript";
+import importX from "eslint-plugin-import-x";
 import regexp from "eslint-plugin-regexp";
 import tseslint from "typescript-eslint";
 
@@ -35,6 +37,16 @@ function restrictLiterals(owner) {
     .flatMap(([, literals]) => literals);
 
   return { "no-restricted-syntax": ["error", ...restrictions] };
+}
+
+/** Forbids imports that point up the layer order from the files `files` matches. */
+function layer(files, message, group) {
+  return {
+    files: [files],
+    rules: {
+      "no-restricted-imports": ["error", { patterns: [{ group, message }] }],
+    },
+  };
 }
 
 export default defineConfig([
@@ -128,6 +140,39 @@ export default defineConfig([
     files: [owner],
     rules: restrictLiterals(owner),
   })),
+  {
+    // No module may reach itself through its imports; a cycle means two
+    // modules should share a lower one instead.
+    files: ["src/**/*.ts"],
+    plugins: { "import-x": importX },
+    settings: {
+      "import-x/parsers": { "@typescript-eslint/parser": [".ts"] },
+      "import-x/resolver-next": [createTypeScriptImportResolver()],
+    },
+    rules: { "import-x/no-cycle": "error" },
+  },
+  // Imports point down: commands → ui → features → config → harnesses → shared.
+  layer("src/config/*.ts", "config/ depends on no feature, UI or command.", [
+    "../features/*",
+    "../ui/*",
+    "../commands/*",
+    "../program.js",
+  ]),
+  layer("src/harnesses/*.ts", "harnesses/ depends only on shared/.", [
+    "../config/*",
+    "../features/*",
+    "../ui/*",
+    "../commands/*",
+  ]),
+  layer("src/features/**/*.ts", "Features don't import UI or commands.", [
+    "../../ui/*",
+    "../../commands/*",
+    "../../program.js",
+  ]),
+  layer("src/ui/*.ts", "ui/ doesn't import commands.", [
+    "../commands/*",
+    "../program.js",
+  ]),
   {
     // Shared helpers stay free of BarnDog code, so any module can import them.
     files: ["src/shared/**/*.ts"],

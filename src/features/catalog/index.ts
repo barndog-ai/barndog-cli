@@ -8,16 +8,8 @@ import { mcpCatalog } from "../mcps/catalog.js";
 import { skillCatalog } from "../skills/catalog.js";
 import { openRepoSource } from "../environment/workspace-source.js";
 import { activeLocal, localOverlay } from "../git-workspace/overlay.js";
-import type { AssetKind } from "../asset-selection/types.js";
-
-/** One row of the published catalog, neutral across asset kinds. */
-export type CatalogAsset = {
-  id: string;
-  kind: AssetKind;
-  name: string;
-  origin: { type: string; id: string; slug: string; localOnly?: boolean };
-  version: { number: number; description: string; label?: string };
-};
+import type { AssetKind } from "../../config/selection.js";
+import type { CatalogAsset } from "../asset-kinds/index.js";
 
 type CatalogFetcher = (
   conn: Connection,

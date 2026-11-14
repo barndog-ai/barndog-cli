@@ -4,7 +4,7 @@
  */
 import type { Change, GitConnection } from "@barndog-ai/api-contract";
 import type { FileDiff } from "@barndog-ai/api-contract/collaboration";
-import type { PackageKind } from "../asset-kinds/index.js";
+import type { PackageKind } from "../../config/selection.js";
 import type { GitPull } from "../github/pulls.js";
 import type { Files } from "./workspace-store.js";
 

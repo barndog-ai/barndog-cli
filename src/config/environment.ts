@@ -1,25 +1,5 @@
-import { z } from "zod";
 import type { Settings } from "./settings.js";
-import type { SelectionState } from "../features/asset-selection/types.js";
-
-const id = z.uuidv4().transform((value) => value.toLowerCase());
-
-export const selectionStateSchema = z
-  .object({
-    subscriptions: z.array(
-      z
-        .object({
-          scope: z.object({ type: z.enum(["org", "team", "repo"]), id }),
-          mode: z.enum(["recommended", "optional", "all"]),
-          enabled: z.boolean(),
-        })
-        .strict(),
-    ),
-    individualAssetIds: z.array(id),
-    excludedAssetIds: z.array(id),
-    disabledAssetIds: z.array(id),
-  })
-  .strict();
+import { selectionStateSchema, type SelectionState } from "./selection.js";
 
 /**
  * Reads selections from settings, returning empty lists when no environment has
