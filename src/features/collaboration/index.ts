@@ -2,12 +2,10 @@ import { synchronize } from "../environment/sync.js";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { z } from "zod";
-import { changeSchema, type Change } from "@barndog-ai/api-contract";
 import type { FileDiff } from "@barndog-ai/api-contract/collaboration";
-import { collaborationClient } from "./domain.js";
-import { responseData } from "../server/client.js";
+import { packageApi } from "./api.js";
 import type { PackageKind } from "../../config/selection.js";
-import { downloadChange, getChange, selectSkill } from "./remote.js";
+import { downloadChange, selectSkill } from "./remote.js";
 import { connection } from "../server/connection.js";
 import { readSettings, type GitWorkspace } from "../../config/settings.js";
 import type { SyncEvent } from "../environment/events.js";
@@ -47,6 +45,7 @@ import type {
   WorkingCopyStatus,
 } from "./results.js";
 import { allPages } from "../server/pages.js";
+import { changeAssetId, type PackageChange } from "./results.js";
 
 /** Who an ID is, when the server will say; IDs still print if it won't. */
 const developerNames = (home: string): Promise<Record<string, string>> =>
@@ -71,10 +70,10 @@ function selectedText(text: string, lines?: number) {
 
 /**
  * A published Skill or Hook, addressed as commands address it: name and origin
- * selector. `kind` defaults to Skill.
+ * selector.
  */
 export type PackageTarget = {
-  kind?: PackageKind;
+  kind: PackageKind;
   name: string;
   origin: string;
 };
@@ -90,6 +89,10 @@ export type WorkingCopyTarget = PackageTarget & { directory?: string };
  * copy yet; `publish` merges at once where the developer may publish directly.
  */
 export type PushOptions = {
+  /**
+   * The kind the command expects (`skills push`, `hooks push`); root `push`
+   * leaves it out and takes whatever the working copy or folder holds.
+   */
   kind?: PackageKind;
   /** Only for a working copy that isn't published yet. */
   name?: string;
@@ -105,7 +108,7 @@ export type PushOptions = {
  * refused once a newer revision exists.
  */
 export type ChangeRevision = {
-  kind?: PackageKind;
+  kind: PackageKind;
   id: string;
   revision: number;
 };
@@ -120,10 +123,10 @@ export type VersionTarget = PackageTarget & { version?: number };
 
 export type VersionRange = PackageTarget & { from: number; to: number };
 
-/** Which proposals to list: Skills by default. */
-export type ChangeListOptions = { kind?: PackageKind };
+/** Which kind's proposals to list. */
+export type ChangeListOptions = { kind: PackageKind };
 
-export type ChangeTarget = { kind?: PackageKind; id: string };
+export type ChangeTarget = { kind: PackageKind; id: string };
 
 /** A proposal's diff at a revision (the newest by default), from `fromRevision` or its base. */
 export type ChangeDiffTarget = ChangeTarget & {
@@ -392,7 +395,7 @@ async function publishedPackage(target: PackageTarget, home: string) {
 
   return {
     type: "cloud" as const,
-    client: collaborationClient(conn.server, home, target.kind),
+    api: packageApi(target.kind, conn, home),
     skill: await selectSkill(
       { name: target.name, selector: target.origin, kind: target.kind },
       conn,
@@ -412,13 +415,11 @@ export async function packageVersions(
   }
 
   const [rows, names] = await Promise.all([
-    where.client.GET("/v1/skills/{id}/versions", {
-      params: { path: { id: where.skill.id } },
-    }),
+    where.api.versions(where.skill.id),
     developerNames(home),
   ]);
 
-  return responseData(rows).map((row) => ({
+  return rows.map((row) => ({
     ...row,
     publisherName: names[row.publishedBy],
   }));
@@ -437,13 +438,9 @@ export async function versionFiles(
     return gitVersionFiles(where.workspace, target, home);
   }
 
-  return responseData(
-    await where.client.GET("/v1/skills/{id}/content", {
-      params: {
-        path: { id: where.skill.id },
-        query: { version: target.version ?? where.skill.version.number },
-      },
-    }),
+  return where.api.content(
+    where.skill.id,
+    target.version ?? where.skill.version.number,
   );
 }
 
@@ -456,14 +453,7 @@ export async function diffVersions(
     return gitVersionDiff(where.workspace, target, home);
   }
 
-  return responseData(
-    await where.client.GET("/v1/skills/{id}/diff", {
-      params: {
-        path: { id: where.skill.id },
-        query: { from: target.from, to: target.to },
-      },
-    }),
-  );
+  return where.api.diff(where.skill.id, { from: target.from, to: target.to });
 }
 
 /**
@@ -471,25 +461,12 @@ export async function diffVersions(
  * only: a Git workspace reviews in pull requests on its host.
  */
 export async function listChanges(
-  { kind }: ChangeListOptions = {},
+  { kind }: ChangeListOptions,
   home = homedir(),
-): Promise<Change[]> {
-  const client = collaborationClient(
-    (await cloudConnection(home)).server,
-    home,
-    kind,
-  );
+): Promise<PackageChange[]> {
+  const api = packageApi(kind, await cloudConnection(home), home);
 
-  return allPages(async (cursor) => {
-    const page = responseData(
-      await client.GET("/v1/skill-changes", { params: { query: { cursor } } }),
-    );
-
-    return {
-      items: page.changes.map((c) => changeSchema.parse(c)),
-      nextCursor: page.nextCursor,
-    };
-  });
+  return allPages((cursor) => api.changes(cursor));
 }
 
 /**
@@ -502,24 +479,19 @@ export async function showChange(
 ): Promise<ChangeDetails> {
   const conn = await cloudConnection(home);
   const id = z.uuid().parse(target.id);
-  const client = collaborationClient(conn.server, home, target.kind);
-  const change = await getChange(id, conn, home, target.kind);
+  const { kind } = target;
+  const api = packageApi(kind, conn, home);
+  const change = await api.change(id);
   const [files, names, versions] = await Promise.all([
     downloadChange(
       { id, revision: change.revision, commit: change.commit },
       conn,
-      { home, kind: target.kind },
+      { home, kind },
     ),
     developerNames(home),
+    // The base number is a nicety; show the change without it if this fails.
     change.baseVersionId
-      ? client
-          .GET("/v1/skills/{id}/versions", {
-            params: { path: { id: change.skillId } },
-          })
-          .then(
-            (result) => result.data ?? [],
-            () => [],
-          )
+      ? api.versions(changeAssetId(change)).catch(() => [])
       : [],
   ]);
 
@@ -544,32 +516,17 @@ export async function changeDiff(
   target: ChangeDiffTarget,
   home = homedir(),
 ): Promise<FileDiff[]> {
-  const client = collaborationClient(
-    (await cloudConnection(home)).server,
-    home,
-    target.kind,
-  );
+  const api = packageApi(target.kind, await cloudConnection(home), home);
 
-  return responseData(
-    await client.GET("/v1/skill-changes/{id}/diff", {
-      params: {
-        path: { id: z.uuid().parse(target.id) },
-        query: {
-          revision: target.revision,
-          fromRevision: target.fromRevision,
-        },
-      },
-    }),
-  );
+  return api.changeDiff(z.uuid().parse(target.id), {
+    revision: target.revision,
+    fromRevision: target.fromRevision,
+  });
 }
 
 async function changeAtRevision(target: ChangeRevision, home: string) {
   return {
-    client: collaborationClient(
-      (await cloudConnection(home)).server,
-      home,
-      target.kind,
-    ),
+    api: packageApi(target.kind, await cloudConnection(home), home),
     id: z.uuid().parse(target.id),
     body: {
       expectedRevision: z.number().int().positive().parse(target.revision),
@@ -585,18 +542,13 @@ export async function reviewChange(
   decision: ReviewDecision,
   target: ChangeRevision,
   home = homedir(),
-): Promise<Change> {
-  const { client, id, body } = await changeAtRevision(target, home);
+): Promise<PackageChange> {
+  const { api, id, body } = await changeAtRevision(target, home);
 
-  return responseData(
-    await client.POST("/v1/skill-changes/{id}/reviews", {
-      params: { path: { id } },
-      body: {
-        ...body,
-        decision: decision === "approve" ? "approve" : "request_changes",
-      },
-    }),
-  );
+  return api.review(id, {
+    ...body,
+    decision: decision === "approve" ? "approve" : "request_changes",
+  });
 }
 
 /**
@@ -606,15 +558,10 @@ export async function reviewChange(
 export async function rejectChange(
   target: ChangeRevision,
   home = homedir(),
-): Promise<Change> {
-  const { client, id, body } = await changeAtRevision(target, home);
+): Promise<PackageChange> {
+  const { api, id, body } = await changeAtRevision(target, home);
 
-  return responseData(
-    await client.POST("/v1/skill-changes/{id}/reject", {
-      params: { path: { id } },
-      body,
-    }),
-  );
+  return api.reject(id, body);
 }
 
 /**
@@ -624,15 +571,10 @@ export async function rejectChange(
 export async function mergeChange(
   target: ChangeRevision,
   home = homedir(),
-): Promise<Change> {
-  const { client, id, body } = await changeAtRevision(target, home);
+): Promise<PackageChange> {
+  const { api, id, body } = await changeAtRevision(target, home);
 
-  return responseData(
-    await client.POST("/v1/skill-changes/{id}/merge", {
-      params: { path: { id } },
-      body,
-    }),
-  );
+  return api.merge(id, body);
 }
 
 /**
@@ -643,8 +585,8 @@ export async function mergeChange(
 export async function commentOnChange(
   options: CommentOptions,
   home = homedir(),
-): Promise<Change> {
-  const { client, id, body } = await changeAtRevision(options, home);
+): Promise<PackageChange> {
+  const { api, id, body } = await changeAtRevision(options, home);
   const text = options.bodyFile
     ? await readFile(options.bodyFile, "utf8")
     : options.body;
@@ -656,68 +598,51 @@ export async function commentOnChange(
   }
 
   if (options.thread) {
-    return responseData(
-      await client.POST(
-        "/v1/skill-changes/{id}/discussions/{threadId}/comments",
-        {
-          params: { path: { id, threadId: z.uuid().parse(options.thread) } },
-          body: { ...body, body: text },
-        },
-      ),
-    );
+    return api.comment(id, z.uuid().parse(options.thread), {
+      ...body,
+      body: text,
+    });
   }
 
-  return responseData(
-    await client.POST("/v1/skill-changes/{id}/discussions", {
-      params: { path: { id } },
-      body: {
-        ...body,
-        body: text,
-        path: options.path,
-        side: options.side,
-        startLine: options.startLine,
-        endLine: options.endLine,
-        replacement: options.replacementFile
-          ? selectedText(await readFile(options.replacementFile, "utf8"))
-          : undefined,
-        expectedContent: options.expectedFile
-          ? selectedText(
-              await readFile(options.expectedFile, "utf8"),
-              options.startLine && options.endLine
-                ? options.endLine - options.startLine + 1
-                : undefined,
-            )
-          : undefined,
-      },
-    }),
-  );
+  return api.discuss(id, {
+    ...body,
+    body: text,
+    path: options.path,
+    side: options.side,
+    startLine: options.startLine,
+    endLine: options.endLine,
+    replacement: options.replacementFile
+      ? selectedText(await readFile(options.replacementFile, "utf8"))
+      : undefined,
+    expectedContent: options.expectedFile
+      ? selectedText(
+          await readFile(options.expectedFile, "utf8"),
+          options.startLine && options.endLine
+            ? options.endLine - options.startLine + 1
+            : undefined,
+        )
+      : undefined,
+  });
 }
 
 /** Creates a new revision; the author runs `barndog pull` to receive it. */
 export async function applySuggestion(
   target: ThreadRevision,
   home = homedir(),
-): Promise<Change> {
-  const { client, id, body } = await changeAtRevision(target, home);
+): Promise<PackageChange> {
+  const { api, id, body } = await changeAtRevision(target, home);
 
-  return responseData(
-    await client.POST("/v1/skill-changes/{id}/discussions/{threadId}/apply", {
-      params: { path: { id, threadId: z.uuid().parse(target.thread) } },
-      body,
-    }),
-  );
+  return api.applySuggestion(id, z.uuid().parse(target.thread), body);
 }
 
 export async function setDiscussionResolved(
   target: ThreadResolution,
   home = homedir(),
-): Promise<Change> {
-  const { client, id, body } = await changeAtRevision(target, home);
+): Promise<PackageChange> {
+  const { api, id, body } = await changeAtRevision(target, home);
 
-  return responseData(
-    await client.POST("/v1/skill-changes/{id}/discussions/{threadId}/resolve", {
-      params: { path: { id, threadId: z.uuid().parse(target.thread) } },
-      body: { ...body, resolved: target.resolved },
-    }),
-  );
+  return api.resolve(id, z.uuid().parse(target.thread), {
+    ...body,
+    resolved: target.resolved,
+  });
 }

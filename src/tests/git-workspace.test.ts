@@ -782,7 +782,7 @@ test("a Cloud machine with a local folder keeps Cloud collaboration", async (t) 
     mode: "environment",
   });
 
-  await expect(listChanges({}, home)).rejects.toSatisfy(
+  await expect(listChanges({ kind: "skill" }, home)).rejects.toSatisfy(
     (error: Error) => !/no review step/.test(error.message),
   );
 
@@ -1114,7 +1114,12 @@ test("working copies push review branches and merge upstream edits", async (t) =
   const { root, url, clone } = await teamRepo(t);
   const member = join(root, "member");
   await setupGit(url, member);
-  const options = { name: "code-review", origin: "org" };
+  const options = {
+    kind: "skill" as const,
+    name: "code-review",
+    origin: "org",
+  };
+
   await pullPackage(options, root, member);
   const work = join(root, "code-review");
   await write(work, "SKILL.md", skill("code-review", "Member edit."));
@@ -1195,7 +1200,12 @@ test("pull merges upstream, conflicts block push, and resolve clears them", asyn
   const { root, url, clone } = await teamRepo(t);
   const member = join(root, "member");
   await setupGit(url, member);
-  await pullPackage({ name: "code-review", origin: "org" }, root, member);
+  await pullPackage(
+    { kind: "skill", name: "code-review", origin: "org" },
+    root,
+    member,
+  );
+
   const work = join(root, "code-review");
   await write(work, "SKILL.md", skill("code-review", "Local."));
   await write(
@@ -1231,7 +1241,12 @@ test("push --publish goes straight to the default branch only when asked", async
   const { root, url, clone } = await teamRepo(t);
   const member = join(root, "member");
   await setupGit(url, member);
-  await pullPackage({ name: "code-review", origin: "org" }, root, member);
+  await pullPackage(
+    { kind: "skill", name: "code-review", origin: "org" },
+    root,
+    member,
+  );
+
   const work = join(root, "code-review");
   await write(work, "SKILL.md", skill("code-review", "Direct."));
   const result = (await pushWorkingCopy({ publish: true }, work, member)) as {
@@ -1291,7 +1306,12 @@ test("create starts a new asset in a new team scope and history is readable", as
   );
 
   await commit(clone, "Second");
-  const options = { name: "code-review", origin: "org" };
+  const options = {
+    kind: "skill" as const,
+    name: "code-review",
+    origin: "org",
+  };
+
   const versions = (await packageVersions(options, member)) as {
     number: number;
     description: string;
@@ -1313,7 +1333,7 @@ test("review commands point to the Git host and cloud-only commands explain why"
   const { root, url } = await teamRepo(t);
   const member = join(root, "member");
   await setupGit(url, member);
-  await expect(listChanges({}, member)).rejects.toThrow(
+  await expect(listChanges({ kind: "skill" }, member)).rejects.toThrow(
     /pull requests on your Git host/,
   );
 
@@ -1380,7 +1400,11 @@ test("local mode delivers every kind from a folder and needs no Git", async (t) 
   );
 
   await expect(
-    pullPackage({ name: "code-review", origin: "org" }, root, home),
+    pullPackage(
+      { kind: "skill", name: "code-review", origin: "org" },
+      root,
+      home,
+    ),
   ).rejects.toThrow(/Edit them directly/);
 });
 
@@ -1711,7 +1735,7 @@ test("commands the setup can't run explain why before doing anything", async (t)
     ["whoami"],
     ["auth", "status"],
     ["github", "status"],
-    ["changes", "list"],
+    ["skills", "changes", "list"],
     ["skills", "promote"],
     ["mcp", "create"],
   ]) {
@@ -1761,7 +1785,7 @@ test("a Git setup sends reviews to the host and allows its own history", async (
   const home = join(root, "member");
   await setupGit(url, home);
   await expect(
-    assertCommandAvailable(["changes", "list"], {}, home),
+    assertCommandAvailable(["hooks", "changes", "list"], {}, home),
   ).rejects.toThrow(/pull requests on your Git host/);
 
   await expect(assertCommandAvailable(["login"], {}, home)).rejects.toThrow(

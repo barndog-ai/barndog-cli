@@ -185,6 +185,14 @@ function serverProblemCode(error: unknown): ServerProblemCode | undefined {
   return serverProblemCodes.find((known) => known === code);
 }
 
+/**
+ * Where to look again after a refusal about a Suggested Change. The server
+ * doesn't say which kind the change is, so this names both; a command that
+ * knows the kind replaces it with its own (`commands/collaboration.ts`).
+ */
+export const CHANGES_LIST_FIX =
+  "barndog skills changes list or barndog hooks changes list";
+
 /** Server refusals people run into, with what to do next when there is something to do. */
 const serverProblems: Record<
   ServerProblemCode,
@@ -192,7 +200,7 @@ const serverProblems: Record<
 > = {
   APPROVALS_REQUIRED: {
     message: "This change needs more approvals before it can merge",
-    fix: "barndog changes list",
+    fix: CHANGES_LIST_FIX,
   },
   CHANGE_AUTHOR_REQUIRED: {
     message: "Only the author of this change can revise it",
@@ -207,7 +215,7 @@ const serverProblems: Record<
   },
   CHANGES_REQUESTED: {
     message: "A reviewer requested changes, so this can't merge yet",
-    fix: "barndog changes list",
+    fix: CHANGES_LIST_FIX,
   },
   GITHUB_APP_NOT_CONFIGURED: {
     message: "GitHub isn't set up on this BarnDog server",
@@ -237,7 +245,7 @@ const serverProblems: Record<
   },
   OUTDATED_SUGGESTION: {
     message: "That suggestion no longer applies to the current revision",
-    fix: "barndog changes list",
+    fix: CHANGES_LIST_FIX,
   },
   PERSONAL_OWNER_REQUIRED: { message: "Only its owner can do that" },
   PUBLICATION_FORBIDDEN: {
@@ -262,7 +270,7 @@ const serverProblems: Record<
   },
   STALE_CHANGE_REVISION: {
     message: "This change has a newer revision. Review it, then retry",
-    fix: "barndog changes list",
+    fix: CHANGES_LIST_FIX,
   },
   STALE_SKILL_VERSION: {
     message: "A newer version was published after this change was made",
@@ -271,7 +279,7 @@ const serverProblems: Record<
   SUGGESTION_CONTENT_MISMATCH: {
     message:
       "--expected-file doesn't match those lines in this revision. Suggestions also need --side new",
-    fix: "barndog changes list",
+    fix: CHANGES_LIST_FIX,
   },
   THREAD_ACTION_FORBIDDEN: {
     message: "Only the discussion's author or an admin can do that",

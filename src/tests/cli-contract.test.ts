@@ -21,7 +21,10 @@ import { ApiError, mcpDefinitionSchema } from "@barndog-ai/api-contract";
 
 import { assertCommandAvailable } from "../commands/availability.js";
 import { CliError } from "../errors.js";
-import { commentOnChange } from "../features/collaboration/index.js";
+import {
+  commentOnChange,
+  mergeChange,
+} from "../features/collaboration/index.js";
 import { updateCredentials } from "../features/auth/credentials.js";
 import { saveSettings, readSettings } from "../config/settings.js";
 import { synchronize } from "../features/environment/sync.js";
@@ -164,7 +167,7 @@ test("mcp add marks OAuth servers, by flag or from the pasted JSON", () => {
 test("--json covers review commands and selection changes", async () => {
   const change = [{ id: "1", name: "a", status: "open", revision: 1 }];
   const list = program({ listChanges: async () => change as never });
-  await list.instance.parseAsync(["changes", "list", "--json"], {
+  await list.instance.parseAsync(["skills", "changes", "list", "--json"], {
     from: "user",
   });
 
@@ -222,7 +225,9 @@ test("a change ID from the other list points there", async () => {
   });
 
   await expect(
-    instance.parseAsync(["changes", "show", "abc"], { from: "user" }),
+    instance.parseAsync(["skills", "changes", "show", "abc"], {
+      from: "user",
+    }),
   ).rejects.toSatisfy(
     (error: CliError) =>
       /No Skill/.test(error.message) &&
@@ -457,6 +462,94 @@ test("MCP details read as fields and keep variable names exact", () => {
   expect(plain(renderValue({ E2E_MCP_TOKEN: "x" }))).toMatch(/E2E_MCP_TOKEN/);
 });
 
+/** A proposal as the server returns it, with the kind's own asset field. */
+const reviewedChange = (asset: { skillId: string } | { hookId: string }) => ({
+  id: randomUUID(),
+  authorId: randomUUID(),
+  name: "release-notes",
+  origin: { type: "org", id: randomUUID() },
+  submittedRevision: 1,
+  title: "Update release-notes",
+  status: "merged",
+  revision: 1,
+  baseVersionId: null,
+  commit: "a".repeat(40),
+  createdAt: new Date().toISOString(),
+  revisions: [],
+  reviews: [],
+  threads: [],
+  publishedVersion: {
+    id: randomUUID(),
+    number: 1,
+    commit: "a".repeat(40),
+    description: "First version",
+    publishedBy: randomUUID(),
+    publishedAt: new Date().toISOString(),
+    ...asset,
+  },
+  ...asset,
+});
+
+test("a Hook change uses the Hook routes and keeps the Hook contract's shape", async (t) => {
+  const home = await realpath(
+    await mkdtemp(join(tmpdir(), "barndog-hook-change-")),
+  );
+
+  const organization = { id: randomUUID(), slug: "local", name: "Local" };
+  const developer = {
+    id: randomUUID(),
+    slug: "admin",
+    name: "Admin",
+    role: "organization_admin" as const,
+  };
+
+  const server = "http://127.0.0.1:9";
+  await saveSettings(
+    {
+      harnesses: [],
+      connection: {
+        server,
+        organizationId: organization.id,
+        developerId: developer.id,
+      },
+    },
+    home,
+  );
+
+  await updateCredentials(home, (credentials) => {
+    credentials.servers[server] = {
+      token: "a".repeat(43),
+      expiresAt: new Date(Date.now() + 3600000).toISOString(),
+      context: { organization, developer },
+    };
+  });
+
+  const hookId = randomUUID();
+  const paths: string[] = [];
+  vi.stubGlobal("fetch", async (request: Request) => {
+    const { pathname } = new URL(request.url);
+    if (pathname === "/v1/context") {
+      return Response.json({ organization, developer });
+    }
+
+    paths.push(`${request.method} ${pathname}`);
+
+    return Response.json(reviewedChange({ hookId }));
+  });
+
+  t.onTestFinished(async () => {
+    vi.unstubAllGlobals();
+    await rm(home, { recursive: true, force: true });
+  });
+
+  const id = randomUUID();
+  const merged = await mergeChange({ kind: "hook", id, revision: 1 }, home);
+
+  expect(paths).toStrictEqual([`POST /v1/hook-changes/${id}/merge`]);
+  expect(merged).toMatchObject({ hookId, publishedVersion: { hookId } });
+  expect(merged).not.toHaveProperty("skillId");
+});
+
 test("a comment's text files drop their closing newline unless the range ends on an empty line", async (t) => {
   const home = await realpath(
     await mkdtemp(join(tmpdir(), "barndog-comment-")),
@@ -495,6 +588,8 @@ test("a comment's text files drop their closing newline unless the range ends on
   vi.stubGlobal("fetch", async (request: Request) => {
     if (request.method === "POST") {
       bodies.push(await request.json());
+
+      return Response.json(reviewedChange({ skillId: randomUUID() }));
     }
 
     return Response.json({ organization, developer });

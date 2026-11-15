@@ -6,12 +6,7 @@ import { join, resolve, dirname } from "node:path";
 import { mkdir, readFile, realpath, rm } from "node:fs/promises";
 
 import { c } from "tar";
-import {
-  ApiError,
-  changeSchema,
-  skillSchema,
-  type ChangeUpload,
-} from "@barndog-ai/api-contract";
+import { ApiError } from "@barndog-ai/api-contract";
 import {
   defaultLimits,
   packageFingerprint,
@@ -23,10 +18,11 @@ import {
   readDirectory,
   textContent,
 } from "@barndog-ai/api-contract/collaboration";
-import { collaborationClient } from "./domain.js";
-import { responseData } from "../server/client.js";
+import { packageApi } from "./api.js";
+import { changeAssetId, type PackageChange } from "./results.js";
 import {
   metadata as packageMetadataFor,
+  packageKindOf,
   assetKinds,
 } from "../asset-kinds/index.js";
 import { type PackageKind } from "../../config/selection.js";
@@ -49,6 +45,7 @@ import {
   type Workspace,
   type Files,
   NoWorkingCopyError,
+  type PackageUpload,
 } from "./workspace-store.js";
 import {
   externalSource,
@@ -70,13 +67,13 @@ import type {
 import { CliError, PackageError } from "../../errors.js";
 import { barndogPaths } from "../../config/paths.js";
 
-const publishedId = (work: { skillId?: string | null }) =>
-  defined(work.skillId, "This working copy isn't published yet");
+const publishedId = (work: { assetId?: string | null }) =>
+  defined(work.assetId, "This working copy isn't published yet");
 
 const linkedProposal = <P>(work: { proposal?: P | null }) =>
   defined(work.proposal, "This working copy has no linked proposal");
 
-const publishedVersion = <V>(change: { publishedVersion?: V | null }) =>
+const publishedVersion = (change: PackageChange) =>
   defined(
     change.publishedVersion,
     "The merged change has no published version",
@@ -98,11 +95,7 @@ export type WorkingFolderOptions = {
  * `~/.barndog/workspaces/`. Refuses a folder that already exists.
  */
 export async function pullSkill(
-  {
-    name,
-    origin,
-    kind = "skill",
-  }: { name: string; origin: string; kind?: PackageKind },
+  { name, origin, kind }: { name: string; origin: string; kind: PackageKind },
   { target, cwd = process.cwd(), home = homedir() }: WorkingFolderOptions = {},
 ): Promise<PulledPackage> {
   return locked(home, async () => {
@@ -135,7 +128,7 @@ export async function pullSkill(
           root,
           kind,
           connection: conn,
-          skillId: skill.id,
+          assetId: skill.id,
           name: skill.name,
           origin: { type: skill.origin.type, id: skill.origin.id },
           baseVersionId: skill.version.id,
@@ -251,15 +244,11 @@ export async function updateWorkspace(
         // The author's remote proposal may already have been rebased by another client.
         if (proposal.baseVersionId !== work.baseVersionId) {
           if (proposal.baseVersionId) {
-            const versions = responseData(
-              await collaborationClient(
-                work.connection.server,
-                home,
-                work.kind,
-              ).GET("/v1/skills/{id}/versions", {
-                params: { path: { id: publishedId(work) } },
-              }),
-            );
+            const versions = await packageApi(
+              work.kind,
+              work.connection,
+              home,
+            ).versions(publishedId(work));
 
             const version = versions.find(
               (v) => v.id === proposal.baseVersionId,
@@ -301,17 +290,11 @@ export async function updateWorkspace(
     }
 
     if (work.baseVersionId) {
-      const skill = skillSchema.parse(
-        (
-          await collaborationClient(
-            work.connection.server,
-            home,
-            work.kind,
-          ).GET("/v1/skills/{id}", {
-            params: { path: { id: publishedId(work) } },
-          })
-        ).data,
-      );
+      const skill = await packageApi(
+        work.kind,
+        work.connection,
+        home,
+      ).published(publishedId(work));
 
       if (skill.version.id !== work.baseVersionId) {
         const latest = await downloadVersion(
@@ -497,15 +480,14 @@ export async function pushWorkspace(
 
       const conn = await connection(home);
       const root = await realpath(cwd);
-      const description = packageMetadataFor(
-        await readDirectory(root),
-        options.kind ?? "skill",
-      );
+      const files = await readDirectory(root);
+      const kind = packageKindOf(files, options.kind);
+      const description = packageMetadataFor(files, kind);
 
       const origin = await selectOrigin(options.origin, conn, home);
       work = {
         root,
-        kind: options.kind ?? "skill",
+        kind,
         connection: conn,
         name: description.name,
         origin: { type: origin.type, id: origin.id },
@@ -544,7 +526,7 @@ export async function pushWorkspace(
         selected.type !== work.origin.type ||
         selected.id !== work.origin.id
       ) {
-        if (work.skillId || work.proposal || work.pending) {
+        if (work.assetId || work.proposal || work.pending) {
           throw new CliError(
             "This working copy was already submitted, so its origin can't change. Push without --origin.",
             "barndog push",
@@ -568,7 +550,7 @@ export async function pushWorkspace(
       return pushExternal(work, source, options, home);
     }
 
-    const client = collaborationClient(work.connection.server, home, work.kind);
+    const api = packageApi(work.kind, work.connection, home);
     if (options.publish) {
       const scope = await selectOrigin(
         `${work.origin.type}:${work.origin.id}`,
@@ -578,7 +560,7 @@ export async function pushWorkspace(
 
       if (!scope.canPublish) {
         throw new CliError(
-          "Only a scope admin, an organization admin or the personal owner can publish directly. Propose it for review instead, then merge it with barndog changes merge.",
+          `Only a scope admin, an organization admin or the personal owner can publish directly. Propose it for review instead, then merge it with barndog ${assetKinds[work.kind].command} changes merge.`,
           "barndog push",
         );
       }
@@ -651,14 +633,9 @@ export async function pushWorkspace(
         (!options.title || options.title === proposal?.title)
       ) {
         if (options.publish && proposal?.status === "open") {
-          const merged = changeSchema.parse(
-            (
-              await client.POST("/v1/skill-changes/{id}/merge", {
-                params: { path: { id: proposal.id } },
-                body: { expectedRevision: proposal.revision },
-              })
-            ).data,
-          );
+          const merged = await api.merge(proposal.id, {
+            expectedRevision: proposal.revision,
+          });
 
           work.baseVersionId = publishedVersion(merged).id;
           work.baseNumber = publishedVersion(merged).number;
@@ -674,8 +651,8 @@ export async function pushWorkspace(
       const changeId =
         proposal?.status === "open" && !options.new ? proposal.id : undefined;
 
-      const metadata: ChangeUpload = {
-        skillId: work.skillId,
+      const metadata: PackageUpload = {
+        assetId: work.assetId,
         name: work.name,
         origin: work.origin,
         baseVersionId: work.baseVersionId,
@@ -689,20 +666,11 @@ export async function pushWorkspace(
     }
 
     const pending = work.pending;
-    const form = new FormData();
-    form.set("metadata", JSON.stringify(pending.metadata));
-    form.set("package", await archive(pending.files, home), "skill.tar.gz");
+    const upload = await archive(pending.files, home);
     try {
-      proposal = changeSchema.parse(
-        pending.changeId
-          ? (
-              await client.PUT("/v1/skill-changes/{id}/revisions", {
-                params: { path: { id: pending.changeId } },
-                body: form,
-              })
-            ).data
-          : (await client.POST("/v1/skill-changes", { body: form })).data,
-      );
+      proposal = pending.changeId
+        ? await api.revise(pending.changeId, pending.metadata, upload)
+        : await api.submit(pending.metadata, upload);
     } catch (error) {
       // A definitive rejection did not accept this submission. Keep local edits and
       // permit pull/reconciliation; ambiguous transport failures retain the exact key.
@@ -723,7 +691,7 @@ export async function pushWorkspace(
       throw error;
     }
 
-    work.skillId = proposal.skillId;
+    work.assetId = changeAssetId(proposal);
     work.proposal = {
       id: proposal.id,
       revision: proposal.submittedRevision,
@@ -733,14 +701,9 @@ export async function pushWorkspace(
     delete work.pending;
     await save(work, home);
     if (options.publish) {
-      proposal = changeSchema.parse(
-        (
-          await client.POST("/v1/skill-changes/{id}/merge", {
-            params: { path: { id: proposal.id } },
-            body: { expectedRevision: work.proposal.revision },
-          })
-        ).data,
-      );
+      proposal = await api.merge(proposal.id, {
+        expectedRevision: work.proposal.revision,
+      });
 
       work.baseVersionId = publishedVersion(proposal).id;
       work.baseNumber = publishedVersion(proposal).number;
@@ -757,11 +720,7 @@ export async function pushWorkspace(
  * validate the connection and origin; asset content is uploaded only on `push`.
  */
 export async function createWorkspace(
-  {
-    name,
-    origin,
-    kind = "skill",
-  }: { name: string; origin: string; kind?: PackageKind },
+  { name, origin, kind }: { name: string; origin: string; kind: PackageKind },
   { target, cwd = process.cwd(), home = homedir() }: WorkingFolderOptions = {},
 ): Promise<CreatedPackage> {
   return locked(home, async () => {

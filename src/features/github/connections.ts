@@ -23,6 +23,7 @@ import { connection } from "../server/connection.js";
 import { selectAsset } from "../server/catalog.js";
 import { type RetryKey, parsed } from "../server/client.js";
 import { CliError } from "../../errors.js";
+import type { PackageKind } from "../../config/selection.js";
 import { apiClient } from "../auth/transport.js";
 
 /** A BarnDog-owned copy of a repository, with no connection left behind. */
@@ -36,7 +37,7 @@ export type MirrorResolved = z.infer<typeof okSchema>;
 
 /** An asset and the GitHub repository it pairs with. */
 export type GithubRepositoryOptions = {
-  kind?: "skill" | "hook";
+  kind: PackageKind;
   name: string;
   origin: string;
   /** BarnDog's installation binding UUID, not GitHub's installation number. */
@@ -99,7 +100,7 @@ function repositoryTarget(options: GithubRepositoryOptions) {
   }
 
   return {
-    kind: options.kind ?? "skill",
+    kind: options.kind,
     installationId: options.installation,
     owner,
     repository,

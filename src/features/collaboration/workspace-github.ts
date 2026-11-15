@@ -38,8 +38,8 @@ import type { CloudPushResult, UpdatedCloudWorkingCopy } from "./results.js";
 import { CliError } from "../../errors.js";
 import { apiClient } from "../auth/transport.js";
 
-const publishedId = (work: { skillId?: string | null }) =>
-  defined(work.skillId, "This working copy isn't published yet");
+const publishedId = (work: { assetId?: string | null }) =>
+  defined(work.assetId, "This working copy isn't published yet");
 
 /**
  * The GitHub connection that is authoritative for this working copy's asset, if
@@ -47,7 +47,7 @@ const publishedId = (work: { skillId?: string | null }) =>
  * connection needs attention, or when an internal upload is still pending.
  */
 export async function externalSource(work: Workspace, home: string) {
-  if (!work.skillId) {
+  if (!work.assetId) {
     return undefined;
   }
 
@@ -58,7 +58,7 @@ export async function externalSource(work: Workspace, home: string) {
 
   const source = connections.find(
     (c) =>
-      c.assetId === work.skillId &&
+      c.assetId === work.assetId &&
       c.kind === work.kind &&
       c.authority === "github",
   );

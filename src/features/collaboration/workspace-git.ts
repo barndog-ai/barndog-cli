@@ -44,6 +44,7 @@ import {
 } from "../workspace/repo-source.js";
 import {
   metadata as packageMetadataFor,
+  packageKindOf,
   assetKinds,
   assetNotFound,
 } from "../asset-kinds/index.js";
@@ -198,12 +199,12 @@ export function pullGitAsset(
     name: string;
     origin: string;
     target?: string;
-    kind?: PackageKind;
+    kind: PackageKind;
   },
   cwd: string,
   home = homedir(),
 ): Promise<PulledPackage> {
-  const kind = options.kind ?? "skill";
+  const { kind } = options;
 
   return locked(home, async () => {
     const { model, commit } = await latest(workspace, home);
@@ -239,12 +240,12 @@ export function createGitAsset(
     name: string;
     origin: string;
     target?: string;
-    kind?: PackageKind;
+    kind: PackageKind;
   },
   cwd: string,
   home = homedir(),
 ): Promise<CreatedPackage> {
-  const kind = options.kind ?? "skill";
+  const { kind } = options;
 
   return locked(home, async () => {
     if (!NAME.test(options.name)) {
@@ -448,12 +449,13 @@ export function pushGitWorkingCopy(
       }
 
       const root = await realpath(cwd);
-      const kind = options.kind ?? "skill";
+      const files = await readDirectory(root);
+      const kind = packageKindOf(files, options.kind);
       work = {
         root,
         kind,
         git: workspace,
-        name: packageMetadataFor(await readDirectory(root), kind).name,
+        name: packageMetadataFor(files, kind).name,
         scope: selectScope(model, options.origin),
         baseCommit: tip,
         base: [],
@@ -657,7 +659,7 @@ async function filesAt(repo: string, commit: string, path: string) {
   }));
 }
 
-type HistoryTarget = { name: string; origin: string; kind?: AssetKind };
+type HistoryTarget = { name: string; origin: string; kind: AssetKind };
 
 /** An asset's published history: one version per commit that changed it. */
 async function history(
@@ -666,12 +668,7 @@ async function history(
   home: string,
 ) {
   const { model, commit } = await latest(workspace, home);
-  const asset = selectAsset(
-    model,
-    target.kind ?? "skill",
-    target.name,
-    target.origin,
-  );
+  const asset = selectAsset(model, target.kind, target.name, target.origin);
 
   const repo = barndogPaths(home).bareClone(workspace.workspaceId);
   const versions = await assetHistory(repo, commit, asset.path);

@@ -1,7 +1,10 @@
 import { Command, Help, Option } from "commander";
 import { homedir } from "node:os";
 import { styleText } from "node:util";
-import { registerCollaboration } from "./commands/collaboration.js";
+import {
+  registerCollaboration,
+  registerWorkingCopy,
+} from "./commands/collaboration.js";
 import {
   applySuggestion,
   changeDiff,
@@ -140,7 +143,7 @@ const groups: [string, string[]][] = [
   ["Assets:", ["skills", "mcp", "hooks", "sets", "knowledge"]],
   [
     "Working copy & review (run inside a folder from `skills pull`, `hooks pull` or `create`):",
-    ["pull", "diff", "push", "resolve", "changes"],
+    ["pull", "diff", "push", "resolve"],
   ],
   [
     "Workspace:",
@@ -515,7 +518,8 @@ export function createProgram(options: ProgramOptions = {}): Command {
   registerEnvironment(program, context);
   registerCapabilities(program, context);
   registerWorkspace(program, context);
-  registerCollaboration(program, context);
+  registerWorkingCopy(program, context);
+  registerCollaboration(program, context, "skill");
   registerCollaboration(program, context, "hook");
   registerAdd(program, context);
   const order = groups.flatMap(([, names]) => names);

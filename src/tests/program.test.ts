@@ -330,7 +330,12 @@ test("collaboration commands pass parsed arguments without performing workflow I
 
   expect(calls.pop()).toStrictEqual([
     "pullPackage",
-    { name: "review", origin: "team/frontend", directory: "editable" },
+    {
+      kind: "skill",
+      name: "review",
+      origin: "team/frontend",
+      directory: "editable",
+    },
   ]);
 
   await program.parseAsync(
@@ -343,15 +348,20 @@ test("collaboration commands pass parsed arguments without performing workflow I
     { publish: true, new: true, title: "Improve instructions" },
   ]);
 
-  await program.parseAsync(["changes", "approve", "id", "--revision", "3"], {
-    from: "user",
-  });
+  await program.parseAsync(
+    ["hooks", "changes", "approve", "id", "--revision", "3"],
+    { from: "user" },
+  );
 
   expect(calls.pop()).toStrictEqual([
     "reviewChange",
     "approve",
-    { id: "id", revision: 3 },
+    { kind: "hook", id: "id", revision: 3 },
   ]);
+
+  await expect(
+    program.parseAsync(["changes", "list"], { from: "user" }),
+  ).rejects.toThrow(/unknown command/);
 
   await program.parseAsync(
     ["skills", "changes", "approve", "id", "--revision", "4"],
@@ -361,7 +371,7 @@ test("collaboration commands pass parsed arguments without performing workflow I
   expect(calls.pop()).toStrictEqual([
     "reviewChange",
     "approve",
-    { id: "id", revision: 4 },
+    { kind: "skill", id: "id", revision: 4 },
   ]);
 });
 
@@ -374,9 +384,9 @@ test("review commands require an explicit positive revision before workflow IO",
   };
 
   for (const args of [
-    ["changes", "approve", "id"],
-    ["changes", "merge", "id", "--revision", "0"],
-    ["changes", "reject", "id", "--revision", "1.2"],
+    ["skills", "changes", "approve", "id"],
+    ["hooks", "changes", "merge", "id", "--revision", "0"],
+    ["skills", "changes", "reject", "id", "--revision", "1.2"],
   ]) {
     const program = createProgram({
       write: () => {},

@@ -14,9 +14,11 @@ import type { z, ZodType } from "zod";
 import {
   assetFolders,
   type AssetKind,
+  packageKindList,
   type PackageKind,
 } from "../../config/selection.js";
 import { CliError, PackageError } from "../../errors.js";
+import { only } from "../../shared/lookup.js";
 
 /** A Hook as the server describes it. */
 export type Hook = z.infer<typeof hookSchema>;
@@ -147,11 +149,44 @@ export const assetNotFound = (kind: AssetKind, name: string, origin: string) =>
   );
 
 /**
+ * Which kind of package a folder holds, from the one manifest file it has at
+ * its root (`SKILL.md` or `hook.yaml`). Throws when it has neither or both, or
+ * when the command that asked (`expected`) is for the other kind.
+ */
+export function packageKindOf(
+  entries: readonly PackageEntry[],
+  expected: PackageKind | undefined,
+): PackageKind {
+  const kinds = packageKindList.filter((kind) =>
+    entries.some((entry) => entry.path === assetKinds[kind].manifest),
+  );
+
+  const kind = only(kinds);
+  if (!kind) {
+    throw new CliError(
+      kinds.length
+        ? `This folder has both ${kinds.map((k) => assetKinds[k].manifest).join(" and ")}, so it isn't clear what to push.`
+        : `This folder has no ${packageKindList.map((k) => assetKinds[k].manifest).join(" or ")}, so there is nothing to push.`,
+      `Keep exactly one of ${packageKindList.map((k) => `${assetKinds[k].manifest} for ${assetKinds[k].a}`).join(" or ")}.`,
+    );
+  }
+
+  if (expected && expected !== kind) {
+    throw new CliError(
+      `This folder holds ${assetKinds[kind].a}, not ${assetKinds[expected].a}.`,
+      `barndog ${assetKinds[kind].command} push --origin <origin>`,
+    );
+  }
+
+  return kind;
+}
+
+/**
  * A package's metadata: the `SKILL.md` front matter, or the parsed `hook.yaml`
  * manifest. Throws when the manifest is missing or invalid, or a Hook script it
  * names is missing.
  */
-export function metadata(entries: PackageEntry[], kind: PackageKind = "skill") {
+export function metadata(entries: PackageEntry[], kind: PackageKind) {
   if (kind === "skill") {
     return packageMetadata(entries);
   }

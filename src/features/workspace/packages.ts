@@ -137,7 +137,7 @@ export async function storePackage(
 }
 
 /** A typed-client call made with `parseAs: "stream"`, so the body is still unread. */
-type PackageDownload = Promise<{ response: Response }>;
+export type PackageDownload = Promise<{ response: Response }>;
 
 /**
  * Reads and unpacks a package download within the package size limits. With

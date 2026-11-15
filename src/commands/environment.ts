@@ -614,7 +614,7 @@ export function registerEnvironment(program: Command, context: CommandContext) {
 
             context.write(
               result.changeId
-                ? hint(`barndog changes show ${result.changeId}`)
+                ? hint(`barndog ${group} changes show ${result.changeId}`)
                 : hint(
                     `barndog ${group} install ${newName} --origin ${target === "me" ? "me" : target}`,
                   ),

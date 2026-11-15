@@ -1,11 +1,9 @@
 import { homedir } from "node:os";
 
 import {
-  changeSchema,
   mcpSchema,
   knowledgeDocumentSchema,
   knowledgeIndexSchema,
-  type ChangeUpload,
 } from "@barndog-ai/api-contract";
 
 import { selectionState, withSelection } from "../../config/environment.js";
@@ -19,9 +17,12 @@ import { CliError } from "../../errors.js";
 import type { AssetReference } from "../asset-selection/types.js";
 import type { SelectionState, PackageKind } from "../../config/selection.js";
 import { normalizeServer, apiClient } from "../auth/transport.js";
-import { collaborationClient } from "../collaboration/domain.js";
+import { packageApi } from "../collaboration/api.js";
 import { archive } from "../collaboration/workspace.js";
-import { encodeFiles } from "../collaboration/workspace-store.js";
+import {
+  encodeFiles,
+  type PackageUpload,
+} from "../collaboration/workspace-store.js";
 import { originLabel, scopes } from "../server/origin.js";
 import { environmentCatalog } from "../server/catalog.js";
 import type { ApiScope } from "../server/origin.js";
@@ -73,9 +74,9 @@ export async function publishPackage(
   conn: Connection,
   home: string,
 ) {
-  const client = collaborationClient(conn.server, home, asset.kind);
+  const api = packageApi(asset.kind, conn, home);
   const files = encodeFiles(asset.entries);
-  const metadata: ChangeUpload = {
+  const metadata: PackageUpload = {
     name: asset.name,
     origin: { type: scope.type, id: scope.id },
     baseVersionId: null,
@@ -84,17 +85,9 @@ export async function publishPackage(
     idempotencyKey: `migrate-${asset.id}-${asset.publishedVersion}-${scope.id}-${asset.name}`,
   };
 
-  const form = new FormData();
-  form.set("metadata", JSON.stringify(metadata));
-  form.set("package", await archive(files, home), "skill.tar.gz");
-  const change = changeSchema.parse(
-    (await client.POST("/v1/skill-changes", { body: form })).data,
-  );
+  const change = await api.submit(metadata, await archive(files, home));
 
-  await client.POST("/v1/skill-changes/{id}/merge", {
-    params: { path: { id: change.id } },
-    body: { expectedRevision: change.submittedRevision },
-  });
+  await api.merge(change.id, { expectedRevision: change.submittedRevision });
 }
 
 /**

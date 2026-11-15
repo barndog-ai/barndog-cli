@@ -17,6 +17,7 @@ import { GIT_OBJECT_ID } from "../../shared/patterns.js";
 import { readIfExists, writeAtomic } from "../../shared/files.js";
 import { withPidLock } from "../../shared/lock.js";
 import { barndogPaths } from "../../config/paths.js";
+import { isRecord } from "../../shared/values.js";
 
 const filesSchema = z.array(
   z.object({ path: z.string(), content: z.string(), executable: z.boolean() }),
@@ -27,6 +28,32 @@ const filesSchema = z.array(
  */
 export type Files = z.infer<typeof filesSchema>;
 
+/**
+ * What a push sends besides the files. `assetId` is the Skill or Hook being
+ * revised, absent until the package is first published; the kind's route names
+ * it `skillId` or `hookId` (`collaboration/api.ts`).
+ */
+const uploadSchema = changeUploadSchema
+  .omit({ skillId: true })
+  .extend({ assetId: z.uuid().optional() });
+
+export type PackageUpload = z.infer<typeof uploadSchema>;
+
+/**
+ * Records written before Hooks had working copies called the asset `skillId`
+ * for both kinds, in the record and in a pending upload. Reads them as
+ * `assetId`; the record is saved in the new shape on its next write.
+ */
+function withAssetId(value: unknown): unknown {
+  if (!isRecord(value) || !("skillId" in value)) {
+    return value;
+  }
+
+  const { skillId, ...rest } = value;
+
+  return { assetId: skillId, ...rest };
+}
+
 const workspaceSchema = z.object({
   kind: z.enum(packageKindList).default("skill"),
   root: z.string().refine(isAbsolute),
@@ -35,7 +62,7 @@ const workspaceSchema = z.object({
     organizationId: z.uuid(),
     developerId: z.uuid(),
   }),
-  skillId: z.uuid().optional(),
+  assetId: z.uuid().optional(),
   name: z.string(),
   origin: z.object({
     type: z.enum(["org", "team", "repo", "dev"]),
@@ -54,7 +81,7 @@ const workspaceSchema = z.object({
   conflicts: z.array(z.string()),
   pending: z
     .object({
-      metadata: changeUploadSchema,
+      metadata: z.preprocess(withAssetId, uploadSchema),
       files: filesSchema,
       changeId: z.uuid().optional(),
     })
@@ -192,7 +219,7 @@ export const find = (cwd: string, home: string): Promise<Workspace> =>
       );
     }
 
-    return workspaceSchema.parse(value);
+    return workspaceSchema.parse(withAssetId(value));
   });
 
 /** The Git working copy containing `cwd`; `find()` for Git workspaces. */

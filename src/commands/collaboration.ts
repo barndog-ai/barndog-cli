@@ -9,7 +9,12 @@ import {
   nearestHookFolder,
 } from "../features/hooks/divergence.js";
 import { resolve } from "node:path";
-import { CliError, friendlyHint, friendlyMessage } from "../errors.js";
+import {
+  CHANGES_LIST_FIX,
+  CliError,
+  friendlyHint,
+  friendlyMessage,
+} from "../errors.js";
 import { ApiError } from "@barndog-ai/api-contract";
 import type {
   CommentOptions,
@@ -41,13 +46,30 @@ type RunOptions = {
 
 type Run = (operation: Promise<unknown>, options?: RunOptions) => Promise<void>;
 
-type WithKind = <T extends object>(options: T) => T & { kind?: "hook" };
+type WithKind = <T extends object>(options: T) => T & { kind: PackageKind };
 
-/** Skill changes also have the root `barndog changes`, which server hints name. */
-const changesCommand: Record<PackageKind, string> = {
-  skill: "barndog changes",
-  hook: "barndog hooks changes",
-};
+/** Prints a working-copy or review result, as JSON with `--json`. */
+function printer(context: CommandContext) {
+  return (result: unknown, options: RunOptions = {}) => {
+    if (context.mode.json) {
+      context.write(json(result));
+    } else {
+      for (const line of renderCollaboration(result, options)) {
+        context.write(line);
+      }
+    }
+  };
+}
+
+/** Warns when a Hook's coding tools run different scripts; editing is when that matters. */
+async function warnDivergence(context: CommandContext, folder: string | null) {
+  const warning =
+    !context.mode.json && folder && (await folderDivergence(folder));
+
+  if (warning) {
+    context.write(`${warn("!")} ${warning}`);
+  }
+}
 
 /** Each package kind has its own list of changes; point at the others when an ID isn't here. */
 function reviewError(
@@ -64,18 +86,72 @@ function reviewError(
       `No ${assetKinds[kind].one} Suggested Change has that ID.`,
       packageKindList
         .filter((other) => other !== kind)
-        .map((other) => `${changesCommand[other]} show ${changeId}`)
+        .map(
+          (other) =>
+            `barndog ${assetKinds[other].command} changes show ${changeId}`,
+        )
         .join(" or "),
       { cause: error },
     );
   }
 
-  const hint = friendlyHint(error);
-  const ownHint = hint?.replace(/^barndog changes/, changesCommand[kind]);
-
-  return ownHint !== hint
-    ? new CliError(friendlyMessage(error), ownHint, { cause: error })
+  // A server refusal doesn't say which kind's change it is about; this command knows.
+  return friendlyHint(error) === CHANGES_LIST_FIX
+    ? new CliError(
+        friendlyMessage(error),
+        `barndog ${assetKinds[kind].command} changes list`,
+        { cause: error },
+      )
     : error;
+}
+
+/**
+ * The working-copy commands at the root: `pull`, `diff`, `push` and `resolve`.
+ * They act on whatever the working copy holds, so they name no kind; a new
+ * folder's kind comes from its manifest file.
+ */
+export function registerWorkingCopy(program: Command, context: CommandContext) {
+  const print = printer(context);
+
+  program
+    .command("pull")
+    .description(
+      "Bring the latest published version into this working copy, keeping your edits",
+    )
+    .action(async () => print(await context.updateWorkingCopy()));
+
+  program
+    .command("diff")
+    .description(
+      "Show your edits in this working copy (elsewhere: preview what sync would change)",
+    )
+    .action(async () => print(await context.workingDiff()));
+
+  program
+    .command("push")
+    .description("Propose this working copy's edits as a Suggested Change")
+    .option(
+      "--origin <origin>",
+      "Origin for a folder that isn't a working copy yet",
+    )
+    .option(
+      "--publish",
+      "Publish directly with admin or personal-owner authority",
+    )
+    .option(
+      "--new",
+      "Start a new proposal instead of updating the linked proposal",
+    )
+    .option("--title <title>", "Suggested Change title")
+    .action(async (options: Omit<PushOptions, "kind">) => {
+      print(await context.pushWorkingCopy(options));
+      await warnDivergence(context, nearestHookFolder(process.cwd()));
+    });
+
+  program
+    .command("resolve <path>")
+    .description("Mark a conflicted file in this working copy as resolved")
+    .action(async (path: string) => print(await context.resolveFile(path)));
 }
 
 /**
@@ -85,41 +161,23 @@ function reviewError(
 export function registerCollaboration(
   program: Command,
   context: CommandContext,
-  kind: PackageKind = "skill",
+  kind: PackageKind,
 ) {
-  // Skill is the default package kind, so only Hook operations name theirs.
-  const withKind: WithKind = (options) =>
-    kind === "hook" ? { ...options, kind } : options;
-
+  const withKind: WithKind = (options) => ({ ...options, kind });
+  const print = printer(context);
   const run: Run = async (operation, options = {}) => {
     const result = await operation.catch((error: unknown) => {
       throw reviewError(error, kind, options);
     });
 
-    if (context.mode.json) {
-      context.write(json(result));
-    } else {
-      for (const line of renderCollaboration(result, options)) {
-        context.write(line);
-      }
-    }
+    print(result, options);
   };
 
   /** Editing is when tools drifting apart matters, so Hooks say it at both ends. */
-  const warnDivergence = async (folder: string | null) => {
-    if (kind !== "hook" || context.mode.json) {
-      return;
+  const divergence = async (folder: string | null) => {
+    if (kind === "hook") {
+      await warnDivergence(context, folder);
     }
-
-    const warning = folder && (await folderDivergence(folder));
-    if (warning) {
-      context.write(`${warn("!")} ${warning}`);
-    }
-  };
-
-  const push = async (options: PushOptions) => {
-    await run(context.pushWorkingCopy(withKind(options)));
-    await warnDivergence(nearestHookFolder(process.cwd()));
   };
 
   const noun = assetKinds[kind].one;
@@ -188,47 +246,11 @@ export function registerCollaboration(
 
         const pulled = context.pullPackage(withKind(target));
         await run(pulled);
-        await warnDivergence(
+        await divergence(
           (await pulled)?.root ?? resolve(target.directory ?? target.name),
         );
       },
     );
-
-  if (kind === "skill") {
-    program
-      .command("pull")
-      .description(
-        "Bring the latest published version into this working copy, keeping your edits",
-      )
-      .action(() => run(context.updateWorkingCopy()));
-
-    program
-      .command("diff")
-      .description(
-        "Show your edits in this working copy (elsewhere: preview what sync would change)",
-      )
-      .action(() => run(context.workingDiff()));
-
-    program
-      .command("push")
-      .description("Propose this working copy's edits as a Suggested Change")
-      .option("--origin <origin>", "Origin for a new local Skill")
-      .option(
-        "--publish",
-        "Publish directly with admin or personal-owner authority",
-      )
-      .option(
-        "--new",
-        "Start a new proposal instead of updating the linked proposal",
-      )
-      .option("--title <title>", "Suggested Change title")
-      .action(push);
-
-    program
-      .command("resolve <path>")
-      .description("Mark a conflicted file in this working copy as resolved")
-      .action((path: string) => run(context.resolveFile(path)));
-  }
 
   for (const [name, description] of [
     [
@@ -297,9 +319,10 @@ export function registerCollaboration(
     .option("--publish", "Publish with direct authority")
     .option("--new", "Start a new proposal")
     .option("--title <title>", "Proposal title")
-    .action((name: string | undefined, options: PushOptions) =>
-      push({ ...options, name }),
-    );
+    .action(async (name: string | undefined, options: PushOptions) => {
+      await run(context.pushWorkingCopy(withKind({ ...options, name })));
+      await divergence(nearestHookFolder(process.cwd()));
+    });
 
   kindCommand
     .command("create <name>")
@@ -312,11 +335,7 @@ export function registerCollaboration(
       run(context.createPackage(withKind({ ...options, name }))),
     );
 
-  for (const parent of kind === "hook"
-    ? [kindCommand]
-    : [program, kindCommand]) {
-    registerChanges(parent, context, withKind, run);
-  }
+  registerChanges(kindCommand, context, withKind, run);
 }
 
 function registerChanges(
@@ -441,6 +460,6 @@ function registerChanges(
 
   changes.addHelpText(
     "after",
-    `\nReview ${styleText("bold", "barndog changes diff <id>")} before approving a revision. Approval does not publish; use ${styleText("bold", "barndog changes merge <id> --revision <number>")}.`,
+    `\nReview ${styleText("bold", `barndog ${parent.name()} changes diff <id>`)} before approving a revision. Approval does not publish; use ${styleText("bold", `barndog ${parent.name()} changes merge <id> --revision <number>`)}.`,
   );
 }

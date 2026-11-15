@@ -1,4 +1,4 @@
-import type { Change, GitConnection } from "@barndog-ai/api-contract";
+import type { GitConnection } from "@barndog-ai/api-contract";
 import type { FileDiff } from "@barndog-ai/api-contract/collaboration";
 import type {
   ChangeDiffTarget,
@@ -117,6 +117,7 @@ import type {
   GitPull,
   GitPullDetails,
 } from "../features/github/pulls.js";
+import type { PackageChange } from "../features/collaboration/results.js";
 
 /** Output and prompting preferences resolved from global flags and the terminal. */
 export type Mode = { json: boolean; interactive: boolean };
@@ -240,18 +241,18 @@ type FeatureFunctions = {
   packageVersions: (target: PackageTarget) => Promise<PackageVersion[]>;
   versionFiles: (target: VersionTarget) => Promise<VersionFiles>;
   diffVersions: (target: VersionRange) => Promise<FileDiff[]>;
-  listChanges: (options: ChangeListOptions) => Promise<Change[]>;
+  listChanges: (options: ChangeListOptions) => Promise<PackageChange[]>;
   showChange: (target: ChangeTarget) => Promise<ChangeDetails>;
   changeDiff: (target: ChangeDiffTarget) => Promise<FileDiff[]>;
   reviewChange: (
     decision: ReviewDecision,
     target: ChangeRevision,
-  ) => Promise<Change>;
-  rejectChange: (target: ChangeRevision) => Promise<Change>;
-  mergeChange: (target: ChangeRevision) => Promise<Change>;
-  commentOnChange: (options: CommentOptions) => Promise<Change>;
-  applySuggestion: (target: ThreadRevision) => Promise<Change>;
-  setDiscussionResolved: (target: ThreadResolution) => Promise<Change>;
+  ) => Promise<PackageChange>;
+  rejectChange: (target: ChangeRevision) => Promise<PackageChange>;
+  mergeChange: (target: ChangeRevision) => Promise<PackageChange>;
+  commentOnChange: (options: CommentOptions) => Promise<PackageChange>;
+  applySuggestion: (target: ThreadRevision) => Promise<PackageChange>;
+  setDiscussionResolved: (target: ThreadResolution) => Promise<PackageChange>;
 
   githubStatus: () => Promise<GithubStatus>;
   githubAuth: () => Promise<GithubPage>;

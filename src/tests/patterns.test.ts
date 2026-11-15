@@ -522,7 +522,7 @@ describe("command routing", () => {
   test.each([
     ["login", "git", "cloud"],
     ["auth status", "local", "cloud"],
-    ["changes", "git", "cloud"],
+    ["hooks changes", "git", "cloud"],
     ["skills changes list", "local", "cloud"],
     ["hooks promote", "git", "cloud"],
     ["github pulls list", "git", "cloud"],

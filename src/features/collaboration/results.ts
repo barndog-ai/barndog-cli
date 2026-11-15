@@ -2,11 +2,28 @@
  * What working-copy and review operations return. Git and Cloud backends
  * return the same types, so commands render either without asking which.
  */
-import type { Change, GitConnection } from "@barndog-ai/api-contract";
+import type {
+  Change,
+  GitConnection,
+  Version,
+  hookChangeSchema,
+  hookVersionSchema,
+} from "@barndog-ai/api-contract";
+import type { z } from "zod";
 import type { FileDiff } from "@barndog-ai/api-contract/collaboration";
 import type { PackageKind } from "../../config/selection.js";
 import type { GitPull } from "../github/pulls.js";
 import type { Files } from "./workspace-store.js";
+
+/** A Suggested Change of either kind, as its own contract schema describes it. */
+export type PackageChange = Change | z.infer<typeof hookChangeSchema>;
+
+/** A published version of either kind. */
+export type PublishedVersion = Version | z.infer<typeof hookVersionSchema>;
+
+/** The Skill or Hook a proposal changes. */
+export const changeAssetId = (change: PackageChange) =>
+  "hookId" in change ? change.hookId : change.skillId;
 
 /** A new working folder for an asset that isn't published yet. */
 export type CreatedPackage = { root: string; kind: PackageKind; name: string };
@@ -86,7 +103,7 @@ export type GitPushResult =
  * nothing new to send.
  */
 export type CloudPushResult =
-  | Change
+  | PackageChange
   | GitPull
   | GitConnection
   | { unchanged: true; pull: number | undefined }
@@ -114,7 +131,7 @@ export type PackageVersion = {
 export type VersionFiles = { files: Files };
 
 /** A proposal with its files and the names of the people in it. */
-export type ChangeDetails = Change & {
+export type ChangeDetails = PackageChange & {
   /** Developer ID → display name, for authors and reviewers. */
   names: Record<string, string>;
   baseVersionNumber: number | undefined;

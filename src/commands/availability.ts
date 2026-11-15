@@ -5,8 +5,8 @@ import { CliError } from "../errors.js";
 import { readCredentials } from "../features/auth/credentials.js";
 import { LOCAL_ORIGIN } from "../features/workspace/overlay.js";
 
-/** Every `barndog changes …`, `skills changes …` and `hooks changes …` command. */
-const CHANGES_COMMANDS = /^(?:skills |hooks )?changes(?: |$)/;
+/** Every `skills changes …` and `hooks changes …` command. */
+const CHANGES_COMMANDS = /^(?:skills|hooks) changes(?: |$)/;
 
 /**
  * Commands that need a BarnDog server, matched against the command's words

@@ -81,7 +81,7 @@ barndog diff
 barndog push --title "Add a security checklist"
 ```
 
-Reviewers use `barndog changes list`, `changes diff`, and `changes approve` from the terminal, or GitHub repo, or the BarnDog web workspace.
+Reviewers use `barndog skills changes list`, `changes diff`, and `changes approve` (or the same under `barndog hooks`) from the terminal, or GitHub repo, or the BarnDog web workspace.
 
 ## What it changes on your machine
 
