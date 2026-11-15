@@ -1,33 +1,18 @@
-import { basename, dirname, join, resolve } from "node:path";
-import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
-import { parse } from "yaml";
-import { hookManifestSchema } from "@barndog-ai/api-contract";
-import { readState, type Link } from "../../config/state.js";
+import { basename, dirname, resolve } from "node:path";
+import { readState } from "../../config/state.js";
 import {
   readSettings,
   settingsText,
   SetupRequiredError,
   type Settings,
 } from "../../config/settings.js";
-import { packageFingerprint } from "@barndog-ai/api-contract/package";
 import { CliError } from "../../errors.js";
-import { desiredEntries, installedPath } from "../workspace/installed.js";
-import { treeFingerprint } from "../../shared/tree.js";
-import {
-  installedName,
-  hookFolders,
-  resolveClashes,
-  type ClashResolver,
-} from "./names.js";
-import { originLabel } from "../server/origin.js";
+import { type ClashResolver } from "./names.js";
 import { selectionState, withSelection } from "../../config/environment.js";
-import {
-  adapters,
-  skillDirectory,
-  nativeFile,
-} from "../../harnesses/registry.js";
 import type { SyncEvent } from "./events.js";
+import { heldName, settleNames } from "./settle-names.js";
+import { stageAssets } from "./stage.js";
+import { assertSupportedConfigHomes, startupEntries } from "./own-entries.js";
 import { resolveAssets } from "../asset-selection/index.js";
 import { pruneCache } from "../workspace/packages.js";
 import { followImports } from "../imports/local.js";
@@ -37,61 +22,24 @@ import {
   type RefreshPolicy,
   type WorkspaceSource,
 } from "../workspace/source.js";
-import { patchNative, type NativeEntry } from "../native/configuration.js";
+import { locked, transact, type Write } from "./transaction.js";
 import {
-  hookEntries,
-  mcpEntry,
-  runtimeRequirements,
-} from "../native/adapters.js";
-import { shellQuote } from "../../shared/shell.js";
-import { linkTarget, locked, transact, type Write } from "./transaction.js";
-import { fileText, isInside } from "../../shared/files.js";
+  assertInstalledUntouched,
+  linkWrites,
+  nativeWrites,
+  entryNames,
+  stateText,
+  treeWrites,
+} from "./writes.js";
+import { fileText } from "../../shared/files.js";
 import type { AssetCatalog } from "../asset-selection/types.js";
-import { assetKinds } from "../asset-kinds/index.js";
-import { type PackageKind } from "../../config/selection.js";
-import { defined } from "../../shared/lookup.js";
 import { barndogPaths } from "../../config/paths.js";
-
-/** The name an asset is installed under right now, whatever settings say it should be. */
-function heldName(
-  id: string,
-  links: readonly Link[],
-  native: readonly { id: string; kind: string; key: string }[],
-) {
-  const held =
-    links.find((link) => link.id === id)?.target ??
-    native.find((entry) => entry.id === id && entry.kind === "mcp")?.key;
-
-  return held ? basename(held) : undefined;
-}
 
 /** Looks up installed names from state, for checks made outside a sync. */
 export async function installedNames(home: string) {
   const { links, native } = await readState(home);
 
   return (id: string) => heldName(id, links, native);
-}
-
-/** What a sync did to one installed link or native entry. */
-type ChangeType = "installed" | "updated" | "unchanged";
-
-function changeType(change: {
-  /** The destination held this asset before. */
-  sameAsset: boolean;
-  /** The destination already matches what sync would write. */
-  current: boolean;
-  /** The asset's content changed in this sync. */
-  contentChanged: boolean;
-}): ChangeType {
-  if (!change.sameAsset) {
-    return "installed";
-  }
-
-  if (change.current && !change.contentChanged) {
-    return "unchanged";
-  }
-
-  return "updated";
 }
 
 /**
@@ -113,16 +61,6 @@ export type SyncOptions = {
 /** The CLI registers a terminal prompt here; library callers default to skipping. */
 export const clashPrompt: { resolver?: ClashResolver } = {};
 
-type InstalledTree = {
-  id: string;
-  kind: PackageKind;
-  path: string;
-  source: string;
-  rename: string | null;
-  fingerprint: string;
-  versionId: string;
-};
-
 /**
  * Locks the environment, plans harness updates and applies journaled writes;
  * dry runs return planned events.
@@ -142,22 +80,7 @@ export async function synchronize(
       throw new SetupRequiredError();
     }
 
-    for (const harness of settings.harnesses) {
-      const { configHome } = adapters[harness];
-      const custom = configHome && process.env[configHome.variable];
-      if (!configHome || !custom) {
-        continue;
-      }
-
-      const isDefault = resolve(custom) === join(home, configHome.directory);
-
-      if (!isDefault || !configHome.defaultIsSupported) {
-        throw new CliError(
-          `BarnDog can't install into a custom ${configHome.variable} yet; it uses ~/${configHome.directory}.`,
-          `unset ${configHome.variable}`,
-        );
-      }
-    }
+    assertSupportedConfigHomes(settings.harnesses, home);
 
     const stateFile = barndogPaths(home).state;
     const rawState = await fileText(stateFile);
@@ -216,9 +139,6 @@ export async function synchronize(
       );
     }
 
-    const desired: Link[] = [];
-    const native: NativeEntry[] = [];
-    const trees: InstalledTree[] = [];
     const events: SyncEvent[] = [
       ...new Set([
         ...followNotices,
@@ -231,553 +151,80 @@ export async function synchronize(
       message,
     }));
 
-    const names = new Set<string>();
-    const ids = new Set<string>();
+    const settled = await settleNames({
+      assets: effective.assets,
+      invalid,
+      state: before,
+      savedNames: settings.localNames ?? {},
+      resolver:
+        options.prompt === false || options.dryRun
+          ? undefined
+          : (options.resolveClash ?? clashPrompt.resolver),
+    });
 
-    // Installed names share one namespace per kind; resolve clashes before staging.
-    const owned = (id: string) =>
-      before.links.some((link) => link.id === id) ||
-      oldNative.some((entry) => entry.id === id && entry.kind === "mcp");
-
-    // An invalid asset can only stay installed while its own folder is still there.
-    const vanished = new Set<string>();
-    for (const entry of installedState) {
-      if (!invalid.has(entry.id)) {
-        continue;
-      }
-
-      const actual = await treeFingerprint(entry.path);
-      const shared = installedState.some(
-        (other) => other.id !== entry.id && other.path === entry.path,
-      );
-
-      if (actual === null || (shared && actual !== entry.fingerprint)) {
-        vanished.add(entry.id);
-      }
-    }
-
-    const savedNames = settings.localNames ?? {};
-    // An invalid asset stays under the name it's installed at, whatever it was renamed to since.
-    const heldNames = new Map<string, string>();
-    for (const { asset, enabled } of effective.assets) {
-      if (!enabled || !invalid.has(asset.id) || vanished.has(asset.id)) {
-        continue;
-      }
-
-      const held = heldName(asset.id, before.links, oldNative);
-      if (held) {
-        heldNames.set(asset.id, held);
-      }
-    }
-
-    const outcome = await resolveClashes(
-      [
-        ...effective.assets.flatMap(({ asset, enabled }) => {
-          const { kind } = asset;
-          if (
-            !enabled ||
-            kind === "hook" ||
-            (invalid.has(asset.id) &&
-              (!owned(asset.id) || vanished.has(asset.id)))
-          ) {
-            return [];
-          }
-
-          return [
-            {
-              id: asset.id,
-              kind,
-              name: asset.name,
-              origin: asset.origin,
-              installed: owned(asset.id),
-              renamable: !invalid.has(asset.id),
-            },
-          ];
-        }),
-      ],
-      { ...savedNames, ...Object.fromEntries(heldNames) },
-      options.prompt === false || options.dryRun
-        ? undefined
-        : (options.resolveClash ?? clashPrompt.resolver),
-    );
-
-    const localNames = { ...outcome.localNames };
-    for (const id of heldNames.keys()) {
-      if (savedNames[id] === undefined) {
-        delete localNames[id];
-      } else {
-        localNames[id] = savedNames[id];
-      }
-    }
-
+    const { vanished, localNames, skipped } = settled;
+    events.push(...settled.events);
     selection = {
       ...selection,
       disabledAssetIds: [
         ...new Set([
           ...selection.disabledAssetIds,
-          ...outcome.disabledAssetIds,
+          ...settled.disabledAssetIds,
         ]),
       ],
     };
 
     effective = resolveAssets(catalog, selection);
-    const skipped = new Set(outcome.skipped.map((clash) => clash.incoming.id));
-    for (const clash of outcome.skipped) {
-      events.push({
-        type: "clash",
-        kind: clash.kind,
-        name: clash.name,
-        installed: {
-          name: clash.installed.name,
-          origin: originLabel(clash.installed.origin),
-        },
-        skipped: {
-          name: clash.incoming.name,
-          origin: originLabel(clash.incoming.origin),
-          rename: clash.incomingRename,
-        },
-      });
-    }
 
-    const addSkill = (id: string, source: string, name: string) => {
-      if (names.has(name)) {
-        throw new CliError(
-          `Two enabled Skills are named ${name}`,
-          "barndog doctor",
-        );
-      }
-
-      names.add(name);
-      for (const harness of settings.harnesses) {
-        const target = resolve(skillDirectory(harness, home), name);
-        if (isInside(source, target) || isInside(target, source)) {
-          throw new CliError(
-            `${source} is inside a folder BarnDog installs into. Keep your workspace somewhere else.`,
-          );
-        }
-
-        desired.push({ id, harness, source, target });
-      }
-    };
-
-    const stage = async ({
-      id,
-      kind,
-      name,
-      source,
-      rename,
-      versionId,
-    }: {
-      id: string;
-      kind: PackageKind;
-      name: string;
-      source: string;
-      rename: string | null;
-      versionId: string;
-    }) => {
-      const path = installedPath(home, kind, name);
-      trees.push({
-        id,
-        kind,
-        path,
-        source,
-        rename,
-        versionId,
-        fingerprint: packageFingerprint(await desiredEntries(source, rename)),
-      });
-
-      return path;
-    };
-
-    const folders = hookFolders(
-      effective.assets
-        .filter(
-          ({ asset, enabled }) =>
-            enabled &&
-            asset.kind === "hook" &&
-            !vanished.has(asset.id) &&
-            (!invalid.has(asset.id) ||
-              installedState.some((tree) => tree.id === asset.id)),
-        )
-        .map(({ asset }) => {
-          const tree = installedState.find((entry) => entry.id === asset.id);
-          const folder = tree && basename(tree.path);
-
-          if (!folder) {
-            return asset;
-          }
-
-          return invalid.has(asset.id)
-            ? { ...asset, kept: folder }
-            : { ...asset, current: folder };
-        }),
+    const staged = await stageAssets({
+      assets: effective.assets,
+      invalid,
+      vanished,
+      skipped,
       localNames,
-    );
+      state: before,
+      source,
+      harnesses: settings.harnesses,
+      home,
+    });
 
-    for (const chosen of effective.assets) {
-      const ref = chosen.asset;
-      if (ids.has(ref.id)) {
-        throw new Error("A catalog asset has the same ID as a local one");
-      }
+    const { links: desired, native, trees } = staged;
+    events.push(...staged.events);
+    native.push(...startupEntries(settings, home, { knowledge: !!source }));
 
-      ids.add(ref.id);
-      if (!chosen.enabled) {
-        events.push({ type: "disabled", id: ref.id });
-        continue;
-      }
-
-      if (skipped.has(ref.id)) {
-        continue;
-      }
-
-      const reason = invalid.get(ref.id);
-      if (reason) {
-        // Nothing validates a repo before merge, so a bad change must not uninstall what works.
-        events.push({
-          type: "invalid",
-          kind: ref.kind,
-          name: ref.name,
-          reason,
-        });
-
-        if (vanished.has(ref.id)) {
-          continue;
-        }
-
-        for (const link of before.links.filter((l) => l.id === ref.id)) {
-          desired.push(link);
-          names.add(basename(link.target));
-        }
-
-        native.push(...oldNative.filter((entry) => entry.id === ref.id));
-        const tree = installedState.find((entry) => entry.id === ref.id);
-        if (tree) {
-          trees.push({
-            id: tree.id,
-            kind: tree.kind,
-            path: tree.path,
-            source: tree.path,
-            rename: null,
-            fingerprint: tree.fingerprint,
-            versionId: tree.versionId,
-          });
-        }
-
-        continue;
-      }
-
-      // Without a source the catalog is empty, so this never runs.
-      if (!source) {
-        throw new Error("Catalog assets need a workspace source");
-      }
-
-      const name = installedName(ref, localNames);
-      if (ref.kind === "skill") {
-        const cache = await source.packageFolder("skill", ref);
-        addSkill(
-          ref.id,
-          await stage({
-            id: ref.id,
-            kind: "skill",
-            name,
-            source: cache,
-            rename: name === ref.name ? null : name,
-            versionId: ref.publishedVersion,
-          }),
-          name,
-        );
-      } else if (ref.kind === "mcp") {
-        const definition = await source.mcpDefinition(ref);
-        for (const harness of settings.harnesses) {
-          native.push(
-            mcpEntry(harness, { id: ref.id, name }, definition, home),
-          );
-        }
-      } else {
-        const cache = await source.packageFolder("hook", ref);
-        const manifest = hookManifestSchema.parse(
-          parse(await readFile(join(cache, "hook.yaml"), "utf8")),
-        );
-
-        // Hook folders are internal, so collisions are settled without prompting.
-        const root = await stage({
-          id: ref.id,
-          kind: "hook",
-          name: defined(
-            folders.get(ref.id),
-            `No Hook folder chosen for ${ref.id}`,
-          ),
-          source: cache,
-          rename: null,
-          versionId: ref.publishedVersion,
-        });
-
-        for (const harness of settings.harnesses) {
-          const implementation = manifest.implementations[harness];
-          const reason = !implementation
-            ? "No implementation for this harness"
-            : await runtimeRequirements(harness, implementation.requirements);
-
-          if (reason) {
-            events.push({
-              type: "unsupported",
-              kind: "hook",
-              harness,
-              name: ref.name,
-              reason,
-            });
-
-            continue;
-          }
-
-          native.push(
-            ...hookEntries(harness, { id: ref.id, root, manifest }, home),
-          );
-        }
-      }
-    }
-
-    if (source && settings.knowledge !== false) {
-      const script = fileURLToPath(
-        new URL("../../entry/knowledge-startup.js", import.meta.url),
-      );
-
-      for (const harness of settings.harnesses) {
-        const command = `${shellQuote(process.execPath)} ${shellQuote(script)} ${harness} ${shellQuote(home)}`;
-        native.push({
-          id: "barndog-knowledge-index",
-          kind: "knowledge",
-          harness,
-          file: nativeFile(harness, "knowledge", home),
-          key: adapters[harness].hooks.sessionStart,
-          value: adapters[harness].hooks.entry(command),
-        });
-      }
-    }
-
-    if (
-      settings.connection ||
-      settings.gitWorkspace ||
-      settings.localWorkspace
-    ) {
-      const script = fileURLToPath(
-        new URL("../../entry/workspace-startup.js", import.meta.url),
-      );
-
-      for (const harness of settings.harnesses) {
-        const command = `${shellQuote(process.execPath)} ${shellQuote(script)} ${shellQuote(home)}`;
-        native.push({
-          id: "barndog-workspace-sync",
-          kind: "sync",
-          harness,
-          file: nativeFile(harness, "sync", home),
-          key: adapters[harness].hooks.sessionStart,
-          value: adapters[harness].hooks.entry(command),
-        });
-      }
-    }
-
-    // Hook registrations carry IDs; show the asset or folder name instead.
-    const hookNames = new Map<string, string>([
+    const nativeName = entryNames([
       ...installedState.map((t) => [t.id, basename(t.path)] as const),
       // Still known after being deselected, unlike the effective set below.
       ...catalog.assets.map((a) => [a.id, a.name] as const),
       ...effective.assets.map((e) => [e.asset.id, e.asset.name] as const),
     ]);
 
-    const nativeName = (entry: { kind: string; key: string; id: string }) => {
-      if (entry.kind === "mcp") {
-        return entry.key;
-      }
-
-      if (entry.kind === "knowledge") {
-        return "knowledge index";
-      }
-
-      if (entry.kind === "sync") {
-        return "workspace sync";
-      }
-
-      return hookNames.get(entry.id) ?? entry.id;
-    };
-
-    const writes: Write[] = [];
-    for (const entry of installedState) {
-      const actual = await treeFingerprint(entry.path);
-      if (actual !== null && actual !== entry.fingerprint) {
-        throw new CliError(
-          `The installed copy at ${entry.path} was edited by hand. Syncing would overwrite those edits. ${
-            settings.localWorkspace &&
-            !settings.connection &&
-            !settings.gitWorkspace
-              ? "To keep them, copy that folder somewhere else first."
-              : `To keep them, make an editable copy with \`barndog ${assetKinds[entry.kind].command} pull\` first.`
-          }`,
-          `rm -rf ${shellQuote(entry.path)} && barndog sync`,
-        );
-      }
-    }
-
-    for (const treePath of new Set([
-      ...installedState.map((entry) => entry.path),
-      ...trees.map((tree) => tree.path),
-    ])) {
-      const next = trees.find((tree) => tree.path === treePath);
-      writes.push({
-        kind: "tree",
-        path: treePath,
-        before: await treeFingerprint(treePath),
-        after: next?.fingerprint ?? null,
-        source: next?.source ?? null,
-        rename: next?.rename ?? null,
-      });
-    }
-
-    const updated = new Set(
-      writes
-        .filter(
-          (w) =>
-            w.kind === "tree" &&
-            w.before !== null &&
-            w.after !== null &&
-            w.before !== w.after,
-        )
-        .map((w) => w.path),
+    await assertInstalledUntouched(installedState, settings);
+    const installedFolders = await treeWrites(installedState, trees);
+    const links = await linkWrites(
+      before.links,
+      desired,
+      installedFolders.updated,
     );
 
-    for (const link of before.links) {
-      const actual = await linkTarget(link.target);
-      if (actual !== null && actual !== link.source) {
-        throw new CliError(
-          `${link.target} was changed outside BarnDog. Restore or remove it, then sync again.`,
-          "barndog sync",
-        );
-      }
-    }
-
-    for (const link of desired) {
-      const actual = await linkTarget(link.target);
-      const old = before.links.find((l) => l.target === link.target);
-
-      if (actual !== null && !old) {
-        throw new CliError(
-          `${link.target} is a Skill BarnDog didn't install, so it won't replace it. Move or rename it, then sync again.`,
-          "barndog sync",
-        );
-      }
-    }
-
-    for (const target of new Set([
-      ...before.links.map((l) => l.target),
-      ...desired.map((l) => l.target),
-    ])) {
-      const old = before.links.find((l) => l.target === target);
-      const next = desired.find((l) => l.target === target);
-      const actual = await linkTarget(target);
-
-      if (old && (!next || next.id !== old.id)) {
-        events.push({ type: "removed", link: old });
-      }
-
-      if (next) {
-        events.push({
-          type: changeType({
-            sameAsset: old?.id === next.id,
-            current: actual === next.source,
-            contentChanged: updated.has(next.source),
-          }),
-          link: next,
-        });
-      }
-
-      writes.push({
-        kind: "link",
-        path: target,
-        before: actual,
-        after: next?.source ?? null,
-      });
-    }
-
-    for (const file of new Set([
-      ...oldNative.map((e) => e.file),
-      ...native.map((e) => e.file),
-    ])) {
-      const old = oldNative.filter((e) => e.file === file);
-      const next = native.filter((e) => e.file === file);
-      const text = await fileText(file);
-
-      writes.push({
-        kind: "file",
-        path: file,
-        before: text,
-        after: patchNative(text, old, next),
-      });
-
-      for (const entry of next) {
-        events.push({
-          type: "native",
-          action: changeType({
-            sameAsset: old.some(
-              (e) => e.id === entry.id && e.harness === entry.harness,
-            ),
-            current: old.some(
-              (e) => JSON.stringify(e) === JSON.stringify(entry),
-            ),
-            contentChanged:
-              entry.kind === "hook" &&
-              trees.some((t) => t.id === entry.id && updated.has(t.path)),
-          }),
-          kind: entry.kind,
-          harness: entry.harness,
-          name: nativeName(entry),
-        });
-      }
-
-      for (const entry of old) {
-        if (
-          !next.some(
-            (e) =>
-              JSON.stringify(e) === JSON.stringify(entry) ||
-              (e.id === entry.id && e.harness === entry.harness),
-          )
-        ) {
-          events.push({
-            type: "native",
-            action: "removed",
-            kind: entry.kind,
-            harness: entry.harness,
-            name: nativeName(entry),
-          });
-        }
-      }
-    }
-
-    const nextState =
-      JSON.stringify(
-        {
-          version: 1,
-          links: desired,
-          native,
-          installed: trees.map(
-            ({ id, kind, path, fingerprint, versionId }) => ({
-              id,
-              kind,
-              path,
-              fingerprint,
-              versionId,
-            }),
-          ),
-        },
-        null,
-        2,
-      ) + "\n";
-
-    writes.push({
-      kind: "file",
-      path: stateFile,
-      before: rawState,
-      after: nextState,
+    const settingsFiles = await nativeWrites(oldNative, native, {
+      trees,
+      updated: installedFolders.updated,
+      nameOf: nativeName,
     });
+
+    events.push(...links.events, ...settingsFiles.events);
+    const writes: Write[] = [
+      ...installedFolders.writes,
+      ...links.writes,
+      ...settingsFiles.writes,
+      {
+        kind: "file",
+        path: stateFile,
+        before: rawState,
+        after: stateText({ links: desired, native, trees }),
+      },
+    ];
 
     // Explicit overrides are one-shot delivery inputs, never a change to default preferences.
     if (!configPath) {

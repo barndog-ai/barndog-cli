@@ -3,14 +3,11 @@ import { harnesses } from "../harnesses/registry.js";
 import { stripVTControlCharacters } from "node:util";
 
 import type { UpdateMode } from "../features/imports/local.js";
-import {
-  addHook,
-  addMcp,
-  addSkills,
-  terminalPrompts,
-  type AddContext,
-  type AddOptions,
-} from "../ui/add-asset.js";
+import { addHook } from "../ui/add-hook.js";
+import { addMcp } from "../ui/add-mcp.js";
+import { addSkills } from "../ui/add-skills.js";
+import { terminalPrompts } from "../ui/add-prompts.js";
+import { type AddContext, type AddOptions } from "../ui/add-asset.js";
 import { renderCollaboration } from "../ui/collaboration.js";
 import { dim, json, ok } from "../ui/format.js";
 import { renderSyncOutput } from "../ui/output.js";

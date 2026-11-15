@@ -91,6 +91,10 @@ A type read back from a function's signature (`Awaited<ReturnType<typeof working
 - A `const` list whose union a type needs repeats the type it serves (`Harness` in `harnesses/types.ts`, `harnesses` in `registry.ts`), rather than the type being read off the list.
 - Allowed: `z.infer<typeof schema>`, and types a third-party package or the platform doesn't name (`Parameters<typeof styleText>[0]`, `typeof fetch`).
 
+### One job per module
+
+A file does one job you can name in a few words: a command group, a sync phase, one prompt flow. When code adds a second job, give it its own file beside the first, named for what it does (`stage.ts`, `writes.ts`, `add-hook.ts`), and keep the original as the short sequence that calls them.
+
 ## Terminal output
 
 - Use the shared `primary()` formatter from `src/ui/theme.ts` for brand accents (`#C54836`), including the heading and interactive selection. Keep ordinary text neutral.

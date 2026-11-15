@@ -71,12 +71,10 @@ import { assertCommandAvailable } from "../commands/availability.js";
 import { createProgram } from "../program.js";
 import { renderCollaboration } from "../ui/collaboration.js";
 import { renderMove } from "../ui/move.js";
-import {
-  addHook,
-  addMcp,
-  addSkills,
-  type AddPrompts,
-} from "../ui/add-asset.js";
+import { addHook } from "../ui/add-hook.js";
+import { addMcp } from "../ui/add-mcp.js";
+import { addSkills } from "../ui/add-skills.js";
+import { type AddPrompts } from "../ui/add-prompts.js";
 import {
   discoverHooks,
   discoverSkills,

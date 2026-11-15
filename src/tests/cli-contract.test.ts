@@ -38,7 +38,9 @@ import {
 import { doctor } from "../features/doctor/index.js";
 import { mcpEntry } from "../features/native/adapters.js";
 import { createProgram, type ProgramOptions } from "../program.js";
-import { addMcp, addSkills, type AddContext } from "../ui/add-asset.js";
+import { addMcp } from "../ui/add-mcp.js";
+import { addSkills } from "../ui/add-skills.js";
+import { type AddContext } from "../ui/add-asset.js";
 import { renderCollaboration } from "../ui/collaboration.js";
 import { renderValue } from "../ui/format.js";
 import { renderMcp } from "../ui/mcp.js";
