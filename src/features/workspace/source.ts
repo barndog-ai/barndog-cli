@@ -22,10 +22,7 @@ export type WorkspaceSource = {
   journal: JournalIdentity;
   catalog(): Promise<AssetCatalog>;
   /** Resolves to a validated, immutable package folder. */
-  skillOrHookPackage(
-    kind: "skill" | "hook",
-    asset: AssetReference,
-  ): Promise<string>;
+  packageFolder(kind: "skill" | "hook", asset: AssetReference): Promise<string>;
   mcpDefinition(asset: AssetReference): Promise<McpDefinition>;
   /** Assets present in the catalog whose content cannot be installed, with why. */
   invalidAssets(): Promise<ReadonlyMap<string, string>>;

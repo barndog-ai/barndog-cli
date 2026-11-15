@@ -17,7 +17,6 @@ import { GIT_OBJECT_ID } from "../../shared/patterns.js";
 import { readIfExists, writeAtomic } from "../../shared/files.js";
 import { withPidLock } from "../../shared/lock.js";
 import { barndogPaths } from "../../config/paths.js";
-import { isRecord } from "../../shared/values.js";
 
 const filesSchema = z.array(
   z.object({ path: z.string(), content: z.string(), executable: z.boolean() }),
@@ -39,23 +38,8 @@ const uploadSchema = changeUploadSchema
 
 export type PackageUpload = z.infer<typeof uploadSchema>;
 
-/**
- * Records written before Hooks had working copies called the asset `skillId`
- * for both kinds, in the record and in a pending upload. Reads them as
- * `assetId`; the record is saved in the new shape on its next write.
- */
-function withAssetId(value: unknown): unknown {
-  if (!isRecord(value) || !("skillId" in value)) {
-    return value;
-  }
-
-  const { skillId, ...rest } = value;
-
-  return { assetId: skillId, ...rest };
-}
-
 const workspaceSchema = z.object({
-  kind: z.enum(packageKindList).default("skill"),
+  kind: z.enum(packageKindList),
   root: z.string().refine(isAbsolute),
   connection: z.object({
     server: z.string(),
@@ -81,7 +65,7 @@ const workspaceSchema = z.object({
   conflicts: z.array(z.string()),
   pending: z
     .object({
-      metadata: z.preprocess(withAssetId, uploadSchema),
+      metadata: uploadSchema,
       files: filesSchema,
       changeId: z.uuid().optional(),
     })
@@ -219,7 +203,7 @@ export const find = (cwd: string, home: string): Promise<Workspace> =>
       );
     }
 
-    return workspaceSchema.parse(withAssetId(value));
+    return workspaceSchema.parse(value);
   });
 
 /** The Git working copy containing `cwd`; `find()` for Git workspaces. */

@@ -5,7 +5,7 @@ import { z } from "zod";
 import type { FileDiff } from "@barndog-ai/api-contract/collaboration";
 import { packageApi } from "./api.js";
 import type { PackageKind } from "../../config/selection.js";
-import { downloadChange, selectSkill } from "./remote.js";
+import { downloadChange, selectPackage } from "./remote.js";
 import { connection } from "../server/connection.js";
 import { readSettings, type GitWorkspace } from "../../config/settings.js";
 import type { SyncEvent } from "../environment/events.js";
@@ -25,7 +25,7 @@ import {
 } from "./workspace-git.js";
 import {
   NoWorkingCopyError,
-  pullSkill,
+  pullCloudPackage,
   createWorkspace,
   workspaceStatus,
   updateWorkspace,
@@ -274,7 +274,7 @@ export async function pullPackage(
     );
   }
 
-  return pullSkill(
+  return pullCloudPackage(
     { name: target.name, origin: target.origin, kind: target.kind },
     { target: target.directory, cwd, home },
   );
@@ -396,7 +396,7 @@ async function publishedPackage(target: PackageTarget, home: string) {
   return {
     type: "cloud" as const,
     api: packageApi(target.kind, conn, home),
-    skill: await selectSkill(
+    published: await selectPackage(
       { name: target.name, selector: target.origin, kind: target.kind },
       conn,
       home,
@@ -415,7 +415,7 @@ export async function packageVersions(
   }
 
   const [rows, names] = await Promise.all([
-    where.api.versions(where.skill.id),
+    where.api.versions(where.published.id),
     developerNames(home),
   ]);
 
@@ -439,8 +439,8 @@ export async function versionFiles(
   }
 
   return where.api.content(
-    where.skill.id,
-    target.version ?? where.skill.version.number,
+    where.published.id,
+    target.version ?? where.published.version.number,
   );
 }
 
@@ -453,7 +453,10 @@ export async function diffVersions(
     return gitVersionDiff(where.workspace, target, home);
   }
 
-  return where.api.diff(where.skill.id, { from: target.from, to: target.to });
+  return where.api.diff(where.published.id, {
+    from: target.from,
+    to: target.to,
+  });
 }
 
 /**

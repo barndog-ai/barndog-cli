@@ -46,7 +46,7 @@ export function barndogPaths(home: string) {
     workingCopiesLock: join(workingCopies, "lock"),
     /** What a working copy held before an update, for recovery. */
     workingCopySnapshots: join(workingCopies, "snapshots"),
-    /** The commit-pinned package cache of one source. */
+    /** The commit-pinned package cache of one source: `<skills|hooks>/<asset ID>/<commit>/`. */
     packageCache: (key: string) => join(root, "packages", key),
     /** Readable folders that harness links point at. */
     installed: (kind: PackageKind) =>

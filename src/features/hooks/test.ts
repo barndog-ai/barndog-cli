@@ -29,7 +29,7 @@ async function hookPackage(name: string, origin: string, home: string) {
   if (repo) {
     const asset = selectRepoAsset(await repo.model(), "hook", name, origin);
 
-    return repo.skillOrHookPackage("hook", asset);
+    return repo.packageFolder("hook", asset);
   }
 
   const selected = await selectAsset("hook", name, origin, home);

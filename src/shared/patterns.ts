@@ -4,6 +4,8 @@
  * covers them.
  */
 
+import { MAX_ASSET_NAME_LENGTH } from "./constants.js";
+
 /** A UUIDv4 in either case, such as `729b9d5a-4a8c-4aa7-9b8d-975a55ac373e`. */
 export const UUID_V4 =
   /^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/i;
@@ -20,6 +22,13 @@ export const GIT_OBJECT_ID = /^[\da-f]{40}$/;
  * single hyphens, such as `code-review` or `team2`. Never `-a`, `a--b` or `A`.
  */
 export const NAME = /^[a-z\d]+(?:-[a-z\d]+)*$/;
+
+/**
+ * Whether `name` can be an asset's folder and installed name: {@link NAME}, at
+ * most 64 characters.
+ */
+export const validAssetName = (name: string) =>
+  NAME.test(name) && name.length <= MAX_ASSET_NAME_LENGTH;
 
 /** Turns any text into a {@link NAME}-shaped slug: `Team A/Review!` → `team-a-review`. */
 export function slugify(text: string): string {

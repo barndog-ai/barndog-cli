@@ -37,7 +37,7 @@ export function cloudSource(conn: Connection, home: string): WorkspaceSource {
     cacheKey: cacheKey(conn),
     journal: conn,
     catalog: async () => (await environmentCatalog(home, conn)).catalog,
-    skillOrHookPackage: async (kind, reference) => {
+    packageFolder: async (kind, reference) => {
       const data = await currentAsset(kind, reference, conn, home);
 
       return cachedPackage(

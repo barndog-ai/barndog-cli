@@ -30,7 +30,7 @@ import {
   downloadChange,
   downloadVersion,
   getChange,
-  selectSkill,
+  selectPackage,
 } from "./remote.js";
 import { selectOrigin } from "../server/origin.js";
 import { connection } from "../server/connection.js";
@@ -94,13 +94,13 @@ export type WorkingFolderOptions = {
  * working folder (`target`, default `./<name>`) and registers it under
  * `~/.barndog/workspaces/`. Refuses a folder that already exists.
  */
-export async function pullSkill(
+export async function pullCloudPackage(
   { name, origin, kind }: { name: string; origin: string; kind: PackageKind },
   { target, cwd = process.cwd(), home = homedir() }: WorkingFolderOptions = {},
 ): Promise<PulledPackage> {
   return locked(home, async () => {
     const conn = await connection(home);
-    const skill = await selectSkill(
+    const published = await selectPackage(
       { name, selector: origin, kind },
       conn,
       home,
@@ -114,9 +114,9 @@ export async function pullSkill(
     try {
       const files = await downloadVersion(
         {
-          id: skill.id,
-          number: skill.version.number,
-          commit: skill.version.commit,
+          id: published.id,
+          number: published.version.number,
+          commit: published.version.commit,
         },
         conn,
         { home, kind },
@@ -128,18 +128,18 @@ export async function pullSkill(
           root,
           kind,
           connection: conn,
-          assetId: skill.id,
-          name: skill.name,
-          origin: { type: skill.origin.type, id: skill.origin.id },
-          baseVersionId: skill.version.id,
-          baseNumber: skill.version.number,
+          assetId: published.id,
+          name: published.name,
+          origin: { type: published.origin.type, id: published.origin.id },
+          baseVersionId: published.version.id,
+          baseNumber: published.version.number,
           base: encodeFiles(files),
           conflicts: [],
         },
         home,
       );
 
-      return { root, version: skill.version.number };
+      return { root, version: published.version.number };
     } catch (error) {
       await rm(root, { recursive: true, force: true });
       throw error;
@@ -290,18 +290,18 @@ export async function updateWorkspace(
     }
 
     if (work.baseVersionId) {
-      const skill = await packageApi(
+      const published = await packageApi(
         work.kind,
         work.connection,
         home,
       ).published(publishedId(work));
 
-      if (skill.version.id !== work.baseVersionId) {
+      if (published.version.id !== work.baseVersionId) {
         const latest = await downloadVersion(
           {
-            id: skill.id,
-            number: skill.version.number,
-            commit: skill.version.commit,
+            id: published.id,
+            number: published.version.number,
+            commit: published.version.commit,
           },
           work.connection,
           { home, kind: work.kind },
@@ -316,8 +316,8 @@ export async function updateWorkspace(
         entries = merged.entries;
         merged.conflicts.forEach((p) => conflicts.add(p));
         work.base = encodeFiles(latest);
-        work.baseVersionId = skill.version.id;
-        work.baseNumber = skill.version.number;
+        work.baseVersionId = published.version.id;
+        work.baseNumber = published.version.number;
       }
     } else if (work.proposal) {
       const proposal = await getChange(

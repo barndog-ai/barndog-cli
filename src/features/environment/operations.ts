@@ -40,11 +40,10 @@ import {
   withOverlay,
 } from "../workspace/overlay.js";
 import { CliError } from "../../errors.js";
-import { validInstalledName } from "./names.js";
 import { originLabel } from "../server/origin.js";
 import { assetKinds } from "../asset-kinds/index.js";
 import { only } from "../../shared/lookup.js";
-import { splitOrigin } from "../../shared/patterns.js";
+import { splitOrigin, validAssetName } from "../../shared/patterns.js";
 
 /** How to treat exclusions and disabled assets that a change would undo. */
 export type Overrides = {
@@ -409,7 +408,7 @@ export function renameAsset(
       delete names[id];
     } else {
       const name = target.as ?? "";
-      if (!validInstalledName(name)) {
+      if (!validAssetName(name)) {
         throw new CliError(
           "Use lowercase letters, numbers and single hyphens (at most 64 characters).",
         );

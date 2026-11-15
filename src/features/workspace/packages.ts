@@ -15,8 +15,12 @@ import type { Connection } from "../../config/settings.js";
 import { ApiError } from "@barndog-ai/api-contract";
 import { type ApiClient, apiClient } from "../auth/transport.js";
 import { assetKinds, metadata } from "../asset-kinds/index.js";
-import { type PackageKind } from "../../config/selection.js";
-import { GIT_OBJECT_ID } from "../../shared/patterns.js";
+import {
+  assetFolders,
+  packageKindList,
+  type PackageKind,
+} from "../../config/selection.js";
+import { GIT_OBJECT_ID, UUID_V4 } from "../../shared/patterns.js";
 import { CliError, PackageError } from "../../errors.js";
 import { barndogPaths, packageManifest } from "../../config/paths.js";
 import { ifExists, writeAtomic } from "../../shared/files.js";
@@ -43,9 +47,11 @@ export async function pruneCache(
   const children = async (path: string) =>
     (await ifExists(readdir(path))) ?? [];
 
-  for (const parent of [root, join(root, "hooks")]) {
+  for (const parent of packageKindList.map((kind) =>
+    join(root, assetFolders[kind]),
+  )) {
     for (const asset of await children(parent)) {
-      if (!/^[0-9a-f-]{36}$/i.test(asset)) {
+      if (!UUID_V4.test(asset)) {
         continue;
       }
 
@@ -84,7 +90,7 @@ export async function storePackage(
 ) {
   const parent = join(
     barndogPaths(home).packageCache(key),
-    ...assetKinds[kind].cachePath,
+    assetFolders[kind],
     asset.id,
   );
 

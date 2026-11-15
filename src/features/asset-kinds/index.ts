@@ -60,7 +60,6 @@ type KindFacts = {
 
 type PackageFacts = KindFacts & {
   manifest: string;
-  cachePath: readonly string[];
   scaffold: (name: string) => PackageEntry[];
 };
 
@@ -102,8 +101,6 @@ export const assetKinds = {
     folder: assetFolders.skill,
     schema: skillSchema,
     manifest: "SKILL.md",
-    // Skills predate Hooks, so their cached packages sit at the cache root.
-    cachePath: [],
     scaffold: (name: string): PackageEntry[] => [
       file(
         "SKILL.md",
@@ -129,7 +126,6 @@ export const assetKinds = {
     folder: assetFolders.hook,
     schema: hookSchema,
     manifest: "hook.yaml",
-    cachePath: ["hooks"],
     scaffold: (name: string): PackageEntry[] => [
       file("hook.yaml", hookManifest(name)),
       file(

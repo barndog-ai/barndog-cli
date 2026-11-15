@@ -24,11 +24,7 @@ import {
 import { CliError } from "../../errors.js";
 import { errorCode } from "../../shared/values.js";
 import { renameSkillEntries } from "../workspace/installed.js";
-import {
-  assertAssetName,
-  assetPath,
-  validAssetName,
-} from "../workspace/format.js";
+import { assertAssetName, assetPath } from "../workspace/format.js";
 import { withLocalSubscription } from "../workspace/overlay.js";
 import { localWorkspace } from "../workspace/setup.js";
 import { localRepoSource } from "../workspace/repo-source.js";
@@ -306,10 +302,7 @@ export async function updateImported(
   const folder = settings.localWorkspace.path;
   const sources = await readSources(folder);
   const records = sources.imports.filter(
-    (entry) =>
-      entry.kind === kind &&
-      // Older versions could record a name sync ignores; it mustn't stop the others.
-      (name ? entry.name === name : validAssetName(entry.name)),
+    (entry) => entry.kind === kind && (!name || entry.name === name),
   );
 
   if (name && !records.length) {

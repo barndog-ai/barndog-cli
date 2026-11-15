@@ -1,6 +1,4 @@
-import { MAX_ASSET_NAME_LENGTH } from "../../shared/constants.js";
-
-import { NAME, slugify } from "../../shared/patterns.js";
+import { slugify, validAssetName } from "../../shared/patterns.js";
 
 /** Eight ID characters distinguish hooks with the same display name. */
 const HOOK_ID_SUFFIX_LENGTH = 8;
@@ -75,14 +73,6 @@ export function prefixedName(asset: Pick<NamedAsset, "name" | "origin">) {
       asset.name,
     ].join("-"),
   );
-}
-
-/**
- * Whether `name` can be an installed folder or MCP key: the name pattern, at
- * most 64 characters.
- */
-export function validInstalledName(name: string) {
-  return NAME.test(name) && name.length <= MAX_ASSET_NAME_LENGTH;
 }
 
 /**
@@ -296,7 +286,7 @@ export async function resolveClashes(
       const name = prefixedName(rename);
       if (
         rename.renamable === false ||
-        !validInstalledName(name) ||
+        !validAssetName(name) ||
         active.some(
           (other) =>
             other.id !== rename.id &&

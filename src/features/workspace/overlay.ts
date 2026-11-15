@@ -218,8 +218,8 @@ export function withOverlay(
     extraCacheKeys: [overlay.cacheKey],
     journal: primary.journal,
     catalog: async () => mergeLocalCatalog(await primary.catalog(), overlay),
-    skillOrHookPackage: async (kind, reference) =>
-      (await owner(reference)).skillOrHookPackage(kind, reference),
+    packageFolder: async (kind, reference) =>
+      (await owner(reference)).packageFolder(kind, reference),
     mcpDefinition: async (reference) =>
       (await owner(reference)).mcpDefinition(reference),
     invalidAssets: async () =>

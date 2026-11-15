@@ -16,7 +16,7 @@ import type { PackageChange } from "./results.js";
  * The one published Skill or Hook named `name` in the origin `selector`; throws
  * the usual not-found error when none or several match.
  */
-export async function selectSkill(
+export async function selectPackage(
   {
     name,
     selector,

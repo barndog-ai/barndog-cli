@@ -7,7 +7,6 @@ import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 import {
   chmod,
-  cp,
   lstat,
   mkdir,
   mkdtemp,
@@ -541,100 +540,6 @@ test("Hooks whose prefixes read the same get separate folders", async (t) => {
       .filter((name) => name.endsWith(".sh"))
       .sort(),
   ).toStrictEqual(["one.sh", "two.sh"]);
-
-  // A machine that already recorded both at one path recovers on its next sync.
-  const statePath = join(member, ".barndog/state.json");
-  const state = JSON.parse(await readFile(statePath, "utf8"));
-  const shared = join(member, ".barndog/installed/hooks/team-a-b-c");
-  const hooks = state.installed.filter((entry: { path: string }) =>
-    entry.path.includes("team-a-b-c-"),
-  );
-
-  await cp(hooks[0].path, shared, { recursive: true });
-  for (const entry of hooks) {
-    entry.path = shared;
-  }
-
-  await writeFile(statePath, JSON.stringify(state));
-  await synchronize(undefined, member);
-  const repaired = JSON.parse(
-    await readFile(statePath, "utf8"),
-  ).installed.filter((entry: { path: string }) =>
-    entry.path.includes("team-a-b-c"),
-  ) as { path: string }[];
-
-  expect(new Set(repaired.map((entry) => entry.path)).size).toBe(2);
-  expect(repaired.some((entry) => entry.path === shared)).toBeTruthy();
-  const delivered = await Promise.all(
-    repaired.map((entry) => readdir(entry.path)),
-  );
-
-  expect(
-    delivered
-      .flat()
-      .filter((name) => name.endsWith(".sh"))
-      .sort(),
-  ).toStrictEqual(["one.sh", "two.sh"]);
-});
-
-test("an old repeated link in state is repaired, keeping the copy on disk", async (t) => {
-  const { root, url, clone } = await teamRepo(t);
-  const member = join(root, "member");
-  await setupGit(url, member);
-  const statePath = join(member, ".barndog/state.json");
-  const state = JSON.parse(await readFile(statePath, "utf8"));
-  const link = state.links.find((entry: { target: string }) =>
-    entry.target.endsWith("/code-review"),
-  );
-
-  const tree = state.installed.find(
-    (entry: { path: string }) => entry.path === link.source,
-  );
-
-  const stale = randomUUID();
-  state.links.unshift({ ...link, id: stale });
-  state.installed.unshift({ ...tree, id: stale, fingerprint: "stale" });
-  await writeFile(statePath, JSON.stringify(state));
-  await write(clone, "org/skills/code-review/SKILL.md", "not valid");
-  await commit(clone, "Break");
-  await synchronize(undefined, member);
-  await synchronize(undefined, member);
-  const after = JSON.parse(await readFile(statePath, "utf8"));
-  expect(
-    after.links
-      .filter((entry: { target: string }) =>
-        entry.target.endsWith("/code-review"),
-      )
-      .map((entry: { id: string }) => entry.id),
-  ).toStrictEqual([link.id]);
-
-  expect(await installed(member, "skills/code-review/SKILL.md")).toMatch(
-    /Do the thing/,
-  );
-});
-
-test("a repeated link with another source keeps the one the target points to", async (t) => {
-  const { root, url } = await teamRepo(t);
-  const member = join(root, "member");
-  await setupGit(url, member);
-  const statePath = join(member, ".barndog/state.json");
-  const state = JSON.parse(await readFile(statePath, "utf8"));
-  const link = state.links.find((entry: { target: string }) =>
-    entry.target.endsWith("/code-review"),
-  );
-
-  state.links.unshift({ ...link, id: randomUUID(), source: join(root, "ext") });
-  await writeFile(statePath, JSON.stringify(state));
-  await inventory(member);
-  await synchronize(undefined, member);
-  const after = JSON.parse(await readFile(statePath, "utf8"));
-  expect(
-    after.links
-      .filter((entry: { target: string }) =>
-        entry.target.endsWith("/code-review"),
-      )
-      .map((entry: { id: string }) => entry.id),
-  ).toStrictEqual([link.id]);
 });
 
 test("an invalid Skill renamed since it broke still holds its installed name", async (t) => {

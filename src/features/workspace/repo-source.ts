@@ -92,7 +92,7 @@ function repoSource(
           ),
       ];
     },
-    skillOrHookPackage: async (kind, reference) => {
+    packageFolder: async (kind, reference) => {
       const asset = await find(reference);
 
       return storePackage(

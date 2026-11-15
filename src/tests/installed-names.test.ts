@@ -595,16 +595,16 @@ test("cache pruning keeps only the versions installed folders use", async (t) =>
   const skill = randomUUID();
   const gone = randomUUID();
   const hook = randomUUID();
-  const current = join(root, skill, "a".repeat(40));
-  const old = join(root, skill, "b".repeat(40));
-  const removedAsset = join(root, gone, "c".repeat(40));
+  const current = join(root, "skills", skill, "a".repeat(40));
+  const old = join(root, "skills", skill, "b".repeat(40));
+  const removedAsset = join(root, "skills", gone, "c".repeat(40));
   const hookCurrent = join(root, "hooks", hook, "d".repeat(40));
   const other = join(home, ".barndog", "packages", "other-server", "x", "y");
   for (const path of [current, old, removedAsset, hookCurrent, other]) {
     await mkdir(join(path, "pkg"), { recursive: true });
   }
 
-  await mkdir(join(root, skill, ".stage-leftover"));
+  await mkdir(join(root, "skills", skill, ".stage-leftover"));
   expect(
     await pruneCache(cacheKey(conn), home, new Set([current, hookCurrent])),
   ).toBe(3);
@@ -618,8 +618,11 @@ test("cache pruning keeps only the versions installed folders use", async (t) =>
   expect(await exists(current)).toBe(true);
   expect(await exists(hookCurrent)).toBe(true);
   expect(await exists(old)).toBe(false);
-  expect(await exists(join(root, gone))).toBe(false);
-  expect(await exists(join(root, skill, ".stage-leftover"))).toBe(false);
+  expect(await exists(join(root, "skills", gone))).toBe(false);
+  expect(await exists(join(root, "skills", skill, ".stage-leftover"))).toBe(
+    false,
+  );
+
   // Another identity's cache is never touched.
   expect(await exists(other)).toBe(true);
 });

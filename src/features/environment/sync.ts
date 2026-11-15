@@ -462,7 +462,7 @@ export async function synchronize(
             source: tree.path,
             rename: null,
             fingerprint: tree.fingerprint,
-            versionId: tree.versionId ?? ref.publishedVersion,
+            versionId: tree.versionId,
           });
         }
 
@@ -476,7 +476,7 @@ export async function synchronize(
 
       const name = installedName(ref, localNames);
       if (ref.kind === "skill") {
-        const cache = await source.skillOrHookPackage("skill", ref);
+        const cache = await source.packageFolder("skill", ref);
         addSkill(
           ref.id,
           await stage({
@@ -497,7 +497,7 @@ export async function synchronize(
           );
         }
       } else {
-        const cache = await source.skillOrHookPackage("hook", ref);
+        const cache = await source.packageFolder("hook", ref);
         const manifest = hookManifestSchema.parse(
           parse(await readFile(join(cache, "hook.yaml"), "utf8")),
         );
@@ -607,13 +607,7 @@ export async function synchronize(
     const writes: Write[] = [];
     for (const entry of installedState) {
       const actual = await treeFingerprint(entry.path);
-      // Older versions could record two Hooks at one path; either copy is ours.
-      if (
-        actual !== null &&
-        !installedState.some(
-          (other) => other.path === entry.path && other.fingerprint === actual,
-        )
-      ) {
+      if (actual !== null && actual !== entry.fingerprint) {
         throw new CliError(
           `The installed copy at ${entry.path} was edited by hand. Syncing would overwrite those edits. ${
             settings.localWorkspace &&

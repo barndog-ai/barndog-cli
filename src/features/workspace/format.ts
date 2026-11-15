@@ -1,5 +1,3 @@
-import { MAX_ASSET_NAME_LENGTH } from "../../shared/constants.js";
-
 import { createHash } from "node:crypto";
 
 import {
@@ -28,7 +26,11 @@ import {
 } from "./snapshot.js";
 import { assetKinds } from "../asset-kinds/index.js";
 import { defined } from "../../shared/lookup.js";
-import { NAME, splitFrontMatter } from "../../shared/patterns.js";
+import {
+  NAME,
+  splitFrontMatter,
+  validAssetName,
+} from "../../shared/patterns.js";
 
 /** BarnDog workspace configuration allows display names up to 200 characters. */
 const MAX_WORKSPACE_NAME_LENGTH = 200;
@@ -540,14 +542,6 @@ export async function loadWorkspace(
     ),
     problems,
   };
-}
-
-/**
- * Whether `name` can be an asset's folder and installed name: the name pattern,
- * at most 64 characters.
- */
-export function validAssetName(name: string) {
-  return slug.safeParse(name).success && name.length <= MAX_ASSET_NAME_LENGTH;
 }
 
 /** Names become folder and file names, so check them before touching the disk. */
