@@ -1,7 +1,6 @@
 import { HTTP_STATUS } from "../../shared/constants.js";
 
 import { readFile } from "node:fs/promises";
-import { homedir } from "node:os";
 
 import {
   ApiError,
@@ -88,7 +87,7 @@ async function currentRevision(conn: Connection, home: string) {
  */
 export async function autoSync(
   sync: () => Promise<unknown>,
-  home = homedir(),
+  home: string,
 ): Promise<void> {
   const settings = await readSettings(home);
 

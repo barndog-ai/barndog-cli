@@ -18,6 +18,7 @@ import {
 import { serverFetch } from "../features/auth/transport.js";
 import { HTTP_STATUS } from "../shared/constants.js";
 import { CONSTANT_CASE } from "../shared/patterns.js";
+import { tmpdir } from "node:os";
 
 const file = (path: string, text = ""): PackageEntry => ({
   path,
@@ -150,7 +151,7 @@ test("an unreachable server is a CliError with a fix", async () => {
   // Port 1 on loopback refuses connections.
   const request = serverFetch(
     "http://127.0.0.1:1",
-    undefined,
+    tmpdir(),
     false,
   )("http://127.0.0.1:1/v1/health");
 

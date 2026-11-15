@@ -1,3 +1,4 @@
+import { homedir } from "node:os";
 import { adapters, isHarness } from "../harnesses/registry.js";
 import {
   knowledgeList,
@@ -18,7 +19,10 @@ const timer = setTimeout(() => {
 }, STARTUP_KNOWLEDGE_TIMEOUT_MS);
 
 try {
-  const text = knowledgeIndexText(await knowledgeList(true, process.argv[3]));
+  const text = knowledgeIndexText(
+    await knowledgeList(true, process.argv[3] ?? homedir()),
+  );
+
   const harness = process.argv[2];
   if (text && isHarness(harness)) {
     console.log(JSON.stringify(adapters[harness].hooks.sessionContext(text)));

@@ -1,4 +1,3 @@
-import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -129,8 +128,8 @@ type InstalledTree = {
  * dry runs return planned events.
  */
 export async function synchronize(
-  configPath?: string,
-  home = homedir(),
+  configPath: string | undefined,
+  home: string,
   override?: Settings,
   options: SyncOptions = {},
 ): Promise<SyncEvent[]> {
@@ -143,22 +142,20 @@ export async function synchronize(
       throw new SetupRequiredError();
     }
 
-    if (home === homedir()) {
-      for (const harness of settings.harnesses) {
-        const { configHome } = adapters[harness];
-        const custom = configHome && process.env[configHome.variable];
-        if (!configHome || !custom) {
-          continue;
-        }
+    for (const harness of settings.harnesses) {
+      const { configHome } = adapters[harness];
+      const custom = configHome && process.env[configHome.variable];
+      if (!configHome || !custom) {
+        continue;
+      }
 
-        const isDefault = resolve(custom) === join(home, configHome.directory);
+      const isDefault = resolve(custom) === join(home, configHome.directory);
 
-        if (!isDefault || !configHome.defaultIsSupported) {
-          throw new CliError(
-            `BarnDog can't install into a custom ${configHome.variable} yet; it uses ~/${configHome.directory}.`,
-            `unset ${configHome.variable}`,
-          );
-        }
+      if (!isDefault || !configHome.defaultIsSupported) {
+        throw new CliError(
+          `BarnDog can't install into a custom ${configHome.variable} yet; it uses ~/${configHome.directory}.`,
+          `unset ${configHome.variable}`,
+        );
       }
     }
 

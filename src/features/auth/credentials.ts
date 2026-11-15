@@ -1,7 +1,6 @@
 import { POSIX_MODE } from "../../shared/constants.js";
 
 import { chmod, lstat, mkdir, readFile, rm } from "node:fs/promises";
-import { homedir } from "node:os";
 import { contextSchema } from "@barndog-ai/api-contract";
 import { z } from "zod";
 import { errorCode } from "../../shared/values.js";
@@ -37,7 +36,7 @@ type Credentials = z.infer<typeof credentialsSchema>;
  * Reads saved sessions under the supplied home; rejects insecure POSIX
  * permissions and returns empty state if absent.
  */
-export async function readCredentials(home = homedir()): Promise<Credentials> {
+export async function readCredentials(home: string): Promise<Credentials> {
   const path = barndogPaths(home).credentials;
   const info = await ifExists(lstat(path));
   if (!info) {

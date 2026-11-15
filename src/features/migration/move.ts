@@ -1,5 +1,4 @@
 import { randomBytes } from "node:crypto";
-import { homedir } from "node:os";
 import { basename } from "node:path";
 
 import {
@@ -472,7 +471,7 @@ async function moveToCloud(
 /** Copies local assets into the shared workspace; the local folder is never deleted. */
 export function moveLocalAssets(
   options: MoveOptions,
-  home = homedir(),
+  home: string,
 ): Promise<MoveResult> {
   return locked(home, async () => {
     const settings = await readSettings(home);
@@ -575,7 +574,7 @@ export type LocalAssets = {
   }[];
 };
 
-export async function listLocalAssets(home = homedir()): Promise<LocalAssets> {
+export async function listLocalAssets(home: string): Promise<LocalAssets> {
   const settings = await readSettings(home);
   if (!settings || !settings.localWorkspace) {
     throw new CliError(

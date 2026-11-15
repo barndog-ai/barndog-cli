@@ -1,4 +1,3 @@
-import { homedir } from "node:os";
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
 import {
@@ -346,7 +345,7 @@ function assetId(
 export function changeAsset(
   change: AssetChange,
   target: AssetTarget & Overrides,
-  home = homedir(),
+  home: string,
 ): Promise<SelectionOutcome> {
   return withLockedWorkspace(home, async (workspace) => {
     const id = assetId(workspace, target, change);
@@ -363,7 +362,7 @@ export function changeAsset(
 export function changeAssets(
   change: AssetChange,
   target: AssetIds & Overrides,
-  home = homedir(),
+  home: string,
 ): Promise<SelectionOutcome> {
   return withLockedWorkspace(home, async (workspace) => {
     if (!target.ids.length) {
@@ -394,7 +393,7 @@ export function changeAssets(
 /** `reset`, or `as` set to the published name, drops the local name. */
 export function renameAsset(
   target: AssetRename,
-  home = homedir(),
+  home: string,
 ): Promise<Applied> {
   return withLockedWorkspace(home, async (workspace) => {
     const { settings, catalog, current } = workspace;
@@ -445,7 +444,7 @@ export function renameAsset(
   });
 }
 
-export function listSets(home = homedir()): Promise<SetsList> {
+export function listSets(home: string): Promise<SetsList> {
   return withLockedWorkspace(home, async ({ scopes, current, catalog }) => ({
     available: (await scopes()).filter((s) => s.type !== "dev"),
     subscriptions: current.subscriptions,
@@ -498,10 +497,7 @@ function scopeAssets(workspace: Workspace, scope: Scope) {
   );
 }
 
-export function previewSet(
-  origin: string,
-  home = homedir(),
-): Promise<SetPreview> {
+export function previewSet(origin: string, home: string): Promise<SetPreview> {
   return withLockedWorkspace(home, async (workspace) => ({
     assets: scopeAssets(workspace, await findScope(workspace, origin)),
     selectedAssetIds: resolveAssets(
@@ -517,7 +513,7 @@ export function previewSet(
  */
 export function installSet(
   options: SetSelection,
-  home = homedir(),
+  home: string,
 ): Promise<SelectionOutcome> {
   return withLockedWorkspace(home, async (workspace) =>
     applyChange(
@@ -539,7 +535,7 @@ export function installSet(
  */
 export function installSetAssets(
   options: SetAssets,
-  home = homedir(),
+  home: string,
 ): Promise<Applied> {
   return withLockedWorkspace(home, async (workspace) => {
     const scope = await findScope(workspace, options.origin);
@@ -592,7 +588,7 @@ export function installSetAssets(
 export function changeSet(
   change: SetChange,
   options: SetTarget,
-  home = homedir(),
+  home: string,
 ): Promise<SelectionOutcome> {
   return withLockedWorkspace(home, async (workspace) => {
     const scope = await findScope(workspace, options.origin, {
@@ -613,7 +609,7 @@ export function changeSet(
 /** Replaces the subscriptions of the same type (team or repository). */
 export function switchSet(
   options: SetSelection,
-  home = homedir(),
+  home: string,
 ): Promise<SelectionOutcome> {
   return withLockedWorkspace(home, async (workspace) => {
     const scope = await findScope(workspace, options.origin);
@@ -637,10 +633,7 @@ export function switchSet(
 }
 
 /** Whether coding tools are told at session start which knowledge documents exist. */
-export function setKnowledge(
-  enabled: boolean,
-  home = homedir(),
-): Promise<Applied> {
+export function setKnowledge(enabled: boolean, home: string): Promise<Applied> {
   return locked(home, async () => {
     const settings = await readRequiredSettings(home);
     if (

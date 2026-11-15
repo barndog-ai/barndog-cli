@@ -2,7 +2,6 @@ import { z } from "zod";
 import { environmentCatalogSchema } from "@barndog-ai/api-contract";
 import { connection } from "./connection.js";
 import { connectionContext } from "../auth/session.js";
-import { homedir } from "node:os";
 import type { Connection } from "../../config/settings.js";
 import {
   assetKinds,
@@ -35,7 +34,7 @@ export type SelectedAsset = {
  * mismatch with an expected saved identity.
  */
 export async function environmentCatalog(
-  home = homedir(),
+  home: string,
   expected?: Connection,
 ): Promise<{ connection: Connection; catalog: EnvironmentCatalog }> {
   const conn = expected
@@ -66,7 +65,7 @@ export async function getAsset(
   kind: AssetKind,
   id: string,
   conn: Connection,
-  home = homedir(),
+  home: string,
 ): Promise<PublishedAsset> {
   return assetKinds[kind].schema.parse(
     responseData(
@@ -100,7 +99,7 @@ export async function selectAsset(
   kind: AssetKind,
   name: string,
   origin: string,
-  home = homedir(),
+  home: string,
 ): Promise<SelectedAsset> {
   const { connection: conn, catalog } = await environmentCatalog(home);
   const matches = catalog.assets.filter(

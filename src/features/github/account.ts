@@ -5,7 +5,6 @@
  * folder calls the server's `/v1/github/…` and `/v1/git-connections/…` routes;
  * the CLI never talks to GitHub itself.
  */
-import { homedir } from "node:os";
 import { z } from "zod";
 import {
   githubStatusSchema,
@@ -25,7 +24,7 @@ export type GithubInstallation = z.infer<typeof gitInstallationSchema>;
 /** A GitHub page where the developer finishes a step. */
 export type GithubPage = { url: string };
 
-export async function githubStatus(home = homedir()): Promise<GithubStatus> {
+export async function githubStatus(home: string): Promise<GithubStatus> {
   const conn = await connection(home);
 
   return parsed(
@@ -35,7 +34,7 @@ export async function githubStatus(home = homedir()): Promise<GithubStatus> {
 }
 
 /** The page that links the developer's GitHub account to BarnDog. */
-export async function githubAuth(home = homedir()): Promise<GithubPage> {
+export async function githubAuth(home: string): Promise<GithubPage> {
   const conn = await connection(home);
   const { url } = await parsed(
     gitAuthorizationSchema,
@@ -46,7 +45,7 @@ export async function githubAuth(home = homedir()): Promise<GithubPage> {
 }
 
 /** The page that installs the BarnDog GitHub App on an account or organization. */
-export async function githubInstall(home = homedir()): Promise<GithubPage> {
+export async function githubInstall(home: string): Promise<GithubPage> {
   const conn = await connection(home);
   const { url } = await parsed(
     gitAuthorizationSchema,
@@ -57,7 +56,7 @@ export async function githubInstall(home = homedir()): Promise<GithubPage> {
 }
 
 export async function githubInstallations(
-  home = homedir(),
+  home: string,
 ): Promise<GithubInstallation[]> {
   const conn = await connection(home);
 

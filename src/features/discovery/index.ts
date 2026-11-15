@@ -1,5 +1,4 @@
 import { CliError } from "../../errors.js";
-import { homedir } from "node:os";
 import { z } from "zod";
 import {
   developerListSchema,
@@ -36,8 +35,8 @@ export type DeveloperAssets = {
  * repeated cursors are rejected.
  */
 export async function developers(
-  search?: string,
-  home = homedir(),
+  search: string | undefined,
+  home: string,
 ): Promise<Developer[]> {
   const conn = await connection(home);
 
@@ -59,8 +58,8 @@ export async function developers(
  */
 export async function developerAssets(
   selector: string,
-  search?: string,
-  home = homedir(),
+  search: string | undefined,
+  home: string,
 ): Promise<DeveloperAssets> {
   const people = await developers(undefined, home);
   const matches = people.filter(
@@ -155,7 +154,7 @@ export async function copyToScope(
 /** Copies an asset into a scope the developer owns; a change ID means it needs review. */
 export async function fork(
   input: PromoteInput,
-  home = homedir(),
+  home: string,
 ): Promise<Promotion> {
   return copyToScope("fork", input, home);
 }

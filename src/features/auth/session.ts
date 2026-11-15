@@ -1,7 +1,6 @@
 import { MILLISECONDS_PER_SECOND } from "../../shared/constants.js";
 
 import { hasRemoteSelections } from "../../config/environment.js";
-import { homedir } from "node:os";
 import { setTimeout } from "node:timers/promises";
 import {
   createApiClient,
@@ -30,7 +29,7 @@ const AUTH_REQUEST_TIMEOUT_MS = 10000;
  */
 export type LoginOptions = {
   server?: string;
-  home?: string;
+  home: string;
   signal?: AbortSignal;
   verification: (details: {
     userCode: string;
@@ -44,7 +43,7 @@ export type LoginOptions = {
  * validated origin.
  */
 export async function configuredServer(
-  home = homedir(),
+  home: string,
 ): Promise<string | undefined> {
   const settings = await readSettings(home);
   const credentials = await readCredentials(home);
@@ -88,7 +87,7 @@ async function revokeSession(client: ApiClient, token: string) {
  * persists the returned session.
  */
 export async function login(options: LoginOptions) {
-  const home = options.home ?? homedir();
+  const { home } = options;
   const server = await selectedServer(options.server, home);
   const client = signInClient(server, home);
 
@@ -167,7 +166,7 @@ export async function login(options: LoginOptions) {
  * Attempts remote session revocation and removes local credentials even if
  * revocation fails; reports that outcome.
  */
-export async function logout(home = homedir()) {
+export async function logout(home: string) {
   const server = await selectedServer(undefined, home);
   const credential = (await readCredentials(home)).servers[server];
   let revoked = true;
@@ -197,7 +196,7 @@ export type AuthStatus = { server: string; context: ActorContext };
  * require login.
  */
 export async function authStatus(
-  home = homedir(),
+  home: string,
   explicitServer?: string,
 ): Promise<AuthStatus> {
   let server;
@@ -220,7 +219,7 @@ export async function authStatus(
  */
 export async function connectionContext(
   server: string,
-  home = homedir(),
+  home: string,
 ): Promise<Connection> {
   server = normalizeServer(server);
   const context = contextSchema.parse(

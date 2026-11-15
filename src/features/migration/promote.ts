@@ -1,5 +1,3 @@
-import { homedir } from "node:os";
-
 import {
   copyToScope,
   type PromoteInput,
@@ -22,7 +20,7 @@ export type PromoteResult =
  */
 export async function promote(
   input: PromoteInput,
-  home = homedir(),
+  home: string,
 ): Promise<PromoteResult> {
   if (input.origin === LOCAL_ORIGIN) {
     return {

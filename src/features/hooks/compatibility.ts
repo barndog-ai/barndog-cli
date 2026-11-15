@@ -1,4 +1,3 @@
-import { homedir } from "node:os";
 import { hookSchema } from "@barndog-ai/api-contract";
 import { readSettings } from "../../config/settings.js";
 import { selectAsset } from "../server/catalog.js";
@@ -16,7 +15,7 @@ import type { HookCompatibility } from "./types.js";
 export async function hookCompatibility(
   name: string,
   origin: string,
-  home = homedir(),
+  home: string,
 ): Promise<HookCompatibility> {
   const settings = await readSettings(home);
   const repo = settings && repoForOrigin(settings, home, origin);

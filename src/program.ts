@@ -124,10 +124,12 @@ import { barndogPaths } from "./config/paths.js";
 /** Keep command help readable at the conventional eighty-column terminal width. */
 const HELP_WIDTH = 80;
 
-export type ProgramOptions = Partial<Omit<CommandContext, "mode">> & {
+export type ProgramOptions = Partial<Omit<CommandContext, "mode" | "home">> & {
   writeError?: (message: string) => void;
   /** Tests pin terminal detection; the CLI detects a TTY. */
   interactive?: boolean;
+  /** Tests pass a temporary directory; the CLI uses the real home directory. */
+  home?: string;
   /** Stops commands the current setup can't run. The CLI always passes one. */
   guard?: (path: string[], options: Record<string, unknown>) => Promise<void>;
   /** Dims commands this setup can't run in help. */
@@ -337,103 +339,183 @@ function guardRequiredOptions(parent: Command, guard: Guard) {
 /** Construct a fresh parser for every invocation or test; command behavior is independently injectable. */
 export function createProgram(options: ProgramOptions = {}): Command {
   const write = options.write ?? console.log;
+  // The one place the real home directory is read; everything below takes it.
+  const home = options.home ?? homedir();
   const mode: Mode = {
     json: false,
     interactive: options.interactive ?? interactiveTerminal(),
   };
 
   const context: CommandContext = {
-    applySuggestion: options.applySuggestion ?? applySuggestion,
-    changeDiff: options.changeDiff ?? changeDiff,
-    commentOnChange: options.commentOnChange ?? commentOnChange,
-    createPackage: options.createPackage ?? createPackage,
-    diffVersions: options.diffVersions ?? diffVersions,
-    listChanges: options.listChanges ?? ((options) => listChanges(options)),
-    mergeChange: options.mergeChange ?? mergeChange,
-    packageVersions: options.packageVersions ?? packageVersions,
-    pullPackage: options.pullPackage ?? pullPackage,
-    pushWorkingCopy: options.pushWorkingCopy ?? pushWorkingCopy,
-    rejectChange: options.rejectChange ?? rejectChange,
-    resolveFile: options.resolveFile ?? ((path) => resolveFile(path)),
-    reviewChange: options.reviewChange ?? reviewChange,
+    applySuggestion:
+      options.applySuggestion ?? ((target) => applySuggestion(target, home)),
+    changeDiff: options.changeDiff ?? ((target) => changeDiff(target, home)),
+    commentOnChange:
+      options.commentOnChange ?? ((options) => commentOnChange(options, home)),
+    createPackage:
+      options.createPackage ??
+      ((target) => createPackage(target, undefined, home)),
+    diffVersions:
+      options.diffVersions ?? ((target) => diffVersions(target, home)),
+    listChanges:
+      options.listChanges ?? ((options) => listChanges(options, home)),
+    mergeChange: options.mergeChange ?? ((target) => mergeChange(target, home)),
+    packageVersions:
+      options.packageVersions ?? ((target) => packageVersions(target, home)),
+    pullPackage:
+      options.pullPackage ?? ((target) => pullPackage(target, undefined, home)),
+    pushWorkingCopy:
+      options.pushWorkingCopy ??
+      ((options) => pushWorkingCopy(options, undefined, home)),
+    rejectChange:
+      options.rejectChange ?? ((target) => rejectChange(target, home)),
+    resolveFile:
+      options.resolveFile ?? ((path) => resolveFile(path, undefined, home)),
+    reviewChange:
+      options.reviewChange ??
+      ((decision, target) => reviewChange(decision, target, home)),
     setDiscussionResolved:
-      options.setDiscussionResolved ?? setDiscussionResolved,
-    showChange: options.showChange ?? showChange,
-    updateWorkingCopy: options.updateWorkingCopy ?? (() => updateWorkingCopy()),
-    versionFiles: options.versionFiles ?? versionFiles,
-    workingDiff: options.workingDiff ?? (() => workingDiff()),
-    workingStatus: options.workingStatus ?? (() => workingStatus()),
-    login: options.login ?? ((login) => runLogin(login, write)),
-    logout: options.logout ?? (() => runLogout(write)),
+      options.setDiscussionResolved ??
+      ((target) => setDiscussionResolved(target, home)),
+    showChange: options.showChange ?? ((target) => showChange(target, home)),
+    updateWorkingCopy:
+      options.updateWorkingCopy ?? (() => updateWorkingCopy(undefined, home)),
+    versionFiles:
+      options.versionFiles ?? ((target) => versionFiles(target, home)),
+    workingDiff: options.workingDiff ?? (() => workingDiff(undefined, home)),
+    workingStatus:
+      options.workingStatus ?? (() => workingStatus(undefined, home)),
+    login: options.login ?? ((login) => runLogin({ ...login, home }, write)),
+    logout: options.logout ?? (() => runLogout(write, home)),
     authStatus:
-      options.authStatus ?? (() => showAuthStatus({ write, json: mode.json })),
+      options.authStatus ??
+      (() => showAuthStatus({ write, json: mode.json }, home)),
     setup:
       options.setup ??
       ((restart, server, setupOptions) =>
-        runSetup({ restart, server, ...setupOptions, write: options.write })),
-    changeAsset: options.changeAsset ?? changeAsset,
-    changeAssets: options.changeAssets ?? changeAssets,
-    renameAsset: options.renameAsset ?? renameAsset,
-    listSets: options.listSets ?? (() => listSets()),
-    previewSet: options.previewSet ?? previewSet,
-    installSet: options.installSet ?? installSet,
-    installSetAssets: options.installSetAssets ?? installSetAssets,
-    changeSet: options.changeSet ?? changeSet,
-    switchSet: options.switchSet ?? switchSet,
-    setKnowledge: options.setKnowledge ?? setKnowledge,
-    doctor: options.doctor ?? (() => doctor()),
-    workspaceUrl: options.workspaceUrl ?? (() => workspaceUrl()),
-    repoStatus: options.repoStatus ?? (() => repoStatus()),
-    listLocalAssets: options.listLocalAssets ?? (() => listLocalAssets()),
-    knowledgeProblems: options.knowledgeProblems ?? (() => knowledgeProblems()),
-    githubStatus: options.githubStatus ?? (() => githubStatus()),
+        runSetup({
+          restart,
+          server,
+          ...setupOptions,
+          write: options.write,
+          home,
+        })),
+    changeAsset:
+      options.changeAsset ??
+      ((change, target) => changeAsset(change, target, home)),
+    changeAssets:
+      options.changeAssets ??
+      ((change, target) => changeAssets(change, target, home)),
+    renameAsset: options.renameAsset ?? ((target) => renameAsset(target, home)),
+    listSets: options.listSets ?? (() => listSets(home)),
+    previewSet: options.previewSet ?? ((origin) => previewSet(origin, home)),
+    installSet: options.installSet ?? ((options) => installSet(options, home)),
+    installSetAssets:
+      options.installSetAssets ??
+      ((options) => installSetAssets(options, home)),
+    changeSet:
+      options.changeSet ??
+      ((change, options) => changeSet(change, options, home)),
+    switchSet: options.switchSet ?? ((options) => switchSet(options, home)),
+    setKnowledge:
+      options.setKnowledge ?? ((enabled) => setKnowledge(enabled, home)),
+    doctor: options.doctor ?? (() => doctor(home)),
+    workspaceUrl: options.workspaceUrl ?? (() => workspaceUrl(home)),
+    repoStatus: options.repoStatus ?? (() => repoStatus(home)),
+    listLocalAssets: options.listLocalAssets ?? (() => listLocalAssets(home)),
+    knowledgeProblems:
+      options.knowledgeProblems ?? (() => knowledgeProblems(home)),
+    githubStatus: options.githubStatus ?? (() => githubStatus(home)),
     githubInstallations:
-      options.githubInstallations ?? (() => githubInstallations()),
-    githubList: options.githubList ?? (() => githubList()),
+      options.githubInstallations ?? (() => githubInstallations(home)),
+    githubList: options.githubList ?? (() => githubList(home)),
     validateFolder: options.validateFolder ?? validateFolder,
-    migrate: options.migrate ?? migrate,
-    moveLocalAssets: options.moveLocalAssets ?? moveLocalAssets,
-    updateImported: options.updateImported ?? updateImported,
-    showMcp: options.showMcp ?? showMcp,
-    createMcp: options.createMcp ?? createMcp,
-    updateMcp: options.updateMcp ?? updateMcp,
-    mcpVersions: options.mcpVersions ?? mcpVersions,
-    authenticateMcp: options.authenticateMcp ?? authenticateMcp,
-    testHook: options.testHook ?? testHook,
-    hookCompatibility: options.hookCompatibility ?? hookCompatibility,
-    adaptHook: options.adaptHook ?? adaptHook,
-    knowledgeGet: options.knowledgeGet ?? knowledgeGet,
-    developers: options.developers ?? developers,
-    developerAssets: options.developerAssets ?? developerAssets,
-    promote: options.promote ?? promote,
-    fork: options.fork ?? fork,
-    githubAuth: options.githubAuth ?? githubAuth,
-    githubInstall: options.githubInstall ?? githubInstall,
-    githubConnect: options.githubConnect ?? githubConnect,
-    githubImport: options.githubImport ?? githubImport,
-    githubImportCopy: options.githubImportCopy ?? githubImportCopy,
+    migrate: options.migrate ?? ((options) => migrate(options, home)),
+    moveLocalAssets:
+      options.moveLocalAssets ?? ((options) => moveLocalAssets(options, home)),
+    updateImported:
+      options.updateImported ??
+      ((kind, name, options) => updateImported(kind, name, options, home)),
+    showMcp: options.showMcp ?? ((name, origin) => showMcp(name, origin, home)),
+    createMcp: options.createMcp ?? ((input) => createMcp(input, home)),
+    updateMcp: options.updateMcp ?? ((input) => updateMcp(input, home)),
+    mcpVersions:
+      options.mcpVersions ??
+      ((name, origin) => mcpVersions(name, origin, home)),
+    authenticateMcp:
+      options.authenticateMcp ??
+      ((name, origin, harness) => authenticateMcp(name, origin, harness, home)),
+    testHook:
+      options.testHook ??
+      ((name, origin, testOptions) =>
+        testHook(name, origin, testOptions, { home })),
+    hookCompatibility:
+      options.hookCompatibility ??
+      ((name, origin) => hookCompatibility(name, origin, home)),
+    adaptHook:
+      options.adaptHook ??
+      ((name, origin, targets) => adaptHook(name, origin, targets, home)),
+    knowledgeGet: options.knowledgeGet ?? ((name) => knowledgeGet(name, home)),
+    developers: options.developers ?? ((search) => developers(search, home)),
+    developerAssets:
+      options.developerAssets ??
+      ((selector, search) => developerAssets(selector, search, home)),
+    promote: options.promote ?? ((input) => promote(input, home)),
+    fork: options.fork ?? ((input) => fork(input, home)),
+    githubAuth: options.githubAuth ?? (() => githubAuth(home)),
+    githubInstall: options.githubInstall ?? (() => githubInstall(home)),
+    githubConnect:
+      options.githubConnect ?? ((options) => githubConnect(options, home)),
+    githubImport:
+      options.githubImport ?? ((options) => githubImport(options, home)),
+    githubImportCopy:
+      options.githubImportCopy ??
+      ((options) => githubImportCopy(options, home)),
     githubCreateRepository:
-      options.githubCreateRepository ?? githubCreateRepository,
-    githubShow: options.githubShow ?? githubShow,
-    githubSync: options.githubSync ?? githubSync,
-    githubRemoteHead: options.githubRemoteHead ?? githubRemoteHead,
-    githubResolveMirror: options.githubResolveMirror ?? githubResolveMirror,
-    githubPullsList: options.githubPullsList ?? githubPullsList,
-    githubPullsShow: options.githubPullsShow ?? githubPullsShow,
-    githubPullsCreate: options.githubPullsCreate ?? githubPullsCreate,
-    githubPullsRevise: options.githubPullsRevise ?? githubPullsRevise,
-    githubPullsReview: options.githubPullsReview ?? githubPullsReview,
-    githubPullsComment: options.githubPullsComment ?? githubPullsComment,
-    githubPullsMerge: options.githubPullsMerge ?? githubPullsMerge,
-    knowledgeList: options.knowledgeList ?? knowledgeList,
+      options.githubCreateRepository ??
+      ((options) => githubCreateRepository(options, home)),
+    githubShow:
+      options.githubShow ?? ((connectionId) => githubShow(connectionId, home)),
+    githubSync:
+      options.githubSync ?? ((connectionId) => githubSync(connectionId, home)),
+    githubRemoteHead:
+      options.githubRemoteHead ??
+      ((connectionId) => githubRemoteHead(connectionId, home)),
+    githubResolveMirror:
+      options.githubResolveMirror ??
+      ((options) => githubResolveMirror(options, home)),
+    githubPullsList:
+      options.githubPullsList ??
+      ((connectionId) => githubPullsList(connectionId, home)),
+    githubPullsShow:
+      options.githubPullsShow ??
+      ((connectionId, number) => githubPullsShow(connectionId, number, home)),
+    githubPullsCreate:
+      options.githubPullsCreate ??
+      ((options) => githubPullsCreate(options, home)),
+    githubPullsRevise:
+      options.githubPullsRevise ??
+      ((options) => githubPullsRevise(options, home)),
+    githubPullsReview:
+      options.githubPullsReview ??
+      ((options) => githubPullsReview(options, home)),
+    githubPullsComment:
+      options.githubPullsComment ??
+      ((options) => githubPullsComment(options, home)),
+    githubPullsMerge:
+      options.githubPullsMerge ??
+      ((options) => githubPullsMerge(options, home)),
+    knowledgeList:
+      options.knowledgeList ?? ((always) => knowledgeList(always, home)),
     synchronize:
       options.synchronize ??
-      ((path, syncOptions) =>
-        synchronize(path, undefined, undefined, syncOptions)),
-    inventory: options.inventory ?? (() => inventory()),
-    searchCatalog: options.searchCatalog ?? ((kind) => searchCatalog(kind)),
+      ((path, syncOptions) => synchronize(path, home, undefined, syncOptions)),
+    inventory: options.inventory ?? (() => inventory(home)),
+    searchCatalog:
+      options.searchCatalog ?? ((kind) => searchCatalog(kind, home)),
     write,
     mode,
+    home,
   };
 
   const program = new Command()
@@ -471,7 +553,7 @@ export function createProgram(options: ProgramOptions = {}): Command {
     )
     .addHelpText(
       "after",
-      `\nRun ${styleText("bold", "barndog <command> --help")} for details. Configuration: ${barndogPaths(homedir()).settings}`,
+      `\nRun ${styleText("bold", "barndog <command> --help")} for details. Configuration: ${barndogPaths(home).settings}`,
     )
     .addHelpText("afterAll", ({ command }) =>
       options.setupMode ? unavailableHint(command, options.setupMode) : "",

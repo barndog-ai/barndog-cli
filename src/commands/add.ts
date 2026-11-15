@@ -36,6 +36,7 @@ export function registerAdd(program: Command, context: CommandContext) {
     );
 
   const add = () => ({
+    home: context.home,
     interactive: context.mode.interactive,
     write: context.write,
     prompts: terminalPrompts(context.write),

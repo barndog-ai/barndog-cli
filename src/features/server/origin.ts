@@ -1,4 +1,3 @@
-import { homedir } from "node:os";
 import { z } from "zod";
 import {
   contextSchema,
@@ -58,7 +57,7 @@ export function scopes(conn: Connection, home: string): Promise<ApiScope[]> {
 export async function selectOrigin(
   selector: string,
   conn: Connection,
-  home = homedir(),
+  home: string,
 ) {
   const visible = await scopes(conn, home);
   const matches = visible.filter((s) => matchesOrigin(s, selector, conn));

@@ -1,7 +1,6 @@
 import { MILLISECONDS_PER_SECOND } from "../../shared/constants.js";
 
 import { randomBytes } from "node:crypto";
-import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { mkdir, realpath, rm } from "node:fs/promises";
 
@@ -202,7 +201,7 @@ export function pullGitAsset(
     kind: PackageKind;
   },
   cwd: string,
-  home = homedir(),
+  home: string,
 ): Promise<PulledPackage> {
   const { kind } = options;
 
@@ -243,7 +242,7 @@ export function createGitAsset(
     kind: PackageKind;
   },
   cwd: string,
-  home = homedir(),
+  home: string,
 ): Promise<CreatedPackage> {
   const { kind } = options;
 
@@ -274,7 +273,7 @@ export function createGitAsset(
  */
 export function gitWorkingStatus(
   cwd: string,
-  home = homedir(),
+  home: string,
 ): Promise<GitWorkingCopyStatus> {
   return locked(home, async () => {
     const work = await findGit(cwd, home);
@@ -338,7 +337,7 @@ async function branchFiles(work: GitWorkingCopy, head: string, home: string) {
  */
 export function updateGitWorkingCopy(
   cwd: string,
-  home = homedir(),
+  home: string,
 ): Promise<UpdatedGitWorkingCopy> {
   return locked(home, async () => {
     const work = await findGit(cwd, home);
@@ -410,7 +409,7 @@ export function updateGitWorkingCopy(
 export function resolveGitConflict(
   path: string,
   cwd: string,
-  home = homedir(),
+  home: string,
 ): Promise<ConflictResolution> {
   return locked(home, async () =>
     markResolved(await findGit(cwd, home), path, cwd, home),
@@ -436,7 +435,7 @@ export function pushGitWorkingCopy(
     title?: string;
   },
   cwd: string,
-  home = homedir(),
+  home: string,
 ): Promise<GitPushResult> {
   return locked(home, async () => {
     const { model, commit: tip } = await latest(workspace, home);
@@ -691,7 +690,7 @@ async function history(
 export async function gitVersions(
   workspace: GitWorkspace,
   target: HistoryTarget,
-  home = homedir(),
+  home: string,
 ): Promise<PackageVersion[]> {
   return (await history(workspace, target, home)).versions;
 }
@@ -700,7 +699,7 @@ export async function gitVersions(
 export async function gitVersionFiles(
   workspace: GitWorkspace,
   target: HistoryTarget & { version?: number },
-  home = homedir(),
+  home: string,
 ): Promise<VersionFiles> {
   const { filesOf } = await history(workspace, target, home);
 
@@ -714,7 +713,7 @@ export async function gitVersionFiles(
 export async function gitVersionDiff(
   workspace: GitWorkspace,
   target: HistoryTarget & { from: number; to: number },
-  home = homedir(),
+  home: string,
 ): Promise<FileDiff[]> {
   const { filesOf } = await history(workspace, target, home);
 

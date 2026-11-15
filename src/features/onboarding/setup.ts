@@ -19,7 +19,6 @@ import {
   readSettings,
   saveSettings,
 } from "../../config/settings.js";
-import { homedir } from "node:os";
 import { detectHarnesses } from "../../harnesses/detect.js";
 import type { DetectedHarness, Harness } from "../../harnesses/registry.js";
 
@@ -76,7 +75,7 @@ export type ChooseHarnesses = (choices: HarnessChoice[]) => Promise<Harness[]>;
 
 /** Resolve saved selections and persist only after the caller supplies an explicit choice. */
 export async function initialize(options: {
-  home?: string;
+  home: string;
   server?: string;
   workspace?: ChosenWorkspace;
   /** A local folder that stays active beside the chosen Git or Cloud workspace. */
@@ -88,7 +87,7 @@ export async function initialize(options: {
   confirm?: (settings: Settings) => Promise<boolean>;
   detected?: DetectedHarness[];
 }): Promise<{ configPath: string; harnesses: Harness[]; cancelled?: boolean }> {
-  const home = options.home ?? homedir();
+  const { home } = options;
 
   return locked(home, async () => {
     const previous = await readSettings(home);

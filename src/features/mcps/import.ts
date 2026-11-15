@@ -1,7 +1,6 @@
 import { POSIX_MODE } from "../../shared/constants.js";
 import { readState } from "../../config/state.js";
 import { mkdir, readFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { basename, join } from "node:path";
 
 import {
@@ -303,9 +302,7 @@ async function jsonFile(path: string) {
 }
 
 /** Servers each harness has configured, leaving out the ones BarnDog installed. */
-export async function harnessServers(
-  home = homedir(),
-): Promise<HarnessServer[]> {
+export async function harnessServers(home: string): Promise<HarnessServer[]> {
   const { native } = await readState(home);
   const owned = new Set(
     native
@@ -350,7 +347,7 @@ export async function harnessServers(
 }
 
 /** Native entries BarnDog doesn't own that would block installing this name. */
-export async function conflictingEntries(name: string, home = homedir()) {
+export async function conflictingEntries(name: string, home: string) {
   const settings = await readSettings(home);
   if (!settings) {
     throw new SetupRequiredError();
@@ -381,7 +378,7 @@ export async function conflictingEntries(name: string, home = homedir()) {
 export async function addMcpServers(
   servers: ConvertedServer[],
   options: { replace?: boolean },
-  home = homedir(),
+  home: string,
 ) {
   const invalid = servers.filter(({ name }) => !validAssetName(name));
   if (invalid.length) {

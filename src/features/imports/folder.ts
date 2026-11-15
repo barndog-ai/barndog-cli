@@ -1,6 +1,5 @@
 import { existsSync } from "node:fs";
 import { rm, rmdir, stat } from "node:fs/promises";
-import { homedir } from "node:os";
 import { dirname, join, parse, resolve } from "node:path";
 
 import { CliError } from "../../errors.js";
@@ -15,7 +14,7 @@ const HOME_PREFIX = /^~(?=\/|$)/;
  *
  * @internal Exported for its table test in `src/tests/patterns.test.ts`.
  */
-export const expandHome = (path: string, home = homedir()) =>
+export const expandHome = (path: string, home: string) =>
   path.replace(HOME_PREFIX, () => home);
 
 /**
@@ -33,9 +32,12 @@ const LOCAL_PATH = /^(?:\/|\.{1,2}(?:\/|$)|~(?:\/|$))/;
 export const looksLocal = (source: string) => LOCAL_PATH.test(source.trim());
 
 /** The plain folder a source points at; Git repos return null and are fetched instead. */
-export async function plainFolder(source: string): Promise<string | null> {
+export async function plainFolder(
+  source: string,
+  home: string,
+): Promise<string | null> {
   const value = source.trim();
-  const path = resolve(expandHome(value));
+  const path = resolve(expandHome(value, home));
   const directory = await stat(path).then(
     (info) => info.isDirectory(),
     () => false,
@@ -53,20 +55,23 @@ export async function plainFolder(source: string): Promise<string | null> {
 }
 
 /** Git can't help with a path that isn't there, so say so instead of suggesting a clone. */
-export function assertSourceExists(source: string) {
+export function assertSourceExists(source: string, home: string) {
   const value = source.trim();
   if (!looksLocal(value)) {
     return;
   }
 
-  if (!existsSync(resolve(expandHome(value)))) {
+  if (!existsSync(resolve(expandHome(value, home)))) {
     throw new CliError(`Can't find ${value}.`);
   }
 }
 
 /** Presents a folder the way a fetched repo looks, so discovery treats both alike. */
-export async function readFolder(path: string): Promise<RemoteRepo> {
-  if (path === homedir() || path === parse(path).root) {
+export async function readFolder(
+  path: string,
+  home: string,
+): Promise<RemoteRepo> {
+  if (path === home || path === parse(path).root) {
     throw new CliError(
       `${path} is too broad to search. Point at the folder holding the Skill.`,
     );

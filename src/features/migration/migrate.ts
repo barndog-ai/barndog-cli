@@ -1,5 +1,3 @@
-import { homedir } from "node:os";
-
 import {
   mcpSchema,
   knowledgeDocumentSchema,
@@ -228,7 +226,7 @@ export type MigrationReport = {
  */
 export async function migrate(
   options: MigrateOptions,
-  home = homedir(),
+  home: string,
 ): Promise<MigrationReport> {
   return locked(home, async () => {
     const settings = await readSettings(home);

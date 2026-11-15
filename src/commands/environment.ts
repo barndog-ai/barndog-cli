@@ -205,7 +205,10 @@ export function registerEnvironment(program: Command, context: CommandContext) {
           return;
         }
 
-        for (const line of renderInventory(page, options)) {
+        for (const line of renderInventory(page, {
+          ...options,
+          home: context.home,
+        })) {
           context.write(line);
         }
 

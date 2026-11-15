@@ -144,7 +144,7 @@ export const terminalPrompts = (write: (line: string) => void): AddPrompts => ({
  * prompts, so choices must come from flags.
  */
 export type AddContext = {
-  home?: string;
+  home: string;
   interactive: boolean;
   write: (line: string) => void;
   prompts: AddPrompts;
@@ -254,10 +254,11 @@ function assertDistinctNames(chosen: SkillCandidate[], url: string) {
 async function withSkillSource(
   source: string,
   folder: string | null,
+  home: string,
   use: (remote: RemoteRepo) => Promise<void>,
 ) {
   if (folder) {
-    return use(await readFolder(folder));
+    return use(await readFolder(folder, home));
   }
 
   return fetchRemote(parseLocation(source), { allowPrompt: true }, use);
@@ -320,10 +321,10 @@ export async function addSkills(
   options: AddOptions,
   context: AddContext,
 ) {
-  assertSourceExists(url);
-  const folder = await plainFolder(url);
+  assertSourceExists(url, context.home);
+  const folder = await plainFolder(url, context.home);
   assertFolderOptions(options, folder);
-  await withSkillSource(url, folder, async (remote) => {
+  await withSkillSource(url, folder, context.home, async (remote) => {
     const { skills, skipped } = discoverSkills(remote);
     for (const skip of skipped) {
       context.write(`${warn("!")} ${skip.path}: ${skip.reason}`);
@@ -529,8 +530,8 @@ export async function addHook(
   options: AddOptions,
   context: AddContext,
 ) {
-  assertSourceExists(url);
-  if (await plainFolder(url)) {
+  assertSourceExists(url, context.home);
+  if (await plainFolder(url, context.home)) {
     throw new CliError(
       `${url} isn't a Git repo, and Hooks can only be added from one for now.`,
       "git init, commit the Hook, then run barndog hooks add again",

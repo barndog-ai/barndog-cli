@@ -1,6 +1,5 @@
 import { SHORT_COMMIT_LENGTH } from "../../shared/constants.js";
 
-import { homedir } from "node:os";
 import { readSettings, type Connection } from "../../config/settings.js";
 import { CliError } from "../../errors.js";
 import { hookCatalog } from "../hooks/catalog.js";
@@ -29,7 +28,7 @@ const catalogFetchers: Record<AssetKind, CatalogFetcher> = {
  */
 export async function searchCatalog(
   kind: AssetKind,
-  home = homedir(),
+  home: string,
 ): Promise<CatalogAsset[]> {
   const shared = await sharedCatalog(kind, home);
   const settings = await readSettings(home);

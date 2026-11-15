@@ -1,4 +1,3 @@
-import { homedir } from "node:os";
 import { readSettings, type GitWorkspace } from "../../config/settings.js";
 import { remoteHead } from "../workspace/git.js";
 import { branchProtected } from "../workspace/publish.js";
@@ -69,7 +68,7 @@ async function gitChecks(workspace: GitWorkspace, home: string) {
 }
 
 /** Every check runs; one failure never hides the others. */
-export async function doctor(home = homedir()): Promise<Check[]> {
+export async function doctor(home: string): Promise<Check[]> {
   const checks: Check[] = [];
   let settings;
   try {

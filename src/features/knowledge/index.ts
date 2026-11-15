@@ -1,4 +1,3 @@
-import { homedir } from "node:os";
 import { z } from "zod";
 import {
   knowledgeDocumentSchema,
@@ -122,7 +121,7 @@ async function keptLocal(home: string, shared: KnowledgeSummary[]) {
 
 /** Knowledge files that can't be read, so they don't vanish without a word. */
 export async function knowledgeProblems(
-  home = homedir(),
+  home: string,
 ): Promise<InvalidKnowledge[]> {
   const settings = await readSettings(home);
   if (!settings) {
@@ -149,7 +148,7 @@ export async function knowledgeProblems(
  */
 export async function knowledgeList(
   always = false,
-  home = homedir(),
+  home: string,
 ): Promise<KnowledgeListing[]> {
   const settings = await readSettings(home);
   const listing = settings?.knowledge !== false;
@@ -178,7 +177,7 @@ export async function knowledgeList(
  */
 export async function knowledgeGet(
   name: string,
-  home = homedir(),
+  home: string,
 ): Promise<KnowledgeDocument> {
   try {
     return await sharedDocument(name, home);

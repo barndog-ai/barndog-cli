@@ -1,5 +1,3 @@
-import { homedir } from "node:os";
-
 import { readSettings } from "../config/settings.js";
 import { CliError } from "../errors.js";
 import { readCredentials } from "../features/auth/credentials.js";
@@ -46,7 +44,7 @@ export type SetupMode = "local" | "git";
 
 /** The setup this machine runs on, when that setup limits what commands can do. */
 export async function currentSetupMode(
-  home = homedir(),
+  home: string,
 ): Promise<SetupMode | undefined> {
   const settings = await readSettings(home).catch(() => null);
   if (!settings || settings.connection) {
@@ -102,8 +100,8 @@ const why: Record<string, string> = {
 /** Stops commands the current setup can't run, before they prompt or reach a server. */
 export async function assertCommandAvailable(
   path: string[],
-  options: Record<string, unknown> = {},
-  home = homedir(),
+  options: Record<string, unknown>,
+  home: string,
 ): Promise<void> {
   const settings = await readSettings(home).catch(() => null);
   if (path.join(" ") === "logout" && !settings) {

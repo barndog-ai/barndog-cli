@@ -1,7 +1,6 @@
 import { HTTP_STATUS } from "../../shared/constants.js";
 
 import { randomUUID } from "node:crypto";
-import { homedir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { mkdir, readFile, realpath, rm } from "node:fs/promises";
 
@@ -86,7 +85,7 @@ export type WorkingFolderOptions = {
   /** The new folder; defaults to `./<name>`. */
   target?: string;
   cwd?: string;
-  home?: string;
+  home: string;
 };
 
 /**
@@ -96,7 +95,7 @@ export type WorkingFolderOptions = {
  */
 export async function pullCloudPackage(
   { name, origin, kind }: { name: string; origin: string; kind: PackageKind },
-  { target, cwd = process.cwd(), home = homedir() }: WorkingFolderOptions = {},
+  { target, cwd = process.cwd(), home }: WorkingFolderOptions,
 ): Promise<PulledPackage> {
   return locked(home, async () => {
     const conn = await connection(home);
@@ -153,7 +152,7 @@ export async function pullCloudPackage(
  */
 export async function workspaceStatus(
   cwd = process.cwd(),
-  home = homedir(),
+  home: string,
 ): Promise<CloudWorkingCopyStatus> {
   return locked(home, async () => {
     const work = await find(cwd, home);
@@ -192,7 +191,7 @@ export async function workspaceStatus(
  */
 export async function updateWorkspace(
   cwd = process.cwd(),
-  home = homedir(),
+  home: string,
 ): Promise<UpdatedCloudWorkingCopy> {
   return locked(home, async () => {
     const work = await find(cwd, home);
@@ -352,7 +351,7 @@ export async function updateWorkspace(
 export async function resolveConflict(
   path: string,
   cwd = process.cwd(),
-  home = homedir(),
+  home: string,
 ): Promise<ConflictResolution> {
   return locked(home, async () => {
     const work = await find(cwd, home);
@@ -467,7 +466,7 @@ export async function pushWorkspace(
     title?: string;
   } = {},
   cwd = process.cwd(),
-  home = homedir(),
+  home: string,
 ): Promise<CloudPushResult> {
   return locked(home, async () => {
     let work: Workspace;
@@ -721,7 +720,7 @@ export async function pushWorkspace(
  */
 export async function createWorkspace(
   { name, origin, kind }: { name: string; origin: string; kind: PackageKind },
-  { target, cwd = process.cwd(), home = homedir() }: WorkingFolderOptions = {},
+  { target, cwd = process.cwd(), home }: WorkingFolderOptions,
 ): Promise<CreatedPackage> {
   return locked(home, async () => {
     if (!NAME.test(name)) {

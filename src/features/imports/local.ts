@@ -1,5 +1,4 @@
 import { mkdir, readdir, rm } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
 
 import {
@@ -86,7 +85,7 @@ const writeSources = (folder: string, sources: Sources) =>
 export async function importedFrom(
   kind: "skill" | "hook",
   name: string,
-  home = homedir(),
+  home: string,
 ) {
   const settings = await readSettings(home);
   if (!settings || !settings.localWorkspace) {
@@ -171,7 +170,7 @@ export async function saveImported(
     root: string;
     files?: string[];
   },
-  home = homedir(),
+  home: string,
 ) {
   const relative = folderFor(input.kind, input.name);
   const workspace = await ensureLocalWorkspace(home);
@@ -292,7 +291,7 @@ export async function updateImported(
   kind: "skill" | "hook",
   name: string | undefined,
   options: { force?: boolean; dryRun?: boolean },
-  home = homedir(),
+  home: string,
 ): Promise<ImportUpdate[]> {
   const settings = await readSettings(home);
   if (!settings || !settings.localWorkspace) {

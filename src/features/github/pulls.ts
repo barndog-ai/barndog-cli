@@ -3,7 +3,6 @@
  * GitHub is authoritative for. Every call goes to the BarnDog server, never
  * to GitHub itself.
  */
-import { homedir } from "node:os";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -113,7 +112,7 @@ async function packageFiles(directory: string | undefined) {
 
 export async function githubPullsList(
   connectionId: string,
-  home = homedir(),
+  home: string,
 ): Promise<GitPull[]> {
   const conn = await connection(home);
 
@@ -129,7 +128,7 @@ export async function githubPullsList(
 export async function githubPullsShow(
   connectionId: string,
   number: number,
-  home = homedir(),
+  home: string,
 ): Promise<GitPullDetails> {
   const conn = await connection(home);
 
@@ -147,7 +146,7 @@ export async function githubPullsShow(
 /** Opens a pull request whose content is the complete package, not a patch. */
 export async function githubPullsCreate(
   options: GithubPullsCreateOptions,
-  home = homedir(),
+  home: string,
 ): Promise<GitPull> {
   const conn = await connection(home);
   const body = await bodyText(options);
@@ -171,7 +170,7 @@ export async function githubPullsCreate(
 /** Replaces an open pull request's content with the complete package. */
 export async function githubPullsRevise(
   options: GithubPullsReviseOptions,
-  home = homedir(),
+  home: string,
 ): Promise<GitPull> {
   const conn = await connection(home);
   const body = await bodyText(options);
@@ -201,7 +200,7 @@ export async function githubPullsRevise(
  */
 export async function githubPullsReview(
   options: GithubPullsReviewOptions,
-  home = homedir(),
+  home: string,
 ): Promise<GitPullDetails> {
   const conn = await connection(home);
   const body = await bodyText(options);
@@ -225,7 +224,7 @@ export async function githubPullsReview(
 /** A general comment, or an inline one when `path`, `line` and `side` are given. */
 export async function githubPullsComment(
   options: GithubPullsCommentOptions,
-  home = homedir(),
+  home: string,
 ): Promise<GitPullDetails> {
   const conn = await connection(home);
   const body = await bodyText(options);
@@ -251,7 +250,7 @@ export async function githubPullsComment(
 /** Returns the connection, now at the merged commit, rather than the pull request. */
 export async function githubPullsMerge(
   options: GithubPullsMergeOptions,
-  home = homedir(),
+  home: string,
 ): Promise<GitConnection> {
   const conn = await connection(home);
 

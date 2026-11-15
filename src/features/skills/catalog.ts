@@ -3,7 +3,6 @@ import {
   listOutputSchema,
   type Skill,
 } from "@barndog-ai/api-contract";
-import { homedir } from "node:os";
 import type { Connection } from "../../config/settings.js";
 import { apiClient } from "../auth/transport.js";
 import type { CatalogAsset } from "../asset-kinds/index.js";
@@ -17,7 +16,7 @@ import { allPages } from "../server/pages.js";
  */
 export async function publishedSkills(
   connection: Connection,
-  home = homedir(),
+  home: string,
 ): Promise<Skill[]> {
   const client = apiClient(connection.server, home);
   const context = contextSchema.parse((await client.GET("/v1/context")).data);

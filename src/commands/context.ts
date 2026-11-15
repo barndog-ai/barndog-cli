@@ -147,6 +147,8 @@ export type CommandContext = {
   searchCatalog: (kind: AssetKind) => Promise<CatalogAsset[]>;
   write: (message: string) => void;
   mode: Mode;
+  /** The home directory every command works in; resolved once in `createProgram()`. */
+  home: string;
 } & FeatureFunctions;
 
 /**

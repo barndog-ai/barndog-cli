@@ -1,6 +1,5 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { homedir } from "node:os";
 import { z } from "zod";
 import {
   normalizeRepositoryRemote,
@@ -67,7 +66,7 @@ export async function localRepository(cwd = process.cwd()) {
  * policy scopes; multiple matches remain ambiguous.
  */
 export async function repositoryContext(
-  home = homedir(),
+  home: string,
   cwd = process.cwd(),
   expected?: Connection,
 ) {

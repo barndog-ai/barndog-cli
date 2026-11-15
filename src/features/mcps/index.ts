@@ -1,6 +1,5 @@
 import { POSIX_MODE } from "../../shared/constants.js";
 import { readState } from "../../config/state.js";
-import { homedir } from "node:os";
 import { readFile, mkdir } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
@@ -63,7 +62,7 @@ async function readDefinition(file: string) {
 /** Publishes a new MCP configuration in a scope. */
 export async function createMcp(
   input: McpWriteInput,
-  home = homedir(),
+  home: string,
 ): Promise<McpServer> {
   const conn = await connection(home);
   const scope = await selectOrigin(input.origin, conn, home);
@@ -86,7 +85,7 @@ export async function createMcp(
 /** Publishes a new revision of an MCP configuration, against the inspected version. */
 export async function updateMcp(
   input: McpUpdateInput,
-  home = homedir(),
+  home: string,
 ): Promise<McpServer> {
   const conn = await connection(home);
   await selectOrigin(input.origin, conn, home);
@@ -110,7 +109,7 @@ export async function updateMcp(
 export async function showMcp(
   name: string,
   origin: string,
-  home = homedir(),
+  home: string,
 ): Promise<RepoAssetView | PublishedAsset> {
   const settings = await readSettings(home);
   const repo = settings && repoForOrigin(settings, home, origin);
@@ -126,7 +125,7 @@ export async function showMcp(
 export async function mcpVersions(
   name: string,
   origin: string,
-  home = homedir(),
+  home: string,
 ): Promise<PackageVersion[] | McpVersion[]> {
   const settings = await readSettings(home);
   if (settings?.gitWorkspace) {
@@ -155,7 +154,7 @@ export async function authenticateMcp(
   name: string,
   origin: string,
   harness: Harness,
-  home = homedir(),
+  home: string,
 ): Promise<McpAuthentication> {
   const settings = await readSettings(home);
   const repo = settings && repoForOrigin(settings, home, origin);

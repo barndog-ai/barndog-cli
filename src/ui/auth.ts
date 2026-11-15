@@ -1,5 +1,4 @@
 import open from "open";
-import { homedir } from "node:os";
 import {
   login,
   logout,
@@ -49,7 +48,7 @@ export async function runLogin(
   options: {
     server?: string;
     browser: boolean;
-    home?: string;
+    home: string;
     force?: boolean;
   },
   write: (message: string) => void,
@@ -141,8 +140,11 @@ export async function runLogin(
  * Revokes the current session and removes local credentials, reporting whether
  * remote revocation was confirmed.
  */
-export async function runLogout(write: (message: string) => void) {
-  const result = await logout();
+export async function runLogout(
+  write: (message: string) => void,
+  home: string,
+) {
+  const result = await logout(home);
   write(
     result.revoked
       ? `${ok("✔")} Signed out of ${result.server}.`
@@ -156,7 +158,7 @@ export async function runLogout(write: (message: string) => void) {
  */
 export async function showAuthStatus(
   output: Output,
-  home = homedir(),
+  home: string,
 ): Promise<void> {
   const { write } = output;
   let result: AuthStatus;

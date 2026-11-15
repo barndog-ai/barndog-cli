@@ -1,4 +1,3 @@
-import { homedir } from "node:os";
 import { normalizeRepositoryRemote } from "@barndog-ai/api-contract";
 import type { WorkspaceModel } from "../workspace/format.js";
 import { authStatus } from "../auth/session.js";
@@ -59,13 +58,13 @@ async function declaredRepository(
 }
 
 /** The workspace's web address: the server this machine is signed in to. */
-export async function workspaceUrl(home = homedir()): Promise<string> {
+export async function workspaceUrl(home: string): Promise<string> {
   return (await authStatus(home)).server;
 }
 
 /** How the Git repository in `cwd` maps to a BarnDog repository and its team. */
 export async function repoStatus(
-  home = homedir(),
+  home: string,
   cwd = process.cwd(),
 ): Promise<RepositoryStatus> {
   const settings = await readSettings(home);

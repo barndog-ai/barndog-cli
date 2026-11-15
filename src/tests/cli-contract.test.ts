@@ -686,9 +686,17 @@ test("Codex entries omit an empty header table", () => {
 });
 
 test("a missing path is reported as missing, not as something to clone", () => {
-  expect(() => assertSourceExists("/missing/path")).toThrow(/Can't find/);
-  expect(() => assertSourceExists("github.com/acme/skills")).not.toThrow();
-  expect(() => assertSourceExists("https://x.test/a.git")).not.toThrow();
+  expect(() => assertSourceExists("/missing/path", tmpdir())).toThrow(
+    /Can't find/,
+  );
+
+  expect(() =>
+    assertSourceExists("github.com/acme/skills", tmpdir()),
+  ).not.toThrow();
+
+  expect(() =>
+    assertSourceExists("https://x.test/a.git", tmpdir()),
+  ).not.toThrow();
 });
 
 test("cancelling first-time local setup leaves no folder behind", async (t) => {

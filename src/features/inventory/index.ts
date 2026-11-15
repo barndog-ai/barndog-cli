@@ -1,4 +1,3 @@
-import { homedir } from "node:os";
 import { basename } from "node:path";
 import { readSettings, SetupRequiredError } from "../../config/settings.js";
 import { selectionState } from "../../config/environment.js";
@@ -93,7 +92,7 @@ function leftoverState(modified: boolean, offline: boolean): InventoryState {
  * Compares configured selections, catalog and installed files to report status;
  * unreachable sources fall back to local state.
  */
-export async function inventory(home = homedir()): Promise<Inventory> {
+export async function inventory(home: string): Promise<Inventory> {
   const settings = await readSettings(home);
   if (!settings) {
     throw new SetupRequiredError();

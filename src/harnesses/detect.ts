@@ -1,12 +1,11 @@
 import { stat } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import which from "which";
 import { harnesses, adapters, type DetectedHarness } from "./registry.js";
 import { errorCode } from "../shared/values.js";
 
 type DetectionOptions = {
-  home?: string;
+  home: string;
   path?: string;
   platform?: NodeJS.Platform;
   appDirectories?: string[];
@@ -26,9 +25,9 @@ async function isDirectory(path: string): Promise<boolean> {
 
 /** Inspect installation evidence; never execute harnesses or infer installation from skill directories. */
 export async function detectHarnesses(
-  options: DetectionOptions = {},
+  options: DetectionOptions,
 ): Promise<DetectedHarness[]> {
-  const home = options.home ?? homedir();
+  const { home } = options;
   const platform = options.platform ?? process.platform;
   const path = options.path ?? process.env.PATH ?? "";
 

@@ -1,6 +1,5 @@
 import { MAX_ASSET_NAME_LENGTH } from "../shared/constants.js";
 
-import { homedir } from "node:os";
 import { isAbsolute } from "node:path";
 import { parse, stringify } from "yaml";
 import { z } from "zod";
@@ -152,7 +151,7 @@ function validate(value: unknown): Settings {
  * null, malformed settings throw.
  */
 export async function readSettings(
-  home = homedir(),
+  home: string,
   path = barndogPaths(home).settings,
 ): Promise<Settings | null> {
   const text = await readIfExists(path);
@@ -184,7 +183,7 @@ export function settingsText(settings: Settings): string {
  */
 export async function saveSettings(
   settings: Settings,
-  home = homedir(),
+  home: string,
 ): Promise<void> {
   const text = settingsText(settings);
   const path = barndogPaths(home).settings;

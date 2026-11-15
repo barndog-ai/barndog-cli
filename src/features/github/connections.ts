@@ -3,7 +3,6 @@
  * importing, mirroring and syncing. Every call goes to the BarnDog server,
  * never to GitHub itself.
  */
-import { homedir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import {
@@ -107,7 +106,7 @@ function repositoryTarget(options: GithubRepositoryOptions) {
   };
 }
 
-export async function githubList(home = homedir()): Promise<GitConnection[]> {
+export async function githubList(home: string): Promise<GitConnection[]> {
   const conn = await connection(home);
 
   return parsed(
@@ -119,7 +118,7 @@ export async function githubList(home = homedir()): Promise<GitConnection[]> {
 /** Connects a published Skill or Hook to an existing GitHub repository. */
 export async function githubConnect(
   options: GithubConnectOptions,
-  home = homedir(),
+  home: string,
 ): Promise<GitConnection> {
   const conn = await connection(home);
   const target = repositoryTarget(options);
@@ -146,7 +145,7 @@ export async function githubConnect(
 /** Creates a Skill or Hook from a GitHub repository, which stays authoritative. */
 export async function githubImport(
   options: GithubRepositoryOptions,
-  home = homedir(),
+  home: string,
 ): Promise<GitConnection> {
   const conn = await connection(home);
   const target = repositoryTarget(options);
@@ -166,7 +165,7 @@ export async function githubImport(
 /** Copies a GitHub repository into a BarnDog-owned asset with no connection left behind. */
 export async function githubImportCopy(
   options: GithubImportCopyOptions,
-  home = homedir(),
+  home: string,
 ): Promise<GitCopyImportResult> {
   const conn = await connection(home);
   const target = repositoryTarget(options);
@@ -189,7 +188,7 @@ export async function githubImportCopy(
 /** Creates a GitHub repository for a published asset and exports its history. */
 export async function githubCreateRepository(
   options: GithubCreateRepositoryOptions,
-  home = homedir(),
+  home: string,
 ): Promise<GitConnection> {
   const conn = await connection(home);
   const target = repositoryTarget(options);
@@ -219,7 +218,7 @@ export async function githubCreateRepository(
 
 export async function githubShow(
   connectionId: string,
-  home = homedir(),
+  home: string,
 ): Promise<GitConnection> {
   const conn = await connection(home);
 
@@ -234,7 +233,7 @@ export async function githubShow(
 /** Syncs now instead of waiting for the server's next scheduled sync. */
 export async function githubSync(
   connectionId: string,
-  home = homedir(),
+  home: string,
 ): Promise<GitConnection> {
   const conn = await connection(home);
 
@@ -249,7 +248,7 @@ export async function githubSync(
 /** The repository's main commit as GitHub reports it now, not as last synced. */
 export async function githubRemoteHead(
   connectionId: string,
-  home = homedir(),
+  home: string,
 ): Promise<GitRemoteHead> {
   const conn = await connection(home);
 
@@ -264,7 +263,7 @@ export async function githubRemoteHead(
 /** Settles a mirror that diverged from BarnDog; refused if either side moved since it was inspected. */
 export async function githubResolveMirror(
   options: GithubResolveMirrorOptions,
-  home = homedir(),
+  home: string,
 ): Promise<MirrorResolved> {
   const conn = await connection(home);
   const body = gitMirrorResolutionSchema.parse({

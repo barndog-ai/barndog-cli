@@ -2,7 +2,6 @@ import { HTTP_STATUS } from "../shared/constants.js";
 
 import { LoginRequiredError } from "../features/auth/transport.js";
 import { styleText } from "node:util";
-import { homedir } from "node:os";
 import { basename, relative, sep } from "node:path";
 import { isInside } from "../shared/files.js";
 import { SetupRequiredError } from "../config/settings.js";
@@ -29,8 +28,7 @@ import { assetKinds } from "../features/asset-kinds/index.js";
  * Abbreviates paths inside the current user's home with ~, preserving platform
  * separators.
  */
-export function displayPath(path: string): string {
-  const home = homedir();
+export function displayPath(path: string, home: string): string {
   if (!isInside(home, path)) {
     return path;
   }

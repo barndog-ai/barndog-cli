@@ -1,4 +1,3 @@
-import { homedir } from "node:os";
 import { contextSchema } from "@barndog-ai/api-contract";
 
 import { readSettings, type Connection } from "../../config/settings.js";
@@ -11,7 +10,7 @@ import { apiClient } from "../auth/transport.js";
  * require a particular connection, such as the one a working copy was made
  * with. Fails with a fix in a Git or local workspace, which has no server.
  */
-export async function connection(home = homedir(), expected?: Connection) {
+export async function connection(home: string, expected?: Connection) {
   const settings = await readSettings(home);
   if (
     settings &&

@@ -1,7 +1,6 @@
 import { HTTP_STATUS } from "../../shared/constants.js";
 
 import { createApiClient } from "@barndog-ai/api-contract";
-import { homedir } from "node:os";
 import { readCredentials } from "./credentials.js";
 import { CliError } from "../../errors.js";
 
@@ -68,7 +67,7 @@ export function normalizeServer(value: string) {
  */
 export function serverFetch(
   server: string,
-  home = homedir(),
+  home: string,
   authenticated = true,
 ): typeof fetch {
   const origin = normalizeServer(server);
@@ -123,7 +122,7 @@ export type ApiClient = ReturnType<typeof createApiClient>;
  * A typed client for the BarnDog API that sends the saved credential for
  * `server`, refusing redirects and requests to other origins.
  */
-export function apiClient(server: string, home = homedir()): ApiClient {
+export function apiClient(server: string, home: string): ApiClient {
   return createApiClient({
     baseUrl: normalizeServer(server),
     fetch: serverFetch(server, home),

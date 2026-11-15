@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { homedir } from "node:os";
 import { CommanderError, InvalidArgumentError } from "commander";
 import {
   assertCommandAvailable,
@@ -15,9 +16,12 @@ const end = words.indexOf("--");
 const asJson = (end < 0 ? words : words.slice(0, end)).includes("--json");
 
 try {
+  const home = homedir();
+
   await createProgram({
-    guard: assertCommandAvailable,
-    setupMode: await currentSetupMode(),
+    home,
+    guard: (path, options) => assertCommandAvailable(path, options, home),
+    setupMode: await currentSetupMode(home),
     ...(asJson ? { writeError: () => undefined } : {}),
   }).parseAsync(process.argv);
 } catch (error) {

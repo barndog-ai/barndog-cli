@@ -1,4 +1,3 @@
-import { homedir } from "node:os";
 import { type Skill } from "@barndog-ai/api-contract";
 import { publishedSkills } from "../skills/catalog.js";
 import { publishedHooks } from "../hooks/catalog.js";
@@ -23,7 +22,7 @@ export async function selectPackage(
     kind,
   }: { name: string; selector: string; kind: PackageKind },
   conn: Connection,
-  home = homedir(),
+  home: string,
 ) {
   const values = await packageCatalogs[kind](conn, home);
   const matches = values.filter(
@@ -38,13 +37,13 @@ export async function selectPackage(
   return match;
 }
 
-type DownloadOptions = { home?: string; kind: PackageKind };
+type DownloadOptions = { home: string; kind: PackageKind };
 
 /** The package of one published version, checked against that version's commit. */
 export function downloadVersion(
   version: { id: string; number: number; commit: string },
   conn: Connection,
-  { home = homedir(), kind }: DownloadOptions,
+  { home, kind }: DownloadOptions,
 ) {
   return unpackDownload(
     packageApi(kind, conn, home).versionPackage(version.id, version.number),
@@ -56,7 +55,7 @@ export function downloadVersion(
 export function downloadChange(
   change: { id: string; revision: number; commit: string },
   conn: Connection,
-  { home = homedir(), kind }: DownloadOptions,
+  { home, kind }: DownloadOptions,
 ) {
   return unpackDownload(
     packageApi(kind, conn, home).changePackage(change.id, change.revision),
@@ -68,7 +67,7 @@ export function downloadChange(
 export function downloadPull(
   pull: { connectionId: string; number: number; head: string },
   conn: Connection,
-  { home = homedir(), kind }: DownloadOptions,
+  { home, kind }: DownloadOptions,
 ) {
   return unpackDownload(
     apiClient(conn.server, home).GET(
@@ -85,7 +84,7 @@ export function downloadPull(
 export function getChange(
   id: string,
   conn: Connection,
-  home = homedir(),
+  home: string,
   kind: PackageKind,
 ): Promise<PackageChange> {
   return packageApi(kind, conn, home).change(id);

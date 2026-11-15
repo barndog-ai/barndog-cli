@@ -94,7 +94,7 @@ const stateLabel: Record<ListedAsset["state"], string> = {
 /** One table of what is selected and installed, with an optional path listing. */
 export function renderInventory(
   items: readonly ListedAsset[],
-  options: { paths?: boolean; heading?: string } = {},
+  options: { paths?: boolean; heading?: string; home: string },
 ): string[] {
   const output: string[] = [];
   if (options.heading) {
@@ -131,7 +131,7 @@ export function renderInventory(
       );
 
       for (const path of item.paths) {
-        output.push(dim(`    ${displayPath(path)}`));
+        output.push(dim(`    ${displayPath(path, options.home)}`));
       }
     }
   }

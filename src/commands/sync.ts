@@ -27,8 +27,13 @@ export function registerSync(program: Command, context: CommandContext): void {
       }) => {
         // Runs detached at session start: nobody is watching, so it never reports.
         if (options.auto) {
-          await autoSync(() =>
-            context.synchronize(undefined, { refresh: "auto", prompt: false }),
+          await autoSync(
+            () =>
+              context.synchronize(undefined, {
+                refresh: "auto",
+                prompt: false,
+              }),
+            context.home,
           ).catch(() => undefined);
 
           return;

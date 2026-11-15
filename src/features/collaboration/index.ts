@@ -1,6 +1,5 @@
 import { synchronize } from "../environment/sync.js";
 import { readFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { z } from "zod";
 import type { FileDiff } from "@barndog-ai/api-contract/collaboration";
 import { packageApi } from "./api.js";
@@ -229,7 +228,7 @@ async function cloudConnection(home: string, origin?: string) {
 export async function createPackage(
   target: WorkingCopyTarget,
   cwd = process.cwd(),
-  home = homedir(),
+  home: string,
 ): Promise<CreatedPackage> {
   const where = await backend(home, target.origin);
   if (where.type === "local") {
@@ -258,7 +257,7 @@ export async function createPackage(
 export async function pullPackage(
   target: WorkingCopyTarget,
   cwd = process.cwd(),
-  home = homedir(),
+  home: string,
 ): Promise<PulledPackage> {
   const where = await backend(home, target.origin);
   if (where.type === "local") {
@@ -286,7 +285,7 @@ export async function pullPackage(
  */
 export async function updateWorkingCopy(
   cwd = process.cwd(),
-  home = homedir(),
+  home: string,
 ): Promise<UpdatedWorkingCopy> {
   const where = await backend(home);
   if (where.type === "local") {
@@ -304,7 +303,7 @@ export async function updateWorkingCopy(
  */
 export async function workingStatus(
   cwd = process.cwd(),
-  home = homedir(),
+  home: string,
 ): Promise<WorkingCopyStatus | EnvironmentStatus> {
   const where = await backend(home);
   if (where.type === "local") {
@@ -330,7 +329,7 @@ export async function workingStatus(
  */
 export async function workingDiff(
   cwd = process.cwd(),
-  home = homedir(),
+  home: string,
 ): Promise<FileDiff[] | EnvironmentPreview> {
   const status = await workingStatus(cwd, home);
   if ("changes" in status) {
@@ -350,7 +349,7 @@ export async function workingDiff(
 export async function pushWorkingCopy(
   options: PushOptions,
   cwd = process.cwd(),
-  home = homedir(),
+  home: string,
 ): Promise<PushResult> {
   const where = await backend(home, options.origin);
   if (where.type === "local") {
@@ -369,7 +368,7 @@ export async function pushWorkingCopy(
 export async function resolveFile(
   path: string,
   cwd = process.cwd(),
-  home = homedir(),
+  home: string,
 ): Promise<ConflictResolution> {
   const where = await backend(home);
   if (where.type === "local") {
@@ -407,7 +406,7 @@ async function publishedPackage(target: PackageTarget, home: string) {
 /** Newest last. */
 export async function packageVersions(
   target: PackageTarget,
-  home = homedir(),
+  home: string,
 ): Promise<PackageVersion[]> {
   const where = await publishedPackage(target, home);
   if (where.type === "git") {
@@ -431,7 +430,7 @@ export async function packageVersions(
  */
 export async function versionFiles(
   target: VersionTarget,
-  home = homedir(),
+  home: string,
 ): Promise<VersionFiles> {
   const where = await publishedPackage(target, home);
   if (where.type === "git") {
@@ -446,7 +445,7 @@ export async function versionFiles(
 
 export async function diffVersions(
   target: VersionRange,
-  home = homedir(),
+  home: string,
 ): Promise<FileDiff[]> {
   const where = await publishedPackage(target, home);
   if (where.type === "git") {
@@ -465,7 +464,7 @@ export async function diffVersions(
  */
 export async function listChanges(
   { kind }: ChangeListOptions,
-  home = homedir(),
+  home: string,
 ): Promise<PackageChange[]> {
   const api = packageApi(kind, await cloudConnection(home), home);
 
@@ -478,7 +477,7 @@ export async function listChanges(
  */
 export async function showChange(
   target: ChangeTarget,
-  home = homedir(),
+  home: string,
 ): Promise<ChangeDetails> {
   const conn = await cloudConnection(home);
   const id = z.uuid().parse(target.id);
@@ -517,7 +516,7 @@ export async function showChange(
  */
 export async function changeDiff(
   target: ChangeDiffTarget,
-  home = homedir(),
+  home: string,
 ): Promise<FileDiff[]> {
   const api = packageApi(target.kind, await cloudConnection(home), home);
 
@@ -544,7 +543,7 @@ async function changeAtRevision(target: ChangeRevision, home: string) {
 export async function reviewChange(
   decision: ReviewDecision,
   target: ChangeRevision,
-  home = homedir(),
+  home: string,
 ): Promise<PackageChange> {
   const { api, id, body } = await changeAtRevision(target, home);
 
@@ -560,7 +559,7 @@ export async function reviewChange(
  */
 export async function rejectChange(
   target: ChangeRevision,
-  home = homedir(),
+  home: string,
 ): Promise<PackageChange> {
   const { api, id, body } = await changeAtRevision(target, home);
 
@@ -573,7 +572,7 @@ export async function rejectChange(
  */
 export async function mergeChange(
   target: ChangeRevision,
-  home = homedir(),
+  home: string,
 ): Promise<PackageChange> {
   const { api, id, body } = await changeAtRevision(target, home);
 
@@ -587,7 +586,7 @@ export async function mergeChange(
  */
 export async function commentOnChange(
   options: CommentOptions,
-  home = homedir(),
+  home: string,
 ): Promise<PackageChange> {
   const { api, id, body } = await changeAtRevision(options, home);
   const text = options.bodyFile
@@ -631,7 +630,7 @@ export async function commentOnChange(
 /** Creates a new revision; the author runs `barndog pull` to receive it. */
 export async function applySuggestion(
   target: ThreadRevision,
-  home = homedir(),
+  home: string,
 ): Promise<PackageChange> {
   const { api, id, body } = await changeAtRevision(target, home);
 
@@ -640,7 +639,7 @@ export async function applySuggestion(
 
 export async function setDiscussionResolved(
   target: ThreadResolution,
-  home = homedir(),
+  home: string,
 ): Promise<PackageChange> {
   const { api, id, body } = await changeAtRevision(target, home);
 

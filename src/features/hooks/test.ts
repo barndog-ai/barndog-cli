@@ -1,7 +1,6 @@
 import { MILLISECONDS_PER_SECOND } from "../../shared/constants.js";
 
 import { readFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { parse } from "yaml";
@@ -66,10 +65,7 @@ export async function testHook(
   name: string,
   origin: string,
   options: HookTestOptions,
-  {
-    home = homedir(),
-    cwd = process.cwd(),
-  }: { home?: string; cwd?: string } = {},
+  { home, cwd = process.cwd() }: { home: string; cwd?: string },
 ): Promise<HookTestResult> {
   if (process.platform === "win32") {
     throw new CliError(

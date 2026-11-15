@@ -40,7 +40,6 @@ import { renderSyncOutput } from "./output.js";
 import checkbox from "@inquirer/checkbox";
 import confirm from "@inquirer/confirm";
 import { existsSync, rmSync } from "node:fs";
-import { homedir } from "node:os";
 import { basename } from "node:path";
 import { styleText } from "node:util";
 import type { DetectedHarness, Harness } from "../harnesses/registry.js";
@@ -129,32 +128,30 @@ async function chooseSource(
  * Runs setup prompts and connection preparation, saves settings and applies the
  * chosen environment when confirmed.
  */
-export async function runSetup(
-  options: {
-    restart?: boolean;
-    server?: string;
-    local?: boolean;
-    repo?: string;
-    browser?: boolean;
-    chooseConnection?: (current?: SetupChoice) => Promise<SetupChoice>;
-    confirmCreateRepo?: (url: string) => Promise<boolean>;
-    confirmClone?: (url: string) => Promise<boolean>;
-    chooseLocalAssets?: (count: number) => Promise<LocalAssetChoice>;
-    chooseMoveTarget?: (
-      targets: { value: string; name: string }[],
-    ) => Promise<string>;
-    confirmApply?: (settings: Settings) => Promise<boolean>;
-    home?: string;
-    interactive?: boolean;
-    write?: (message: string) => void;
-    confirmRestart?: () => Promise<boolean>;
-    choose?: ChooseHarnesses;
-    chooseEnvironment?: ChooseEnvironment;
-    cwd?: string;
-    detected?: DetectedHarness[];
-  } = {},
-): Promise<void> {
-  const home = options.home ?? homedir();
+export async function runSetup(options: {
+  restart?: boolean;
+  server?: string;
+  local?: boolean;
+  repo?: string;
+  browser?: boolean;
+  chooseConnection?: (current?: SetupChoice) => Promise<SetupChoice>;
+  confirmCreateRepo?: (url: string) => Promise<boolean>;
+  confirmClone?: (url: string) => Promise<boolean>;
+  chooseLocalAssets?: (count: number) => Promise<LocalAssetChoice>;
+  chooseMoveTarget?: (
+    targets: { value: string; name: string }[],
+  ) => Promise<string>;
+  confirmApply?: (settings: Settings) => Promise<boolean>;
+  home: string;
+  interactive?: boolean;
+  write?: (message: string) => void;
+  confirmRestart?: () => Promise<boolean>;
+  choose?: ChooseHarnesses;
+  chooseEnvironment?: ChooseEnvironment;
+  cwd?: string;
+  detected?: DetectedHarness[];
+}): Promise<void> {
+  const { home } = options;
   const write = options.write ?? console.log;
   const previous = await readSettings(home);
   if (previous) {

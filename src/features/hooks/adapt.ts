@@ -1,4 +1,3 @@
-import { homedir } from "node:os";
 import { join } from "node:path";
 
 import {
@@ -134,8 +133,8 @@ export type Adaptation = {
 export async function adaptHook(
   name: string,
   origin: string,
-  targets?: readonly Harness[],
-  home = homedir(),
+  targets: readonly Harness[] | undefined,
+  home: string,
 ): Promise<Adaptation> {
   const hook = await resolveHook(name, origin, home);
   const written = harnesses.filter((h) => hook.implementations[h]);
