@@ -16,10 +16,10 @@ export default defineConfig({
       // gaps are filled. Code run only by the built CLI in child processes
       // (such as src/cli.ts) isn't counted.
       thresholds: {
-        statements: 69,
-        branches: 61,
-        functions: 71,
-        lines: 68,
+        statements: 82,
+        branches: 72,
+        functions: 85,
+        lines: 82,
       },
     },
   },
