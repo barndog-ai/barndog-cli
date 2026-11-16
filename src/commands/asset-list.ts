@@ -109,7 +109,7 @@ export function registerList(
 
       for (const line of renderInventory(page, {
         ...options,
-        home: context.home,
+        runtime: context.runtime,
       })) {
         context.write(line);
       }

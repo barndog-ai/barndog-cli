@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../../runtime.js";
 import {
   mcpSchema,
   knowledgeDocumentSchema,
@@ -70,9 +71,9 @@ export async function publishPackage(
   asset: PublishableAsset & { kind: PackageKind },
   scope: ApiScope,
   conn: Connection,
-  home: string,
+  runtime: RuntimeContext,
 ) {
-  const api = packageApi(asset.kind, conn, home);
+  const api = packageApi(asset.kind, conn, runtime);
   const files = encodeFiles(asset.entries);
   const metadata: PackageUpload = {
     name: asset.name,
@@ -83,7 +84,7 @@ export async function publishPackage(
     idempotencyKey: `migrate-${asset.id}-${asset.publishedVersion}-${scope.id}-${asset.name}`,
   };
 
-  const change = await api.submit(metadata, await archive(files, home));
+  const change = await api.submit(metadata, await archive(files, runtime));
 
   await api.merge(change.id, { expectedRevision: change.submittedRevision });
 }
@@ -96,11 +97,11 @@ export const publishMcp = (
   asset: PublishableAsset,
   scope: ApiScope,
   conn: Connection,
-  home: string,
-) =>
-  parsed(
+  runtime: RuntimeContext,
+) => {
+  return parsed(
     mcpSchema,
-    apiClient(conn.server, home).POST("/v1/mcps", {
+    apiClient(conn.server, runtime).POST("/v1/mcps", {
       body: {
         name: asset.name,
         origin: { type: scope.type, id: scope.id },
@@ -112,15 +113,16 @@ export const publishMcp = (
       },
     }),
   );
+};
 
 export const publishKnowledge = (
   doc: Pick<RepoKnowledge, "id" | "version" | "content">,
   conn: Connection,
-  home: string,
-) =>
-  parsed(
+  runtime: RuntimeContext,
+) => {
+  return parsed(
     knowledgeDocumentSchema,
-    apiClient(conn.server, home).POST("/v1/knowledge/publish", {
+    apiClient(conn.server, runtime).POST("/v1/knowledge/publish", {
       body: {
         baseVersionId: null,
         content: doc.content,
@@ -128,6 +130,7 @@ export const publishKnowledge = (
       },
     }),
   );
+};
 
 /** Carries each choice over by scope and name, because cloud assigns new IDs. */
 function translateSelection(
@@ -226,15 +229,17 @@ export type MigrationReport = {
  */
 export async function migrate(
   options: MigrateOptions,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<MigrationReport> {
-  return locked(home, async () => {
+  const { home } = runtime;
+
+  return locked(runtime, async () => {
     const settings = await readSettings(home);
     if (!settings) {
       throw new SetupRequiredError();
     }
 
-    const source = openRepoSource(settings, home);
+    const source = openRepoSource(settings, runtime);
     if (
       !settings.gitWorkspace &&
       settings.localWorkspace &&
@@ -252,18 +257,18 @@ export async function migrate(
       );
     }
 
-    const overlay = localOverlay(settings, home);
+    const overlay = localOverlay(settings, runtime);
     const kept = overlay ? await overlay.model() : undefined;
     const model = await source.model();
     const server = normalizeServer(options.server);
-    const conn = await connectionContext(server, home);
-    const cloudScopes = await scopes(conn, home);
+    const conn = await connectionContext(server, runtime);
+    const cloudScopes = await scopes(conn, runtime);
 
-    const { catalog: existing } = await environmentCatalog(home, conn);
+    const { catalog: existing } = await environmentCatalog(runtime, conn);
     const existingDocs = (
       await parsed(
         knowledgeIndexSchema,
-        apiClient(conn.server, home).GET("/v1/knowledge", {
+        apiClient(conn.server, runtime).GET("/v1/knowledge", {
           params: { query: { limit: PAGE_SIZE } },
         }),
       )
@@ -307,12 +312,12 @@ export async function migrate(
         rows.push({ ...base, action: "publish" });
         pending.push(() =>
           asset.kind === "mcp"
-            ? publishMcp(asset, pair.cloud, conn, home)
+            ? publishMcp(asset, pair.cloud, conn, runtime)
             : publishPackage(
                 { ...asset, kind: asset.kind },
                 pair.cloud,
                 conn,
-                home,
+                runtime,
               ),
         );
       }
@@ -324,7 +329,7 @@ export async function migrate(
         rows.push({ ...base, action: "exists" });
       } else {
         rows.push({ ...base, action: "publish" });
-        pending.push(() => publishKnowledge(doc, conn, home));
+        pending.push(() => publishKnowledge(doc, conn, runtime));
       }
     }
 
@@ -347,7 +352,7 @@ export async function migrate(
       await publish();
     }
 
-    const { catalog } = await environmentCatalog(home, conn);
+    const { catalog } = await environmentCatalog(runtime, conn);
     const next = withSelection(
       {
         ...settings,
@@ -369,7 +374,7 @@ export async function migrate(
     delete next.gitWorkspace;
     delete next.localNames;
     await saveSettings(next, home);
-    await synchronize(undefined, home, next, { catalog });
+    await synchronize(undefined, runtime, next, { catalog });
 
     return { server, dryRun: false, rows, migrated: true };
   });

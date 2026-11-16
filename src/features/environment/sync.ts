@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../../runtime.js";
 import { basename, dirname, resolve } from "node:path";
 import { readState } from "../../config/state.js";
 import {
@@ -36,7 +37,9 @@ import type { AssetCatalog } from "../asset-selection/types.js";
 import { barndogPaths } from "../../config/paths.js";
 
 /** Looks up installed names from state, for checks made outside a sync. */
-export async function installedNames(home: string) {
+export async function installedNames(runtime: RuntimeContext) {
+  const { home } = runtime;
+
   const { links, native } = await readState(home);
 
   return (id: string) => heldName(id, links, native);
@@ -67,20 +70,25 @@ export const clashPrompt: { resolver?: ClashResolver } = {};
  */
 export async function synchronize(
   configPath: string | undefined,
-  home: string,
+  runtime: RuntimeContext,
   override?: Settings,
   options: SyncOptions = {},
 ): Promise<SyncEvent[]> {
-  home = resolve(home);
+  runtime = { ...runtime, home: resolve(runtime.cwd, runtime.home) };
+  const { home } = runtime;
 
-  return locked(home, async () => {
-    const path = resolve(configPath ?? barndogPaths(home).settings);
+  return locked(runtime, async () => {
+    const path = resolve(
+      runtime.cwd,
+      configPath ?? barndogPaths(home).settings,
+    );
+
     const settings = override ?? (await readSettings(home, path));
     if (!settings) {
       throw new SetupRequiredError();
     }
 
-    assertSupportedConfigHomes(settings.harnesses, home);
+    assertSupportedConfigHomes(settings.harnesses, runtime);
 
     const stateFile = barndogPaths(home).state;
     const rawState = await fileText(stateFile);
@@ -94,12 +102,13 @@ export async function synchronize(
         ? await followImports(
             settings.localWorkspace.path,
             options.refresh ?? "always",
+            runtime,
           ).catch(() => [])
         : [];
 
     const source =
       options.source ??
-      openWorkspaceSource(settings, home, {
+      openWorkspaceSource(settings, runtime, {
         refresh: options.refresh,
       });
 
@@ -117,7 +126,7 @@ export async function synchronize(
       ? (options.catalog ?? (await source.catalog()))
       : { assets: [], distributions: [] };
 
-    const overlay = localOverlay(settings, home);
+    const overlay = localOverlay(settings, runtime);
     if (overlay) {
       selection = await adoptMoved(
         overlay,
@@ -151,16 +160,19 @@ export async function synchronize(
       message,
     }));
 
-    const settled = await settleNames({
-      assets: effective.assets,
-      invalid,
-      state: before,
-      savedNames: settings.localNames ?? {},
-      resolver:
-        options.prompt === false || options.dryRun
-          ? undefined
-          : (options.resolveClash ?? clashPrompt.resolver),
-    });
+    const settled = await settleNames(
+      {
+        assets: effective.assets,
+        invalid,
+        state: before,
+        savedNames: settings.localNames ?? {},
+        resolver:
+          options.prompt === false || options.dryRun
+            ? undefined
+            : (options.resolveClash ?? clashPrompt.resolver),
+      },
+      runtime,
+    );
 
     const { vanished, localNames, skipped } = settled;
     events.push(...settled.events);
@@ -185,12 +197,12 @@ export async function synchronize(
       state: before,
       source,
       harnesses: settings.harnesses,
-      home,
+      runtime,
     });
 
     const { links: desired, native, trees } = staged;
     events.push(...staged.events);
-    native.push(...startupEntries(settings, home, { knowledge: !!source }));
+    native.push(...startupEntries(settings, runtime, { knowledge: !!source }));
 
     const nativeName = entryNames([
       ...installedState.map((t) => [t.id, basename(t.path)] as const),
@@ -199,8 +211,8 @@ export async function synchronize(
       ...effective.assets.map((e) => [e.asset.id, e.asset.name] as const),
     ]);
 
-    await assertInstalledUntouched(installedState, settings);
-    const installedFolders = await treeWrites(installedState, trees);
+    await assertInstalledUntouched(installedState, settings, runtime);
+    const installedFolders = await treeWrites(installedState, trees, runtime);
     const links = await linkWrites(
       before.links,
       desired,
@@ -250,13 +262,13 @@ export async function synchronize(
       return events;
     }
 
-    await transact(home, writes, source?.journal, options.checkpoint);
+    await transact(runtime, writes, source?.journal, options.checkpoint);
     // Only versions the installed folders were just filled from are worth keeping.
     if (source) {
       for (const key of [source.cacheKey, ...(source.extraCacheKeys ?? [])]) {
         await pruneCache(
           key,
-          home,
+          runtime,
           new Set(trees.map((tree) => dirname(tree.source))),
         ).catch(() => 0);
       }

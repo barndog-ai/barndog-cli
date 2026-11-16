@@ -1,14 +1,14 @@
+import { writePackage, readDirectory } from "../workspace/directory.js";
+import type { RuntimeContext } from "../../runtime.js";
 import { mkdir, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 
 import {
   packageFingerprint,
-  writePackage,
   type PackageEntry,
 } from "@barndog-ai/api-contract/package";
 import {
   diffEntries,
-  readDirectory,
   type FileDiff,
 } from "@barndog-ai/api-contract/collaboration";
 
@@ -85,8 +85,10 @@ const writeSources = (folder: string, sources: Sources) =>
 export async function importedFrom(
   kind: "skill" | "hook",
   name: string,
-  home: string,
+  runtime: RuntimeContext,
 ) {
+  const { home } = runtime;
+
   const settings = await readSettings(home);
   if (!settings || !settings.localWorkspace) {
     return null;
@@ -99,8 +101,10 @@ export async function importedFrom(
 
 /** Adding always lands in the local folder, creating it on first use. */
 export async function ensureLocalWorkspace(
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<LocalWorkspace> {
+  const { home } = runtime;
+
   const settings = await readSettings(home);
   if (!settings) {
     throw new SetupRequiredError();
@@ -110,8 +114,8 @@ export async function ensureLocalWorkspace(
     return settings.localWorkspace;
   }
 
-  const workspace = await localWorkspace(home);
-  const kept = await localRepoSource(workspace, home).model();
+  const workspace = await localWorkspace(runtime);
+  const kept = await localRepoSource(workspace, runtime).model();
   const next: Settings = {
     ...settings,
     localWorkspace: workspace,
@@ -170,15 +174,17 @@ export async function saveImported(
     root: string;
     files?: string[];
   },
-  home: string,
+  runtime: RuntimeContext,
 ) {
   const relative = folderFor(input.kind, input.name);
-  const workspace = await ensureLocalWorkspace(home);
+  const workspace = await ensureLocalWorkspace(runtime);
   const target = join(workspace.path, relative);
   await assertFree(target, input.kind, input.name);
   await mkdir(target, { recursive: true });
   await rm(target, { recursive: true, force: true });
-  await writePackage(target, input.entries);
+  await writePackage(target, input.entries, runtime);
+  // Read back, so Windows (no executable bits) records what an update will see.
+  const fingerprint = packageFingerprint(await readDirectory(target, runtime));
   if (input.mode !== "fork") {
     const sources = await readSources(workspace.path);
     sources.imports = sources.imports.filter(
@@ -194,7 +200,7 @@ export async function saveImported(
       root: input.root,
       commit: input.remote.commit,
       ...(input.files ? { files: input.files } : {}),
-      fingerprint: packageFingerprint(input.entries),
+      fingerprint,
     });
 
     await writeSources(workspace.path, sources);
@@ -256,10 +262,16 @@ async function applyUpdate(
   folder: string,
   sources: Sources,
   record: ImportRecord,
-  options: { force?: boolean; dryRun?: boolean; allowPrompt: boolean },
+  options: {
+    force?: boolean;
+    dryRun?: boolean;
+    allowPrompt: boolean;
+    runtime: RuntimeContext;
+  },
 ): Promise<ImportUpdate> {
+  const { runtime } = options;
   const target = join(folder, folderFor(record.kind, record.name));
-  const current = await readDirectory(target);
+  const current = await readDirectory(target, runtime);
   if (packageFingerprint(current) !== record.fingerprint && !options.force) {
     throw new CliError(
       `${record.name} was edited locally, so updating would lose those edits.`,
@@ -275,14 +287,18 @@ async function applyUpdate(
       const changes = await diffEntries(current, next);
       if (changes.length && !options.dryRun) {
         await rm(target, { recursive: true, force: true });
-        await writePackage(target, next);
+        await writePackage(target, next, runtime);
         record.commit = remote.commit;
-        record.fingerprint = packageFingerprint(next);
+        record.fingerprint = packageFingerprint(
+          await readDirectory(target, runtime),
+        );
+
         await writeSources(folder, sources);
       }
 
       return { name: record.name, commit: remote.commit, changes };
     },
+    runtime,
   );
 }
 
@@ -291,8 +307,10 @@ export async function updateImported(
   kind: "skill" | "hook",
   name: string | undefined,
   options: { force?: boolean; dryRun?: boolean },
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<ImportUpdate[]> {
+  const { home } = runtime;
+
   const settings = await readSettings(home);
   if (!settings || !settings.localWorkspace) {
     throw new CliError("This machine has no assets added from a repo.");
@@ -314,8 +332,11 @@ export async function updateImported(
   for (const record of records) {
     results.push(
       await applyUpdate(folder, sources, record, {
-        ...options,
-        allowPrompt: true,
+        ...{
+          ...options,
+          allowPrompt: true,
+        },
+        runtime,
       }),
     );
   }
@@ -330,6 +351,7 @@ const FOLLOW_INTERVAL_MS = 300000;
 export async function followImports(
   folder: string,
   policy: "always" | "auto" | "none",
+  runtime: RuntimeContext,
 ) {
   const sources = await readSources(folder);
   const followed = sources.imports.filter((entry) => entry.mode === "auto");
@@ -347,13 +369,14 @@ export async function followImports(
   }
 
   for (const record of followed) {
-    await applyUpdate(folder, sources, record, { allowPrompt: false }).catch(
-      (error: Error) => {
-        notices.push(
-          `${record.name} wasn't updated from its repo: ${error.message}`,
-        );
-      },
-    );
+    await applyUpdate(folder, sources, record, {
+      allowPrompt: false,
+      runtime,
+    }).catch((error: Error) => {
+      notices.push(
+        `${record.name} wasn't updated from its repo: ${error.message}`,
+      );
+    });
   }
 
   sources.checkedAt = new Date().toISOString();

@@ -1,3 +1,5 @@
+import { writePackage, readDirectory } from "../workspace/directory.js";
+import type { RuntimeContext } from "../../runtime.js";
 import { MILLISECONDS_PER_SECOND } from "../../shared/constants.js";
 
 import { randomBytes } from "node:crypto";
@@ -7,13 +9,11 @@ import { mkdir, realpath, rm } from "node:fs/promises";
 import {
   packageFingerprint,
   validatePackageEntries,
-  writePackage,
   type PackageEntry,
 } from "@barndog-ai/api-contract/package";
 import {
   diffEntries,
   mergeEntries,
-  readDirectory,
   type FileDiff,
 } from "@barndog-ai/api-contract/collaboration";
 
@@ -57,6 +57,7 @@ import {
   locked,
   save,
   type GitWorkingCopy,
+  readWorkingCopy,
 } from "./workspace-store.js";
 import { defined, only } from "../../shared/lookup.js";
 import { NAME, splitOrigin } from "../../shared/patterns.js";
@@ -76,13 +77,13 @@ import { barndogPaths } from "../../config/paths.js";
 /** Three random bytes provide six hex characters to distinguish work branches. */
 const BRANCH_RANDOM_BYTES = 3;
 
-async function latest(workspace: GitWorkspace, home: string) {
-  const model = await gitRepoSource(workspace, home).model();
+async function latest(workspace: GitWorkspace, runtime: RuntimeContext) {
+  const model = await gitRepoSource(workspace, runtime).model();
 
   return {
     model,
     commit: defined(
-      await acceptedCommit(workspace.workspaceId, home),
+      await acceptedCommit(workspace.workspaceId, runtime),
       "This Git workspace hasn't been fetched yet",
     ),
   };
@@ -173,13 +174,13 @@ async function startWorkingCopy(
   root: string,
   record: Omit<GitWorkingCopy, "root" | "base" | "conflicts">,
   { entries, base }: { entries: PackageEntry[]; base: PackageEntry[] },
-  home: string,
+  runtime: RuntimeContext,
 ) {
   try {
-    await writePackage(root, entries);
+    await writePackage(root, entries, runtime);
     await save(
       { ...record, root, base: encodeFiles(base), conflicts: [] },
-      home,
+      runtime,
     );
   } catch (error) {
     await rm(root, { recursive: true, force: true });
@@ -200,13 +201,14 @@ export function pullGitAsset(
     target?: string;
     kind: PackageKind;
   },
-  cwd: string,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<PulledPackage> {
+  const { cwd } = runtime;
+
   const { kind } = options;
 
-  return locked(home, async () => {
-    const { model, commit } = await latest(workspace, home);
+  return locked(runtime, async () => {
+    const { model, commit } = await latest(workspace, runtime);
     const asset = usable(
       selectAsset(model, kind, options.name, options.origin),
     );
@@ -222,7 +224,7 @@ export function pullGitAsset(
         baseCommit: commit,
       },
       { entries: asset.entries, base: asset.entries },
-      home,
+      runtime,
     );
 
     return { root, commit };
@@ -241,26 +243,27 @@ export function createGitAsset(
     target?: string;
     kind: PackageKind;
   },
-  cwd: string,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<CreatedPackage> {
+  const { cwd } = runtime;
+
   const { kind } = options;
 
-  return locked(home, async () => {
+  return locked(runtime, async () => {
     if (!NAME.test(options.name)) {
       throw new CliError(
         `${options.name} isn't a valid name. Use lowercase letters, digits and hyphens, such as my-skill.`,
       );
     }
 
-    const { model, commit } = await latest(workspace, home);
+    const { model, commit } = await latest(workspace, runtime);
     const scope = selectScope(model, options.origin);
     const root = await newFolder(cwd, options.target ?? options.name);
     await startWorkingCopy(
       root,
       { kind, git: workspace, name: options.name, scope, baseCommit: commit },
       { entries: assetKinds[kind].scaffold(options.name), base: [] },
-      home,
+      runtime,
     );
 
     return { root, kind, name: options.name };
@@ -272,11 +275,10 @@ export function createGitAsset(
  * it started from. Throws `CliError` outside a working copy.
  */
 export function gitWorkingStatus(
-  cwd: string,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<GitWorkingCopyStatus> {
-  return locked(home, async () => {
-    const work = await findGit(cwd, home);
+  return locked(runtime, async () => {
+    const work = await findGit(runtime);
 
     return {
       root: work.root,
@@ -292,7 +294,7 @@ export function gitWorkingStatus(
       external: null,
       changes: await diffEntries(
         decodeFiles(work.base),
-        await readDirectory(work.root),
+        await readWorkingCopy(work, runtime),
       ),
     };
   });
@@ -307,7 +309,13 @@ const assetIn = (model: WorkspaceModel, work: GitWorkingCopy) =>
 
 const fingerprint = (entries: PackageEntry[]) => packageFingerprint(entries);
 
-async function branchFiles(work: GitWorkingCopy, head: string, home: string) {
+async function branchFiles(
+  work: GitWorkingCopy,
+  head: string,
+  runtime: RuntimeContext,
+) {
+  const { home } = runtime;
+
   const { branch } = defined(
     work.review,
     "This working copy has no review branch",
@@ -316,10 +324,11 @@ async function branchFiles(work: GitWorkingCopy, head: string, home: string) {
   const repo = barndogPaths(home).bareClone(work.git.workspaceId);
   await git(
     ["fetch", "--quiet", "--no-tags", "origin", `refs/heads/${branch}`],
+    runtime,
     { repo },
   );
 
-  const model = await loadWorkspace(await gitSnapshot(repo, head));
+  const model = await loadWorkspace(await gitSnapshot(repo, head, runtime));
   const asset = assetIn(model, work);
   if (!asset) {
     throw new CliError(`${branch} no longer contains ${work.name}.`);
@@ -336,11 +345,12 @@ async function branchFiles(work: GitWorkingCopy, head: string, home: string) {
  * holds its content.
  */
 export function updateGitWorkingCopy(
-  cwd: string,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<UpdatedGitWorkingCopy> {
-  return locked(home, async () => {
-    const work = await findGit(cwd, home);
+  const { home } = runtime;
+
+  return locked(runtime, async () => {
+    const work = await findGit(runtime);
     const previous = structuredClone(work);
     if (work.conflicts.length) {
       throw new CliError(
@@ -350,8 +360,8 @@ export function updateGitWorkingCopy(
     }
 
     const repo = barndogPaths(home).bareClone(work.git.workspaceId);
-    const { model, commit } = await latest(work.git, home);
-    let entries = await readDirectory(work.root);
+    const { model, commit } = await latest(work.git, runtime);
+    let entries = await readWorkingCopy(work, runtime);
     const conflicts = new Set<string>();
     const merge = async (base: PackageEntry[], incoming: PackageEntry[]) => {
       const merged = await mergeEntries(base, entries, incoming);
@@ -360,9 +370,9 @@ export function updateGitWorkingCopy(
     };
 
     if (work.review) {
-      const head = await remoteBranch(repo, work.review.branch);
+      const head = await remoteBranch(repo, work.review.branch, runtime);
       if (head && head !== work.review.head) {
-        const remote = await branchFiles(work, head, home);
+        const remote = await branchFiles(work, head, runtime);
         await merge(decodeFiles(work.review.files), remote);
         work.review = {
           ...work.review,
@@ -391,7 +401,7 @@ export function updateGitWorkingCopy(
 
     work.baseCommit = commit;
     work.conflicts = [...conflicts];
-    await applyFiles(work, entries, home, previous);
+    await applyFiles(work, entries, runtime, previous);
 
     return {
       root: work.root,
@@ -408,11 +418,15 @@ export function updateGitWorkingCopy(
  */
 export function resolveGitConflict(
   path: string,
-  cwd: string,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<ConflictResolution> {
-  return locked(home, async () =>
-    markResolved(await findGit(cwd, home), path, cwd, home),
+  const { cwd } = runtime;
+
+  return locked(runtime, async () =>
+    markResolved(await findGit(runtime), path, {
+      ...runtime,
+      cwd: cwd,
+    }),
   );
 }
 
@@ -434,21 +448,22 @@ export function pushGitWorkingCopy(
     new?: boolean;
     title?: string;
   },
-  cwd: string,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<GitPushResult> {
-  return locked(home, async () => {
-    const { model, commit: tip } = await latest(workspace, home);
+  const { home, cwd } = runtime;
+
+  return locked(runtime, async () => {
+    const { model, commit: tip } = await latest(workspace, runtime);
     let work: GitWorkingCopy;
     try {
-      work = await findGit(cwd, home);
+      work = await findGit(runtime);
     } catch (error) {
       if (!options.origin || !(error instanceof CliError)) {
         throw error;
       }
 
       const root = await realpath(cwd);
-      const files = await readDirectory(root);
+      const files = await readDirectory(root, runtime);
       const kind = packageKindOf(files, options.kind);
       work = {
         root,
@@ -461,7 +476,7 @@ export function pushGitWorkingCopy(
         conflicts: [],
       };
 
-      await save(work, home);
+      await save(work, runtime);
     }
 
     if (options.kind && work.kind !== options.kind) {
@@ -492,7 +507,7 @@ export function pushGitWorkingCopy(
     }
 
     const files = validatePackageEntries(
-      await readDirectory(work.root),
+      await readWorkingCopy(work, runtime),
       undefined,
       assetKinds[work.kind].manifest,
     );
@@ -531,28 +546,41 @@ export function pushGitWorkingCopy(
         return { unchanged: true };
       }
 
-      const commit = await commitFiles(repo, tip, {
-        ...change,
-        message: title,
-      });
-
-      await pushCommit(repo, commit, workspace.branch);
-      await git(["update-ref", trackingRef(workspace.branch), commit], {
+      const commit = await commitFiles(
         repo,
+        tip,
+        {
+          ...change,
+          message: title,
+        },
+        { ...{}, runtime },
+      );
+
+      await pushCommit(repo, commit, workspace.branch, {
+        runtime,
+        allowPrompt: false,
       });
 
-      await recordFetch(workspace, commit, home);
+      await git(
+        ["update-ref", trackingRef(workspace.branch), commit],
+        runtime,
+        {
+          repo,
+        },
+      );
+
+      await recordFetch(workspace, commit, runtime);
       work.base = encodeFiles(files);
       work.baseCommit = commit;
       delete work.review;
-      await save(work, home);
+      await save(work, runtime);
 
       return { branch: workspace.branch, commit, published: true };
     }
 
     let review = options.new ? undefined : work.review;
     if (review) {
-      const head = await remoteBranch(repo, review.branch);
+      const head = await remoteBranch(repo, review.branch, runtime);
       if (head === null) {
         review = undefined;
       } else if (head !== review.head) {
@@ -575,20 +603,32 @@ export function pushGitWorkingCopy(
       review?.branch ??
       `barndog/${work.scope.type === "org" ? "org" : `${work.scope.type}-${work.scope.slug}`}-${work.name}-${randomBytes(BRANCH_RANDOM_BYTES).toString("hex")}`;
 
-    const commit = await commitFiles(repo, review?.head ?? work.baseCommit, {
-      ...change,
-      message: title,
+    const commit = await commitFiles(
+      repo,
+      review?.head ?? work.baseCommit,
+      {
+        ...change,
+        message: title,
+      },
+      { ...{}, runtime },
+    );
+
+    await pushCommit(repo, commit, branch, {
+      runtime,
+      allowPrompt: false,
     });
 
-    await pushCommit(repo, commit, branch);
     const opened = review?.url
       ? { url: review.url, opened: false }
-      : await openPullRequest({
-          url: workspace.url,
-          base: workspace.branch,
-          branch,
-          title,
-        });
+      : await openPullRequest(
+          {
+            url: workspace.url,
+            base: workspace.branch,
+            branch,
+            title,
+          },
+          runtime,
+        );
 
     work.review = {
       branch,
@@ -597,16 +637,22 @@ export function pushGitWorkingCopy(
       ...(opened.url ? { url: opened.url } : {}),
     };
 
-    await save(work, home);
+    await save(work, runtime);
 
     return { branch, commit, url: opened.url ?? null, opened: opened.opened };
   });
 }
 
 /** Commits that changed an asset, oldest first; their position is the version number. */
-async function assetHistory(repo: string, commit: string, path: string) {
+async function assetHistory(
+  repo: string,
+  commit: string,
+  path: string,
+  runtime: RuntimeContext,
+) {
   const output = await gitText(
     ["log", "--reverse", "--format=%H%x00%ct%x00%an%x00%s", commit, "--", path],
+    runtime,
     { repo },
   );
 
@@ -631,8 +677,13 @@ async function assetHistory(repo: string, commit: string, path: string) {
     });
 }
 
-async function filesAt(repo: string, commit: string, path: string) {
-  const snapshot = await gitSnapshot(repo, commit);
+async function filesAt(
+  repo: string,
+  commit: string,
+  path: string,
+  runtime: RuntimeContext,
+) {
+  const snapshot = await gitSnapshot(repo, commit, runtime);
   const single = snapshot.entries.find((entry) => entry.path === path);
   const members =
     single && single.mode !== GIT_MODE.tree
@@ -664,20 +715,22 @@ type HistoryTarget = { name: string; origin: string; kind: AssetKind };
 async function history(
   workspace: GitWorkspace,
   target: HistoryTarget,
-  home: string,
+  runtime: RuntimeContext,
 ) {
-  const { model, commit } = await latest(workspace, home);
+  const { home } = runtime;
+
+  const { model, commit } = await latest(workspace, runtime);
   const asset = selectAsset(model, target.kind, target.name, target.origin);
 
   const repo = barndogPaths(home).bareClone(workspace.workspaceId);
-  const versions = await assetHistory(repo, commit, asset.path);
+  const versions = await assetHistory(repo, commit, asset.path, runtime);
   const filesOf = (number = versions.length) => {
     const version = versions[number - 1];
     if (!version) {
       throw new CliError(`${asset.name} has no version ${number}.`);
     }
 
-    return filesAt(repo, version.commit, asset.path);
+    return filesAt(repo, version.commit, asset.path, runtime);
   };
 
   return { versions, filesOf };
@@ -690,18 +743,18 @@ async function history(
 export async function gitVersions(
   workspace: GitWorkspace,
   target: HistoryTarget,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<PackageVersion[]> {
-  return (await history(workspace, target, home)).versions;
+  return (await history(workspace, target, runtime)).versions;
 }
 
 /** A version's files, base64-encoded; the newest when `version` is left out. */
 export async function gitVersionFiles(
   workspace: GitWorkspace,
   target: HistoryTarget & { version?: number },
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<VersionFiles> {
-  const { filesOf } = await history(workspace, target, home);
+  const { filesOf } = await history(workspace, target, runtime);
 
   return { files: encodeFiles(await filesOf(target.version)) };
 }
@@ -713,9 +766,9 @@ export async function gitVersionFiles(
 export async function gitVersionDiff(
   workspace: GitWorkspace,
   target: HistoryTarget & { from: number; to: number },
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<FileDiff[]> {
-  const { filesOf } = await history(workspace, target, home);
+  const { filesOf } = await history(workspace, target, runtime);
 
   return diffEntries(await filesOf(target.from), await filesOf(target.to));
 }

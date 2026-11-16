@@ -1,7 +1,8 @@
-import { join, resolve } from "node:path";
 import { claude } from "./claude.js";
 import { codex } from "./codex.js";
 import { cursor } from "./cursor.js";
+import { join, resolve } from "node:path";
+
 import type { Harness, HarnessAdapter } from "./types.js";
 
 export type { Harness, DetectedHarness } from "./types.js";

@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../../runtime.js";
 import { POSIX_MODE } from "../../shared/constants.js";
 import { randomUUID } from "node:crypto";
 import { mkdir, rename, rm, writeFile } from "node:fs/promises";
@@ -32,13 +33,24 @@ const DEFAULT_BRANCH = "main";
  * Queries a remote repository's default head with credential prompts allowed
  * for interactive setup.
  */
-export const inspectRepository = (url: string): Promise<RemoteHead> =>
-  remoteHead(url, true);
+export const inspectRepository = (
+  url: string,
+  runtime: RuntimeContext,
+): Promise<RemoteHead> => remoteHead(url, runtime, true);
 
-const stagingClone = (home: string) =>
-  barndogPaths(home).setupClone(randomUUID());
+const stagingClone = (runtime: RuntimeContext) => {
+  const { home } = runtime;
 
-async function adoptClone(staging: string, workspaceId: string, home: string) {
+  return barndogPaths(home).setupClone(randomUUID());
+};
+
+async function adoptClone(
+  staging: string,
+  workspaceId: string,
+  runtime: RuntimeContext,
+) {
+  const { home } = runtime;
+
   const target = barndogPaths(home).bareClone(workspaceId);
   await rm(target, { recursive: true, force: true });
   await rename(staging, target);
@@ -48,12 +60,12 @@ async function adoptClone(staging: string, workspaceId: string, home: string) {
 export async function createGitWorkspace(
   url: string,
   name: string,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<GitWorkspace> {
   const workspaceId = randomUUID();
-  const staging = stagingClone(home);
+  const staging = stagingClone(runtime);
   try {
-    await ensureBareClone(staging, url);
+    await ensureBareClone(staging, url, runtime);
     const commit = await commitFiles(
       staging,
       null,
@@ -64,17 +76,21 @@ export async function createGitWorkspace(
         })),
         message: "Set up BarnDog workspace",
       },
-      { allowPrompt: true },
+      { allowPrompt: true, runtime },
     );
 
-    await pushCommit(staging, commit, DEFAULT_BRANCH, true);
-    await git(["update-ref", trackingRef(DEFAULT_BRANCH), commit], {
+    await pushCommit(staging, commit, DEFAULT_BRANCH, {
+      runtime,
+      allowPrompt: true,
+    });
+
+    await git(["update-ref", trackingRef(DEFAULT_BRANCH), commit], runtime, {
       repo: staging,
     });
 
-    await adoptClone(staging, workspaceId, home);
+    await adoptClone(staging, workspaceId, runtime);
     const workspace = { url, branch: DEFAULT_BRANCH, workspaceId };
-    await recordFetch(workspace, commit, home);
+    await recordFetch(workspace, commit, runtime);
 
     return workspace;
   } finally {
@@ -86,19 +102,19 @@ export async function createGitWorkspace(
 export async function connectGitWorkspace(
   url: string,
   branch: string,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<GitWorkspace> {
-  const staging = stagingClone(home);
+  const staging = stagingClone(runtime);
   try {
-    await ensureBareClone(staging, url);
-    await fetchBranch(staging, branch, true);
-    const commit = await gitText(["rev-parse", trackingRef(branch)], {
+    await ensureBareClone(staging, url, runtime);
+    await fetchBranch(staging, branch, runtime, true);
+    const commit = await gitText(["rev-parse", trackingRef(branch)], runtime, {
       repo: staging,
     });
 
     let text: string;
     try {
-      text = await gitText(["show", `${commit}:${CONFIG_FILE}`], {
+      text = await gitText(["show", `${commit}:${CONFIG_FILE}`], runtime, {
         repo: staging,
       });
     } catch (error) {
@@ -110,9 +126,9 @@ export async function connectGitWorkspace(
     }
 
     const { workspaceId } = parseConfig(text);
-    await adoptClone(staging, workspaceId, home);
+    await adoptClone(staging, workspaceId, runtime);
     const workspace = { url, branch, workspaceId };
-    await recordFetch(workspace, commit, home);
+    await recordFetch(workspace, commit, runtime);
 
     return workspace;
   } finally {
@@ -126,9 +142,9 @@ export async function connectGitWorkspace(
  */
 export async function cloneGitWorkspace(
   url: string,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<GitWorkspace | null> {
-  const staging = stagingClone(home);
+  const staging = stagingClone(runtime);
   await mkdir(dirname(staging), {
     recursive: true,
     mode: POSIX_MODE.privateDirectory,
@@ -136,7 +152,7 @@ export async function cloneGitWorkspace(
 
   try {
     try {
-      await gitInTerminal(["clone", "--bare", "--", url, staging]);
+      await gitInTerminal(["clone", "--bare", "--", url, staging], runtime);
     } catch (error) {
       throw new CliError(
         `Git couldn't clone ${url}. Check that you have access, and that this URL is right.`,
@@ -148,21 +164,24 @@ export async function cloneGitWorkspace(
     let commit: string;
     let branch: string;
     try {
-      commit = await gitText(["rev-parse", "--verify", "HEAD"], {
+      commit = await gitText(["rev-parse", "--verify", "HEAD"], runtime, {
         repo: staging,
       });
 
-      branch = await gitText(["symbolic-ref", "--short", "HEAD"], {
+      branch = await gitText(["symbolic-ref", "--short", "HEAD"], runtime, {
         repo: staging,
       });
     } catch {
       return null;
     }
 
-    await git(["update-ref", trackingRef(branch), commit], { repo: staging });
+    await git(["update-ref", trackingRef(branch), commit], runtime, {
+      repo: staging,
+    });
+
     let text: string;
     try {
-      text = await gitText(["show", `${commit}:${CONFIG_FILE}`], {
+      text = await gitText(["show", `${commit}:${CONFIG_FILE}`], runtime, {
         repo: staging,
       });
     } catch (error) {
@@ -174,9 +193,9 @@ export async function cloneGitWorkspace(
     }
 
     const { workspaceId } = parseConfig(text);
-    await adoptClone(staging, workspaceId, home);
+    await adoptClone(staging, workspaceId, runtime);
     const workspace = { url, branch, workspaceId };
-    await recordFetch(workspace, commit, home);
+    await recordFetch(workspace, commit, runtime);
 
     return workspace;
   } finally {
@@ -186,8 +205,8 @@ export async function cloneGitWorkspace(
 
 /** Opens the folder that holds this machine's assets, creating it the first time. */
 export async function localWorkspace(
-  home: string,
-  path = barndogPaths(home).localWorkspace,
+  runtime: RuntimeContext,
+  path = barndogPaths(runtime.home).localWorkspace,
 ): Promise<LocalWorkspace> {
   const config = await readIfExists(join(path, CONFIG_FILE));
   if (config !== null) {

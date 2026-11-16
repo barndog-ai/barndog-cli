@@ -73,7 +73,7 @@ export function registerStatus(program: Command, context: CommandContext) {
         for (const line of renderInventory(items, {
           heading: assetKinds[kind].many,
           paths: options.paths,
-          home: context.home,
+          runtime: context.runtime,
         })) {
           context.write(line);
         }

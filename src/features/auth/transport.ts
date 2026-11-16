@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../../runtime.js";
 import { HTTP_STATUS } from "../../shared/constants.js";
 
 import { createApiClient } from "@barndog-ai/api-contract";
@@ -67,7 +68,7 @@ export function normalizeServer(value: string) {
  */
 export function serverFetch(
   server: string,
-  home: string,
+  runtime: RuntimeContext,
   authenticated = true,
 ): typeof fetch {
   const origin = normalizeServer(server);
@@ -80,7 +81,7 @@ export function serverFetch(
 
     const headers = new Headers(request.headers);
     if (authenticated) {
-      const credential = (await readCredentials(home)).servers[origin];
+      const credential = (await readCredentials(runtime)).servers[origin];
       if (!credential || Date.parse(credential.expiresAt) <= Date.now()) {
         throw new LoginRequiredError();
       }
@@ -122,9 +123,9 @@ export type ApiClient = ReturnType<typeof createApiClient>;
  * A typed client for the BarnDog API that sends the saved credential for
  * `server`, refusing redirects and requests to other origins.
  */
-export function apiClient(server: string, home: string): ApiClient {
+export function apiClient(server: string, runtime: RuntimeContext): ApiClient {
   return createApiClient({
     baseUrl: normalizeServer(server),
-    fetch: serverFetch(server, home),
+    fetch: serverFetch(server, runtime),
   });
 }

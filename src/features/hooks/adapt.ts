@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../../runtime.js";
 import { join } from "node:path";
 
 import {
@@ -58,7 +59,13 @@ function adaptPrompt(input: AdaptInput) {
   });
 }
 
-async function resolveHook(name: string, origin: string, home: string) {
+async function resolveHook(
+  name: string,
+  origin: string,
+  runtime: RuntimeContext,
+) {
+  const { home } = runtime;
+
   const settings = await readSettings(home);
   if (!settings) {
     throw new SetupRequiredError();
@@ -67,9 +74,9 @@ async function resolveHook(name: string, origin: string, home: string) {
   const local = settings.localWorkspace;
   const git = settings.gitWorkspace;
   const shared = Boolean(git || settings.connection);
-  const repo = repoForOrigin(settings, home, origin);
+  const repo = repoForOrigin(settings, runtime, origin);
   if (!repo) {
-    const selected = await selectAsset("hook", name, origin, home);
+    const selected = await selectAsset("hook", name, origin, runtime);
     const asset = hookSchema.parse(selected.asset);
     const implementations: Implementations = {};
     for (const row of asset.compatibility) {
@@ -134,9 +141,9 @@ export async function adaptHook(
   name: string,
   origin: string,
   targets: readonly Harness[] | undefined,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<Adaptation> {
-  const hook = await resolveHook(name, origin, home);
+  const hook = await resolveHook(name, origin, runtime);
   const written = harnesses.filter((h) => hook.implementations[h]);
   const covered = targets?.filter((h) => written.includes(h)) ?? [];
   if (covered.length) {
@@ -155,7 +162,7 @@ export async function adaptHook(
 
   const record =
     hook.place.type === "folder"
-      ? await importedFrom("hook", hook.name, home)
+      ? await importedFrom("hook", hook.name, runtime)
       : null;
 
   return {

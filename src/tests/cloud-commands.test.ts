@@ -1,3 +1,4 @@
+import { inspectNative } from "./native.js";
 import { expect, test } from "vitest";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -601,7 +602,9 @@ test("installing from Cloud delivers a Skill, a Hook and an MCP server to Claude
 
   expect(skill).toContain("Write them.");
   expect(
-    await readFile(join(server.home, ".claude/settings.json"), "utf8"),
+    inspectNative(
+      await readFile(join(server.home, ".claude/settings.json"), "utf8"),
+    ),
   ).toContain("scripts/hook.sh");
 
   expect(await readFile(join(server.home, ".claude.json"), "utf8")).toContain(

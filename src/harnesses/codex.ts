@@ -57,9 +57,12 @@ export const codex: HarnessAdapter = {
   name: "Codex",
   skillRoot: ".agents/skills",
   commands: ["codex"],
-  macApp: "Codex.app",
+  desktopApp: { name: "Codex" },
   hooks: {
     settings: [/(^|\/)\.codex\/hooks\.json$/, /(^|\/)\.codex\/config\.toml$/],
+    // Recent Codex runs hooks in the session shell, PowerShell on Windows;
+    // older releases (such as 0.142) used cmd.exe, where these lines fail.
+    windowsShell: "powershell",
     rootVariables: ["PLUGIN_ROOT"],
     file: ".codex/hooks.json",
     sessionStart: "SessionStart",

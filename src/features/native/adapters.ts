@@ -1,30 +1,20 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import type { RuntimeContext } from "../../runtime.js";
 import { fileURLToPath } from "node:url";
 import { coerce, satisfies, validRange } from "semver";
-import which from "which";
+import {
+  programOutput,
+  findExecutable,
+  runtimeExecutable,
+} from "../../platform.js";
 import type { HookManifest, McpDefinition } from "@barndog-ai/api-contract";
 import { adapters, nativeFile } from "../../harnesses/registry.js";
 import type { Harness } from "../../harnesses/types.js";
 import { type NativeEntry } from "./configuration.js";
-import { shellQuote } from "../../shared/shell.js";
+import { hookCommand } from "./hook-shell.js";
 
-const execute = promisify(execFile);
-
-/**
- * Also sets the tool's own root variables, so a script written for the tool
- * finds its files and recognises where it runs.
- */
-export const hookCommand = (root: string, command: string, harness?: Harness) =>
-  `export ${["BARNDOG_HOOK_ROOT", ...(harness ? adapters[harness].hooks.rootVariables : [])].map((name) => `${name}=${shellQuote(root)}`).join(" ")}; ${command}`;
-
-/** Where `command` runs from, trying Windows extensions there; null when it isn't on PATH. */
-function executable(
-  command: string,
-  path = process.env.PATH ?? "",
-): Promise<string | null> {
-  return which(command, { path, nothrow: true });
-}
+/** A `--version` answer is one short line; anything slower or longer is broken. */
+const VERSION_TIMEOUT_MS = 5000;
+const VERSION_OUTPUT_LIMIT_BYTES = 4096;
 
 /**
  * Checks required executables and optionally runs the harness version command;
@@ -33,9 +23,10 @@ function executable(
 export async function runtimeRequirements(
   harness: Harness,
   requirements: { commands: string[]; harnessVersion?: string },
+  runtime: RuntimeContext,
 ) {
   for (const command of requirements.commands) {
-    if (!(await executable(command))) {
+    if (!(await runtimeExecutable(command, runtime))) {
       return `Missing runtime: ${command}`;
     }
   }
@@ -46,7 +37,9 @@ export async function runtimeRequirements(
     }
 
     const command = (
-      await Promise.all(adapters[harness].commands.map((c) => executable(c)))
+      await Promise.all(
+        adapters[harness].commands.map((c) => findExecutable(c, runtime)),
+      )
     ).find(Boolean);
 
     if (!command) {
@@ -54,9 +47,9 @@ export async function runtimeRequirements(
     }
 
     try {
-      const { stdout } = await execute(command, ["--version"], {
-        timeout: 5000,
-        maxBuffer: 4096,
+      const stdout = await programOutput(command, ["--version"], runtime, {
+        timeoutMs: VERSION_TIMEOUT_MS,
+        maxBytes: VERSION_OUTPUT_LIMIT_BYTES,
       });
 
       const version = coerce(stdout);
@@ -79,8 +72,10 @@ export function mcpEntry(
   harness: Harness,
   asset: { id: string; name: string },
   definition: McpDefinition,
-  home: string,
+  runtime: RuntimeContext,
 ): NativeEntry {
+  const { home } = runtime;
+
   return {
     id: asset.id,
     kind: "mcp",
@@ -101,8 +96,10 @@ export function mcpEntry(
 export function hookEntries(
   harness: Harness,
   { id, root, manifest }: { id: string; root: string; manifest: HookManifest },
-  home: string,
+  runtime: RuntimeContext,
 ): NativeEntry[] {
+  const { home } = runtime;
+
   const implementation = manifest.implementations[harness];
   if (!implementation) {
     return [];
@@ -122,12 +119,22 @@ export function hookEntries(
               hooks: handler.hooks.map((command) => ({
                 ...command,
                 type: "command",
-                command: hookCommand(root, command.command, harness),
+                command: hookCommand(
+                  root,
+                  command.command,
+                  harness,
+                  runtime.platform,
+                ),
               })),
             }
           : {
               ...handler,
-              command: hookCommand(root, handler.command, harness),
+              command: hookCommand(
+                root,
+                handler.command,
+                harness,
+                runtime.platform,
+              ),
             },
     })),
   );

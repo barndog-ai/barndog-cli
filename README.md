@@ -42,7 +42,7 @@ flowchart LR
 
 ## Install
 
-Requires [Node.js](https://nodejs.org) 24 or newer.
+Runs on **macOS, Linux, and Windows** with [Node.js](https://nodejs.org) 24 or newer.
 
 ```sh
 npm install -g barndog

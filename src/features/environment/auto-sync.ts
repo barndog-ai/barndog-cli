@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../../runtime.js";
 import { HTTP_STATUS } from "../../shared/constants.js";
 
 import { readFile } from "node:fs/promises";
@@ -28,7 +29,9 @@ const checkSchema = z.object({
 
 type Check = z.infer<typeof checkSchema>;
 
-async function readCheck(home: string, conn: Connection) {
+async function readCheck(runtime: RuntimeContext, conn: Connection) {
+  const { home } = runtime;
+
   const text = await readFile(barndogPaths(home).cloudCheck, "utf8").catch(
     () => null,
   );
@@ -55,7 +58,9 @@ async function readCheck(home: string, conn: Connection) {
     : undefined;
 }
 
-async function writeCheck(home: string, check: Check) {
+async function writeCheck(runtime: RuntimeContext, check: Check) {
+  const { home } = runtime;
+
   await writeAtomic(
     barndogPaths(home).cloudCheck,
     `${JSON.stringify(check)}\n`,
@@ -63,11 +68,11 @@ async function writeCheck(home: string, check: Check) {
 }
 
 /** A server from before the check existed answers 404; sync as if it changed. */
-async function currentRevision(conn: Connection, home: string) {
+async function currentRevision(conn: Connection, runtime: RuntimeContext) {
   try {
     const { revision } = await parsed(
       environmentCatalogRevisionSchema,
-      apiClient(conn.server, home).GET("/v1/environment/catalog/revision"),
+      apiClient(conn.server, runtime).GET("/v1/environment/catalog/revision"),
     );
 
     return revision;
@@ -87,8 +92,10 @@ async function currentRevision(conn: Connection, home: string) {
  */
 export async function autoSync(
   sync: () => Promise<unknown>,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<void> {
+  const { home } = runtime;
+
   const settings = await readSettings(home);
 
   if (!settings || !settings.connection || settings.localWorkspace) {
@@ -98,7 +105,7 @@ export async function autoSync(
   }
 
   const conn = settings.connection;
-  const previous = await readCheck(home, conn);
+  const previous = await readCheck(runtime, conn);
 
   if (
     previous &&
@@ -108,7 +115,7 @@ export async function autoSync(
   }
 
   const record = (revision: string | undefined) =>
-    writeCheck(home, {
+    writeCheck(runtime, {
       server: conn.server,
       organizationId: conn.organizationId,
       developerId: conn.developerId,
@@ -117,7 +124,7 @@ export async function autoSync(
     });
 
   try {
-    const revision = await currentRevision(conn, home);
+    const revision = await currentRevision(conn, runtime);
 
     if (revision !== undefined && revision === previous?.revision) {
       await record(revision);

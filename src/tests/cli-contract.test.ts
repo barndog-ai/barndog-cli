@@ -1,3 +1,7 @@
+import { stripVTControlCharacters } from "node:util";
+import { pathToFileURL } from "node:url";
+import { locked } from "../features/environment/transaction.js";
+import { testRuntime } from "./runtime.js";
 import { HTTP_STATUS } from "../shared/constants.js";
 
 import { assert, expect, test, vi, type TestContext } from "vitest";
@@ -66,7 +70,7 @@ async function localHome(t: TestContext) {
   const root = await temp(t);
   const home = join(root, "home");
   await runSetup({
-    home,
+    runtime: testRuntime(home),
     local: true,
     restart: true,
     interactive: true,
@@ -84,7 +88,7 @@ async function localHome(t: TestContext) {
 }
 
 const quiet = (home: string): AddContext => ({
-  home,
+  runtime: testRuntime(home),
   interactive: false,
   write: () => {},
   prompts: {} as AddContext["prompts"],
@@ -210,6 +214,25 @@ test("failures render as JSON with the same fix people see", () => {
   });
 });
 
+test("a fix that runs a command says what it does, then shows the command", () => {
+  const error = new CliError("The copy was changed.", "Delete it.", {
+    command: "rm -rf '/x' && barndog sync",
+  });
+
+  const text = stripVTControlCharacters(renderError(error));
+  expect(text).toBe(
+    "✖ The copy was changed.\n  Fix: Delete it.\n  Command: rm -rf '/x' && barndog sync",
+  );
+
+  expect(JSON.parse(renderJsonError(error))).toStrictEqual({
+    error: {
+      message: "The copy was changed.",
+      fix: "Delete it.",
+      command: "rm -rf '/x' && barndog sync",
+    },
+  });
+});
+
 test("common server refusals carry a Fix line", () => {
   const text = renderError(
     new ApiError(HTTP_STATUS.forbidden, "X", "CHANGE_AUTHOR_REQUIRED"),
@@ -283,12 +306,18 @@ test("skills update installs what it changed", async () => {
 test("status flags a hand-edited install the way sync and doctor do", async (t) => {
   const { root, home, folder } = await localHome(t);
   const installed = await addSkill(root, home);
-  const before = (await inventory(home)).items.find((i) => i.name === "review");
+  const before = (await inventory(testRuntime(home))).items.find(
+    (i) => i.name === "review",
+  );
+
   expect(before?.state).toBe("installed");
   await writeFile(join(installed, "SKILL.md"), "edited");
-  const after = (await inventory(home)).items.find((i) => i.name === "review");
+  const after = (await inventory(testRuntime(home))).items.find(
+    (i) => i.name === "review",
+  );
+
   expect(after?.state).toBe("modified");
-  await expect(synchronize(undefined, home)).rejects.toSatisfy(
+  await expect(synchronize(undefined, testRuntime(home))).rejects.toSatisfy(
     (error: CliError) =>
       /copy that folder somewhere else/.test(error.message) &&
       !/skills pull/.test(error.message),
@@ -305,10 +334,10 @@ test("a knowledge file with a bad field is reported, not dropped silently", asyn
     "---\ndescription: Guide\naccess: always\n---\nBody\n",
   );
 
-  const [problem] = await knowledgeProblems(home);
+  const [problem] = await knowledgeProblems(testRuntime(home));
   expect(problem?.path).toBe("org/knowledge/guide.md");
   expect(problem!.reason).toMatch(/access/);
-  const events = await synchronize(undefined, home);
+  const events = await synchronize(undefined, testRuntime(home));
   expect(
     events.some(
       (e) => e.type === "notice" && e.message.includes("guide.md was skipped"),
@@ -316,7 +345,7 @@ test("a knowledge file with a bad field is reported, not dropped silently", asyn
   ).toBeTruthy();
 
   expect(
-    (await doctor(home)).some((c) => /guide\.md/.test(c.detail)),
+    (await doctor(testRuntime(home))).some((c) => /guide\.md/.test(c.detail)),
   ).toBeTruthy();
 });
 
@@ -328,7 +357,10 @@ test("knowledge list reflects whether session-start listing is on", async (t) =>
     "---\ndescription: Guide\naccessMode: always\n---\nBody\n",
   );
 
-  expect((await knowledgeList(false, home))[0]?.listedAtStart).toBe(true);
+  expect(
+    (await knowledgeList(false, testRuntime(home)))[0]?.listedAtStart,
+  ).toBe(true);
+
   const path = join(home, ".barndog/config.yaml");
   await writeFile(path, `${await readFile(path, "utf8")}\nknowledge: false\n`);
   const text = await readFile(path, "utf8");
@@ -337,7 +369,10 @@ test("knowledge list reflects whether session-start listing is on", async (t) =>
     `${text.replace(/^knowledge: true\n/m, "").trimEnd()}\n`,
   );
 
-  expect((await knowledgeList(false, home))[0]?.listedAtStart).toBe(false);
+  expect(
+    (await knowledgeList(false, testRuntime(home)))[0]?.listedAtStart,
+  ).toBe(false);
+
   const { instance, output } = program({
     knowledgeList: async () => [
       {
@@ -518,7 +553,7 @@ test("a Hook change uses the Hook routes and keeps the Hook contract's shape", a
     home,
   );
 
-  await updateCredentials(home, (credentials) => {
+  await updateCredentials(testRuntime(home), (credentials) => {
     credentials.servers[server] = {
       token: "a".repeat(43),
       expiresAt: new Date(Date.now() + 3600000).toISOString(),
@@ -545,7 +580,10 @@ test("a Hook change uses the Hook routes and keeps the Hook contract's shape", a
   });
 
   const id = randomUUID();
-  const merged = await mergeChange({ kind: "hook", id, revision: 1 }, home);
+  const merged = await mergeChange(
+    { kind: "hook", id, revision: 1 },
+    testRuntime(home),
+  );
 
   expect(paths).toStrictEqual([`POST /v1/hook-changes/${id}/merge`]);
   expect(merged).toMatchObject({ hookId, publishedVersion: { hookId } });
@@ -578,7 +616,7 @@ test("a comment's text files drop their closing newline unless the range ends on
     home,
   );
 
-  await updateCredentials(home, (credentials) => {
+  await updateCredentials(testRuntime(home), (credentials) => {
     credentials.servers[server] = {
       token: "a".repeat(43),
       expiresAt: new Date(Date.now() + 3600000).toISOString(),
@@ -622,7 +660,7 @@ test("a comment's text files drop their closing newline unless the range ends on
         replacementFile: await file("replacement.txt", "new\n"),
         expectedFile: await file("expected.txt", expected),
       },
-      home,
+      testRuntime(home),
     );
 
   await comment("one\ntwo\n", 2);
@@ -661,7 +699,8 @@ test("assets install accepts override decisions", async () => {
 test("an unavailable command says so before asking for its flags", async (t) => {
   const { home } = await localHome(t);
   const { instance } = program({
-    guard: (path, options) => assertCommandAvailable(path, options, home),
+    guard: (path, options) =>
+      assertCommandAvailable(path, options, testRuntime(home)),
   });
 
   await expect(
@@ -681,23 +720,23 @@ test("Codex entries omit an empty header table", () => {
     "codex",
     { id: "1", name: "docs" },
     definition,
-    "/home",
+    testRuntime("/home"),
   );
 
   expect("env_http_headers" in entry.value).toBe(false);
 });
 
 test("a missing path is reported as missing, not as something to clone", () => {
-  expect(() => assertSourceExists("/missing/path", tmpdir())).toThrow(
-    /Can't find/,
-  );
+  expect(() =>
+    assertSourceExists("/missing/path", testRuntime(tmpdir())),
+  ).toThrow(/Can't find/);
 
   expect(() =>
-    assertSourceExists("github.com/acme/skills", tmpdir()),
+    assertSourceExists("github.com/acme/skills", testRuntime(tmpdir())),
   ).not.toThrow();
 
   expect(() =>
-    assertSourceExists("https://x.test/a.git", tmpdir()),
+    assertSourceExists("https://x.test/a.git", testRuntime(tmpdir())),
   ).not.toThrow();
 });
 
@@ -705,7 +744,7 @@ test("cancelling first-time local setup leaves no folder behind", async (t) => {
   const root = await temp(t);
   const home = join(root, "home");
   await runSetup({
-    home,
+    runtime: testRuntime(home),
     local: true,
     restart: true,
     interactive: true,
@@ -728,8 +767,8 @@ test("a stopped process releases the environment lock", async (t) => {
     [
       "--input-type=module",
       "-e",
-      `const { locked } = await import(${JSON.stringify(transaction)});
-       await locked(${JSON.stringify(home)}, () => new Promise(() => setInterval(() => {}, 1000)));`,
+      `const { locked } = await import(${JSON.stringify(pathToFileURL(transaction).href)});
+       await locked({home:${JSON.stringify(home)},cwd:process.cwd(),env:{...process.env},platform:process.platform}, () => new Promise(() => setInterval(() => {}, 1000)));`,
     ],
     { stdio: "ignore" },
   );
@@ -743,5 +782,6 @@ test("a stopped process releases the environment lock", async (t) => {
   const exited = new Promise((resolve) => child.once("exit", resolve));
   child.kill("SIGTERM");
   await exited;
+  await locked(testRuntime(home), async () => {});
   expect(existsSync(lock)).toBe(false);
 });

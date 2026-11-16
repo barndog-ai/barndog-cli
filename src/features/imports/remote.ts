@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../../runtime.js";
 import { POSIX_MODE } from "../../shared/constants.js";
 import { randomUUID } from "node:crypto";
 import { mkdir, rm } from "node:fs/promises";
@@ -79,6 +80,7 @@ async function resolveRest(
   url: string,
   rest: string | null,
   allowPrompt: boolean,
+  runtime: RuntimeContext,
 ) {
   if (!rest) {
     return { ref: null, path: "" };
@@ -89,9 +91,13 @@ async function resolveRest(
     return { ref: first, path: rest.slice(first.length + 1) };
   }
 
-  const listing = await gitText(["ls-remote", "--heads", "--tags", "--", url], {
-    allowPrompt,
-  });
+  const listing = await gitText(
+    ["ls-remote", "--heads", "--tags", "--", url],
+    runtime,
+    {
+      allowPrompt,
+    },
+  );
 
   const refs = parseLsRemote(listing)
     .map(({ ref }) => ref.replace(/^refs\/(?:heads|tags)\//, ""))
@@ -111,15 +117,21 @@ export async function fetchRemote<T>(
   location: RemoteLocation & { ref?: string | null; path?: string },
   options: { allowPrompt: boolean },
   use: (remote: RemoteRepo) => Promise<T>,
+  runtime: RuntimeContext,
 ): Promise<T> {
   const repo = join(tmpdir(), `barndog-import-${randomUUID()}.git`);
   await mkdir(repo, { recursive: true, mode: POSIX_MODE.privateDirectory });
   try {
-    await git(["init", "--quiet", "--bare", "."], { repo });
+    await git(["init", "--quiet", "--bare", "."], runtime, { repo });
     const resolved =
       location.ref !== undefined
         ? { ref: location.ref, path: location.path ?? "" }
-        : await resolveRest(location.url, location.rest, options.allowPrompt);
+        : await resolveRest(
+            location.url,
+            location.rest,
+            options.allowPrompt,
+            runtime,
+          );
 
     await git(
       [
@@ -132,11 +144,15 @@ export async function fetchRemote<T>(
         location.url,
         resolved.ref ?? "HEAD",
       ],
+      runtime,
       { repo, allowPrompt: options.allowPrompt },
     );
 
-    const commit = await gitText(["rev-parse", "FETCH_HEAD"], { repo });
-    const snapshot = await gitSnapshot(repo, commit);
+    const commit = await gitText(["rev-parse", "FETCH_HEAD"], runtime, {
+      repo,
+    });
+
+    const snapshot = await gitSnapshot(repo, commit, runtime);
     const blobs = await snapshot.readBlobs(
       snapshot.entries
         .filter((entry) => isBlob(entry.mode))

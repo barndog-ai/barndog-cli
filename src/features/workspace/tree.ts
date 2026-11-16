@@ -5,9 +5,10 @@ import {
   type PackageEntry,
 } from "@barndog-ai/api-contract/package";
 
-import { CliError } from "./cli-error.js";
-import { POSIX_MODE } from "./constants.js";
-import { ifExists } from "./files.js";
+import { CliError } from "../../errors.js";
+import { fileExecutable } from "../../platform.js";
+import type { RuntimeContext } from "../../runtime.js";
+import { ifExists } from "../../shared/files.js";
 
 /**
  * Every file in an installed folder. Not `readDirectory()` from the contract
@@ -15,7 +16,10 @@ import { ifExists } from "./files.js";
  * package size limits. Here everything counts: a `.git` or large file added by
  * hand must show up as a hand edit and be removed by mirroring.
  */
-export async function readTree(directory: string): Promise<PackageEntry[]> {
+export async function readTree(
+  directory: string,
+  runtime: RuntimeContext,
+): Promise<PackageEntry[]> {
   const entries: PackageEntry[] = [];
 
   async function visit(base: string) {
@@ -28,7 +32,11 @@ export async function readTree(directory: string): Promise<PackageEntry[]> {
         entries.push({
           path,
           data: await readFile(join(directory, path)),
-          executable: !!(info.mode & POSIX_MODE.executableBits),
+          executable: await fileExecutable(
+            join(directory, path),
+            info.mode,
+            runtime,
+          ),
         });
       } else {
         throw new CliError(
@@ -44,7 +52,10 @@ export async function readTree(directory: string): Promise<PackageEntry[]> {
 }
 
 /** Fingerprint of an installed folder, or null when it does not exist. */
-export async function treeFingerprint(directory: string) {
+export async function treeFingerprint(
+  directory: string,
+  runtime: RuntimeContext,
+) {
   const info = await ifExists(lstat(directory));
   if (!info) {
     return null;
@@ -55,7 +66,7 @@ export async function treeFingerprint(directory: string) {
   }
 
   try {
-    return packageFingerprint(await readTree(directory));
+    return packageFingerprint(await readTree(directory, runtime));
   } catch {
     return "unreadable";
   }

@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../../runtime.js";
 import {
   onboardingEnvironment,
   selectedEnvironment,
@@ -75,23 +76,23 @@ export type ChooseHarnesses = (choices: HarnessChoice[]) => Promise<Harness[]>;
 
 /** Resolve saved selections and persist only after the caller supplies an explicit choice. */
 export async function initialize(options: {
-  home: string;
+  runtime: RuntimeContext;
   server?: string;
   workspace?: ChosenWorkspace;
   /** A local folder that stays active beside the chosen Git or Cloud workspace. */
   keepLocal?: LocalWorkspace;
   choose: ChooseHarnesses;
   chooseEnvironment?: ChooseEnvironment;
-  cwd?: string;
   apply?: (settings: Settings) => Promise<void>;
   confirm?: (settings: Settings) => Promise<boolean>;
   detected?: DetectedHarness[];
 }): Promise<{ configPath: string; harnesses: Harness[]; cancelled?: boolean }> {
-  const { home } = options;
+  const { runtime } = options;
+  const { home } = runtime;
 
-  return locked(home, async () => {
+  return locked(options.runtime, async () => {
     const previous = await readSettings(home);
-    const detected = options.detected ?? (await detectHarnesses({ home }));
+    const detected = options.detected ?? (await detectHarnesses(runtime));
     const choices = detected.map((harness) => ({
       value: harness.id,
       name: harness.name,
@@ -109,7 +110,7 @@ export async function initialize(options: {
       const model =
         next.environment === undefined && options.workspace.kind === "local"
           ? await defined(
-              openRepoSource(next, home),
+              openRepoSource(next, options.runtime),
               "A local workspace always has a source",
             ).model()
           : undefined;
@@ -132,7 +133,11 @@ export async function initialize(options: {
     }
 
     if (options.server) {
-      const connection = await connectionContext(options.server, home);
+      const connection = await connectionContext(
+        options.server,
+        options.runtime,
+      );
+
       if (
         hasRemoteSelections(next) &&
         next.connection &&
@@ -158,7 +163,7 @@ export async function initialize(options: {
     }
 
     if (options.chooseEnvironment && (next.connection || next.gitWorkspace)) {
-      const choices = await onboardingEnvironment(next, home);
+      const choices = await onboardingEnvironment(next, options.runtime);
       next = selectedEnvironment(
         next,
         choices,
@@ -167,7 +172,11 @@ export async function initialize(options: {
     }
 
     if (options.keepLocal) {
-      const kept = await localRepoSource(options.keepLocal, home).model();
+      const kept = await localRepoSource(
+        options.keepLocal,
+        options.runtime,
+      ).model();
+
       const settings = {
         ...next,
         localWorkspace: options.keepLocal,

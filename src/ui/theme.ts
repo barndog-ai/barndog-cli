@@ -34,17 +34,6 @@ export function selected(
   return styleText(SELECTION_COLOR, text, { stream });
 }
 
-/** The color depth `FORCE_COLOR` asks for, in bits. */
-function forcedColorDepth() {
-  if (process.env.FORCE_COLOR === "3") {
-    return TRUE_COLOR_DEPTH;
-  }
-
-  return process.env.FORCE_COLOR === "2"
-    ? PALETTE_COLOR_DEPTH
-    : BASIC_COLOR_DEPTH;
-}
-
 /** The SGR foreground code for the brand color at a color depth: exact, nearest of 256, or red. */
 function primaryColorCode(depth: number, rgb: number[]) {
   if (depth >= TRUE_COLOR_DEPTH) {
@@ -64,7 +53,7 @@ export function primary(
     return text;
   }
 
-  const depth = stream.getColorDepth?.() ?? forcedColorDepth();
+  const depth = stream.getColorDepth?.() ?? BASIC_COLOR_DEPTH;
   const rgb = [1, GREEN_HEX_OFFSET, BLUE_HEX_OFFSET].map((start) =>
     parseInt(PRIMARY_COLOR.slice(start, start + 2), 16),
   );

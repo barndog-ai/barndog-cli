@@ -13,12 +13,14 @@ export const claude: HarnessAdapter = {
   name: "Claude Code",
   skillRoot: ".claude/skills",
   commands: ["claude"],
-  macApp: "Claude.app",
+  desktopApp: { name: "Claude" },
   hooks: {
     settings: [
       /(^|\/)\.claude\/settings(\.local)?\.json$/,
       /(^|\/)hooks\/hooks\.json$/,
     ],
+    // Git Bash, as Claude Code's hook reference says (PowerShell only when Git Bash is missing).
+    windowsShell: "bash",
     rootVariables: ["CLAUDE_PLUGIN_ROOT"],
     file: ".claude/settings.json",
     sessionStart: "SessionStart",

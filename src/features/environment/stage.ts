@@ -3,6 +3,7 @@
  * from the workspace source and works out the Skill links, native entries and
  * installed folders it needs. Nothing is written to a destination here.
  */
+import type { RuntimeContext } from "../../runtime.js";
 import { readFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { parse } from "yaml";
@@ -49,10 +50,12 @@ export async function stageAssets(input: {
   /** Absent when no workspace is connected; the catalog is then empty. */
   source: WorkspaceSource | undefined;
   harnesses: readonly Harness[];
-  home: string;
+  runtime: RuntimeContext;
 }): Promise<StagedAssets> {
-  const { invalid, vanished, skipped, localNames, source, harnesses, home } =
+  const { invalid, vanished, skipped, localNames, source, harnesses, runtime } =
     input;
+
+  const { home } = runtime;
 
   const effective = { assets: input.assets };
   const { links, native: previousNative, installed } = input.state;
@@ -99,7 +102,7 @@ export async function stageAssets(input: {
     rename: string | null;
     versionId: string;
   }) => {
-    const path = installedPath(home, kind, name);
+    const path = installedPath(runtime, kind, name);
     trees.push({
       id,
       kind,
@@ -107,7 +110,9 @@ export async function stageAssets(input: {
       source,
       rename,
       versionId,
-      fingerprint: packageFingerprint(await desiredEntries(source, rename)),
+      fingerprint: packageFingerprint(
+        await desiredEntries(source, rename, input.runtime),
+      ),
     });
 
     return path;
@@ -213,7 +218,9 @@ export async function stageAssets(input: {
     } else if (ref.kind === "mcp") {
       const definition = await source.mcpDefinition(ref);
       for (const harness of harnesses) {
-        native.push(mcpEntry(harness, { id: ref.id, name }, definition, home));
+        native.push(
+          mcpEntry(harness, { id: ref.id, name }, definition, runtime),
+        );
       }
     } else {
       const cache = await source.packageFolder("hook", ref);
@@ -238,7 +245,11 @@ export async function stageAssets(input: {
         const implementation = manifest.implementations[harness];
         const reason = !implementation
           ? "No implementation for this harness"
-          : await runtimeRequirements(harness, implementation.requirements);
+          : await runtimeRequirements(
+              harness,
+              implementation.requirements,
+              input.runtime,
+            );
 
         if (reason) {
           events.push({
@@ -253,7 +264,7 @@ export async function stageAssets(input: {
         }
 
         native.push(
-          ...hookEntries(harness, { id: ref.id, root, manifest }, home),
+          ...hookEntries(harness, { id: ref.id, root, manifest }, runtime),
         );
       }
     }

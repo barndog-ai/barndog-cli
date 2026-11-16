@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../../runtime.js";
 import { MILLISECONDS_PER_SECOND } from "../../shared/constants.js";
 
 import { hasRemoteSelections } from "../../config/environment.js";
@@ -29,7 +30,7 @@ const AUTH_REQUEST_TIMEOUT_MS = 10000;
  */
 export type LoginOptions = {
   server?: string;
-  home: string;
+  runtime: RuntimeContext;
   signal?: AbortSignal;
   verification: (details: {
     userCode: string;
@@ -43,17 +44,22 @@ export type LoginOptions = {
  * validated origin.
  */
 export async function configuredServer(
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<string | undefined> {
+  const { home } = runtime;
+
   const settings = await readSettings(home);
-  const credentials = await readCredentials(home);
+  const credentials = await readCredentials(runtime);
   const value = settings?.connection?.server ?? credentials.selectedServer;
 
   return value ? normalizeServer(value) : undefined;
 }
 
-async function selectedServer(server: string | undefined, home: string) {
-  const value = server ?? (await configuredServer(home));
+async function selectedServer(
+  server: string | undefined,
+  runtime: RuntimeContext,
+) {
+  const value = server ?? (await configuredServer(runtime));
   if (!value) {
     throw new CliError(
       "Choose a server for your first sign-in.",
@@ -68,11 +74,12 @@ async function selectedServer(server: string | undefined, home: string) {
  * A client that attaches no saved credential: sign-in has none yet, and
  * revoking names the token itself, which may not be the saved one.
  */
-const signInClient = (server: string, home: string): ApiClient =>
-  createApiClient({
+const signInClient = (server: string, runtime: RuntimeContext): ApiClient => {
+  return createApiClient({
     baseUrl: server,
-    fetch: serverFetch(server, home, false),
+    fetch: serverFetch(server, runtime, false),
   });
+};
 
 /** Ends the session `token` belongs to; throws when the server didn't confirm it. */
 async function revokeSession(client: ApiClient, token: string) {
@@ -87,9 +94,10 @@ async function revokeSession(client: ApiClient, token: string) {
  * persists the returned session.
  */
 export async function login(options: LoginOptions) {
-  const { home } = options;
-  const server = await selectedServer(options.server, home);
-  const client = signInClient(server, home);
+  const { runtime } = options;
+  const { home } = runtime;
+  const server = await selectedServer(options.server, options.runtime);
+  const client = signInClient(server, options.runtime);
 
   const started = loginStartSchema.parse(
     (await client.POST("/v1/auth/cli/start", { signal: options.signal })).data,
@@ -144,7 +152,7 @@ export async function login(options: LoginOptions) {
         );
       }
 
-      await updateCredentials(home, (credentials) => {
+      await updateCredentials(options.runtime, (credentials) => {
         credentials.servers[server] = {
           token: result.token,
           expiresAt: result.expiresAt,
@@ -166,19 +174,19 @@ export async function login(options: LoginOptions) {
  * Attempts remote session revocation and removes local credentials even if
  * revocation fails; reports that outcome.
  */
-export async function logout(home: string) {
-  const server = await selectedServer(undefined, home);
-  const credential = (await readCredentials(home)).servers[server];
+export async function logout(runtime: RuntimeContext) {
+  const server = await selectedServer(undefined, runtime);
+  const credential = (await readCredentials(runtime)).servers[server];
   let revoked = true;
   if (credential) {
     try {
-      await revokeSession(signInClient(server, home), credential.token);
+      await revokeSession(signInClient(server, runtime), credential.token);
     } catch {
       revoked = false;
     }
   }
 
-  await updateCredentials(home, (credentials) => {
+  await updateCredentials(runtime, (credentials) => {
     delete credentials.servers[server];
     if (credentials.selectedServer === server) {
       delete credentials.selectedServer;
@@ -196,18 +204,18 @@ export type AuthStatus = { server: string; context: ActorContext };
  * require login.
  */
 export async function authStatus(
-  home: string,
+  runtime: RuntimeContext,
   explicitServer?: string,
 ): Promise<AuthStatus> {
   let server;
   try {
-    server = await selectedServer(explicitServer, home);
+    server = await selectedServer(explicitServer, runtime);
   } catch {
     throw new LoginRequiredError();
   }
 
   const context = contextSchema.parse(
-    (await apiClient(server, home).GET("/v1/context")).data,
+    (await apiClient(server, runtime).GET("/v1/context")).data,
   );
 
   return { server, context };
@@ -219,11 +227,11 @@ export async function authStatus(
  */
 export async function connectionContext(
   server: string,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<Connection> {
   server = normalizeServer(server);
   const context = contextSchema.parse(
-    (await apiClient(server, home).GET("/v1/context")).data,
+    (await apiClient(server, runtime).GET("/v1/context")).data,
   );
 
   return {

@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../../runtime.js";
 import { mcpListSchema } from "@barndog-ai/api-contract";
 import type { Connection } from "../../config/settings.js";
 import type { CatalogAsset } from "../asset-kinds/index.js";
@@ -11,12 +12,12 @@ import { apiClient } from "../auth/transport.js";
  */
 export async function mcpCatalog(
   conn: Connection,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<CatalogAsset[]> {
   return allPages(async (cursor) => {
     const page = await parsed(
       mcpListSchema,
-      apiClient(conn.server, home).GET("/v1/mcps", {
+      apiClient(conn.server, runtime).GET("/v1/mcps", {
         params: { query: { limit: PAGE_SIZE, cursor } },
       }),
     );

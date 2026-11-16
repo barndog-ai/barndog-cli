@@ -18,10 +18,15 @@ const timer = setTimeout(() => {
   process.exit(0);
 }, STARTUP_KNOWLEDGE_TIMEOUT_MS);
 
+const runtime = {
+  home: process.argv[3] ?? homedir(),
+  cwd: process.cwd(),
+  env: { ...process.env },
+  platform: process.platform,
+};
+
 try {
-  const text = knowledgeIndexText(
-    await knowledgeList(true, process.argv[3] ?? homedir()),
-  );
+  const text = knowledgeIndexText(await knowledgeList(true, runtime));
 
   const harness = process.argv[2];
   if (text && isHarness(harness)) {

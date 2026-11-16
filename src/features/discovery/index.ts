@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../../runtime.js";
 import { CliError } from "../../errors.js";
 import { z } from "zod";
 import {
@@ -36,14 +37,14 @@ export type DeveloperAssets = {
  */
 export async function developers(
   search: string | undefined,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<Developer[]> {
-  const conn = await connection(home);
+  const conn = await connection(runtime);
 
   return allPages(async (cursor) => {
     const page: DeveloperList = await parsed(
       developerListSchema,
-      apiClient(conn.server, home).GET("/v1/developers", {
+      apiClient(conn.server, runtime).GET("/v1/developers", {
         params: { query: { limit: PAGE_SIZE, search, cursor } },
       }),
     );
@@ -59,9 +60,9 @@ export async function developers(
 export async function developerAssets(
   selector: string,
   search: string | undefined,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<DeveloperAssets> {
-  const people = await developers(undefined, home);
+  const people = await developers(undefined, runtime);
   const matches = people.filter(
     (p) => p.id === selector || p.slug === selector,
   );
@@ -74,11 +75,11 @@ export async function developerAssets(
     );
   }
 
-  const conn = await connection(home);
+  const conn = await connection(runtime);
   const assets = await allPages(async (cursor) => {
     const page: DeveloperAssetPage = await parsed(
       developerAssetsSchema,
-      apiClient(conn.server, home).GET("/v1/developers/{id}/assets", {
+      apiClient(conn.server, runtime).GET("/v1/developers/{id}/assets", {
         params: {
           path: { id: developer.id },
           query: { limit: PAGE_SIZE, search, cursor },
@@ -118,18 +119,18 @@ export type Promotion = z.infer<typeof promotionSchema>;
 export async function copyToScope(
   action: "promote" | "fork",
   input: PromoteInput,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<Promotion> {
   const selected = await selectAsset(
     input.kind,
     input.name,
     input.origin,
-    home,
+    runtime,
   );
 
-  const scope = await selectOrigin(input.target, selected.connection, home);
+  const scope = await selectOrigin(input.target, selected.connection, runtime);
 
-  const client = apiClient(selected.connection.server, home);
+  const client = apiClient(selected.connection.server, runtime);
   const params = { path: { kind: input.kind, id: selected.reference.id } };
   const body = {
     name: input.newName,
@@ -154,7 +155,7 @@ export async function copyToScope(
 /** Copies an asset into a scope the developer owns; a change ID means it needs review. */
 export async function fork(
   input: PromoteInput,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<Promotion> {
-  return copyToScope("fork", input, home);
+  return copyToScope("fork", input, runtime);
 }

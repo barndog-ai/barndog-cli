@@ -8,12 +8,14 @@ export const cursor: HarnessAdapter = {
   name: "Cursor",
   skillRoot: ".cursor/skills",
   commands: ["cursor", "cursor-agent"],
-  macApp: "Cursor.app",
+  desktopApp: { name: "Cursor" },
   hooks: {
     settings: [
       /(^|\/)\.cursor\/hooks\.json$/,
       /(^|\/)hooks\/hooks-cursor\.json$/,
     ],
+    // Cursor's desktop app runs hook commands through PowerShell.
+    windowsShell: "powershell",
     rootVariables: ["CURSOR_PLUGIN_ROOT"],
     file: ".cursor/hooks.json",
     fileVersion: 1,

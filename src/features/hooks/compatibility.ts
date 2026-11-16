@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../../runtime.js";
 import { hookSchema } from "@barndog-ai/api-contract";
 import { readSettings } from "../../config/settings.js";
 import { selectAsset } from "../server/catalog.js";
@@ -15,17 +16,20 @@ import type { HookCompatibility } from "./types.js";
 export async function hookCompatibility(
   name: string,
   origin: string,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<HookCompatibility> {
+  const { home } = runtime;
+
   const settings = await readSettings(home);
-  const repo = settings && repoForOrigin(settings, home, origin);
+  const repo = settings && repoForOrigin(settings, runtime, origin);
   if (repo) {
     return repoHookCompatibility(
       selectRepoAsset(await repo.model(), "hook", name, origin),
+      runtime,
     );
   }
 
-  const selected = await selectAsset("hook", name, origin, home);
+  const selected = await selectAsset("hook", name, origin, runtime);
   const asset = hookSchema.parse(selected.asset);
 
   return {
@@ -37,6 +41,7 @@ export async function hookCompatibility(
           ? await runtimeRequirements(
               row.harness,
               row.implementation.requirements,
+              runtime,
             )
           : "No implementation for this harness",
       })),
@@ -47,6 +52,7 @@ export async function hookCompatibility(
 /** What a Git or local workspace Hook declares for each coding tool, and what this machine lacks. */
 async function repoHookCompatibility(
   asset: RepoAsset,
+  runtime: RuntimeContext,
 ): Promise<HookCompatibility> {
   const manifest = hookMetadata(asset.entries);
 
@@ -62,7 +68,11 @@ async function repoHookCompatibility(
           declared: true,
           implementation,
           runtimeIssue: implementation
-            ? await runtimeRequirements(harness, implementation.requirements)
+            ? await runtimeRequirements(
+                harness,
+                implementation.requirements,
+                runtime,
+              )
             : "No implementation for this harness",
         };
       }),

@@ -1,3 +1,5 @@
+import { writePackage, readDirectory } from "../workspace/directory.js";
+import type { RuntimeContext } from "../../runtime.js";
 import { HTTP_STATUS } from "../../shared/constants.js";
 
 import { randomUUID } from "node:crypto";
@@ -9,12 +11,10 @@ import { ApiError } from "@barndog-ai/api-contract";
 import {
   defaultLimits,
   packageFingerprint,
-  writePackage,
 } from "@barndog-ai/api-contract/package";
 import {
   diffEntries,
   mergeEntries,
-  readDirectory,
   textContent,
 } from "@barndog-ai/api-contract/collaboration";
 import { packageApi } from "./api.js";
@@ -45,6 +45,7 @@ import {
   type Files,
   NoWorkingCopyError,
   type PackageUpload,
+  readWorkingCopy,
 } from "./workspace-store.js";
 import {
   externalSource,
@@ -84,8 +85,7 @@ export { NoWorkingCopyError } from "./workspace-store.js";
 export type WorkingFolderOptions = {
   /** The new folder; defaults to `./<name>`. */
   target?: string;
-  cwd?: string;
-  home: string;
+  runtime: RuntimeContext;
 };
 
 /**
@@ -95,14 +95,16 @@ export type WorkingFolderOptions = {
  */
 export async function pullCloudPackage(
   { name, origin, kind }: { name: string; origin: string; kind: PackageKind },
-  { target, cwd = process.cwd(), home }: WorkingFolderOptions,
+  { target, runtime }: WorkingFolderOptions,
 ): Promise<PulledPackage> {
-  return locked(home, async () => {
-    const conn = await connection(home);
+  const { cwd } = runtime;
+
+  return locked(runtime, async () => {
+    const conn = await connection(runtime);
     const published = await selectPackage(
       { name, selector: origin, kind },
       conn,
-      home,
+      runtime,
     );
 
     const path = resolve(cwd, target ?? name);
@@ -118,10 +120,10 @@ export async function pullCloudPackage(
           commit: published.version.commit,
         },
         conn,
-        { home, kind },
+        { runtime, kind },
       );
 
-      await writePackage(root, files);
+      await writePackage(root, files, runtime);
       await save(
         {
           root,
@@ -135,7 +137,7 @@ export async function pullCloudPackage(
           base: encodeFiles(files),
           conflicts: [],
         },
-        home,
+        runtime,
       );
 
       return { root, version: published.version.number };
@@ -151,12 +153,11 @@ export async function pullCloudPackage(
  * version it started from. Throws `NoWorkingCopyError` outside one.
  */
 export async function workspaceStatus(
-  cwd = process.cwd(),
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<CloudWorkingCopyStatus> {
-  return locked(home, async () => {
-    const work = await find(cwd, home);
-    const local = await readDirectory(work.root);
+  return locked(runtime, async () => {
+    const work = await find(runtime);
+    const local = await readWorkingCopy(work, runtime);
 
     return {
       root: work.root,
@@ -190,13 +191,12 @@ export async function workspaceStatus(
  * awaits a retry; conflicting text gets markers and is listed in `conflicts`.
  */
 export async function updateWorkspace(
-  cwd = process.cwd(),
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<UpdatedCloudWorkingCopy> {
-  return locked(home, async () => {
-    const work = await find(cwd, home);
+  return locked(runtime, async () => {
+    const work = await find(runtime);
     const previous = structuredClone(work);
-    await connection(home, work.connection);
+    await connection(runtime, work.connection);
     if (work.pending || work.external?.pending) {
       throw new CliError(
         "Your last push is still waiting for the server to confirm it. Retry it before pulling.",
@@ -211,24 +211,24 @@ export async function updateWorkspace(
       );
     }
 
-    let entries = await readDirectory(work.root);
+    let entries = await readWorkingCopy(work, runtime);
     const conflicts = new Set<string>();
-    const source = await externalSource(work, home);
+    const source = await externalSource(work, runtime);
     if (source) {
-      return pullExternal(work, { source, entries, previous }, home);
+      return pullExternal(work, { source, entries, previous }, runtime);
     }
 
     if (work.proposal) {
       const proposal = await getChange(
         work.proposal.id,
         work.connection,
-        home,
+        runtime,
         work.kind,
       );
 
       if (proposal.revision !== work.proposal.revision) {
         const remote = await downloadChange(proposal, work.connection, {
-          home,
+          runtime,
           kind: work.kind,
         });
 
@@ -246,7 +246,7 @@ export async function updateWorkspace(
             const versions = await packageApi(
               work.kind,
               work.connection,
-              home,
+              runtime,
             ).versions(publishedId(work));
 
             const version = versions.find(
@@ -267,7 +267,7 @@ export async function updateWorkspace(
                   commit: version.commit,
                 },
                 work.connection,
-                { home, kind: work.kind },
+                { runtime, kind: work.kind },
               ),
             );
 
@@ -292,7 +292,7 @@ export async function updateWorkspace(
       const published = await packageApi(
         work.kind,
         work.connection,
-        home,
+        runtime,
       ).published(publishedId(work));
 
       if (published.version.id !== work.baseVersionId) {
@@ -303,7 +303,7 @@ export async function updateWorkspace(
             commit: published.version.commit,
           },
           work.connection,
-          { home, kind: work.kind },
+          { runtime, kind: work.kind },
         );
 
         const merged = await mergeEntries(
@@ -322,7 +322,7 @@ export async function updateWorkspace(
       const proposal = await getChange(
         work.proposal.id,
         work.connection,
-        home,
+        runtime,
         work.kind,
       );
 
@@ -334,7 +334,7 @@ export async function updateWorkspace(
     }
 
     work.conflicts = [...conflicts];
-    await applyFiles(work, entries, home, previous);
+    await applyFiles(work, entries, runtime, previous);
 
     return {
       root: work.root,
@@ -350,13 +350,12 @@ export async function updateWorkspace(
  */
 export async function resolveConflict(
   path: string,
-  cwd = process.cwd(),
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<ConflictResolution> {
-  return locked(home, async () => {
-    const work = await find(cwd, home);
+  return locked(runtime, async () => {
+    const work = await find(runtime);
 
-    return markResolved(work, path, cwd, home);
+    return markResolved(work, path, runtime);
   });
 }
 
@@ -381,9 +380,10 @@ export async function markResolved(
     "root" | "conflicts" | "pendingWrite" | "pendingSnapshot"
   >,
   path: string,
-  cwd: string,
-  home: string,
+  runtime: RuntimeContext,
 ) {
+  const { cwd } = runtime;
+
   const absolute = resolve(await realpath(cwd), path);
   const conflict = work.conflicts.find((p) => join(work.root, p) === absolute);
   if (!conflict) {
@@ -393,7 +393,7 @@ export async function markResolved(
     );
   }
 
-  const files = await readDirectory(work.root);
+  const files = await readDirectory(work.root, runtime);
   const file = files.find((e) => e.path === conflict);
 
   if (file && hasConflictMarkers(textContent(file.data) ?? "")) {
@@ -414,7 +414,7 @@ export async function markResolved(
   }
 
   work.conflicts = work.conflicts.filter((p) => p !== conflict);
-  await save(work, home);
+  await save(work, runtime);
 
   return { resolved: conflict, remaining: work.conflicts };
 }
@@ -424,12 +424,14 @@ export async function markResolved(
  * routes take. Fails with `PACKAGE_TOO_LARGE` above the compressed size limit;
  * uses a temporary folder under `~/.barndog/workspaces/`.
  */
-export async function archive(files: Files, home: string) {
+export async function archive(files: Files, runtime: RuntimeContext) {
+  const { home } = runtime;
+
   const temp = join(barndogPaths(home).workingCopies, `upload-${randomUUID()}`);
   const tar = temp + ".tar.gz";
 
   try {
-    await writePackage(temp, decodeFiles(files));
+    await writePackage(temp, decodeFiles(files), runtime);
     await c(
       { cwd: temp, file: tar, gzip: true, portable: true, noMtime: true },
       files.map((e) => e.path),
@@ -465,25 +467,26 @@ export async function pushWorkspace(
     new?: boolean;
     title?: string;
   } = {},
-  cwd = process.cwd(),
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<CloudPushResult> {
-  return locked(home, async () => {
+  const { cwd } = runtime;
+
+  return locked(runtime, async () => {
     let work: Workspace;
     try {
-      work = await find(cwd, home);
+      work = await find(runtime);
     } catch (error) {
       if (!options.origin || !(error instanceof NoWorkingCopyError)) {
         throw error;
       }
 
-      const conn = await connection(home);
+      const conn = await connection(runtime);
       const root = await realpath(cwd);
-      const files = await readDirectory(root);
+      const files = await readDirectory(root, runtime);
       const kind = packageKindOf(files, options.kind);
       const description = packageMetadataFor(files, kind);
 
-      const origin = await selectOrigin(options.origin, conn, home);
+      const origin = await selectOrigin(options.origin, conn, runtime);
       work = {
         root,
         kind,
@@ -496,7 +499,7 @@ export async function pushWorkspace(
         conflicts: [],
       };
 
-      await save(work, home);
+      await save(work, runtime);
     }
 
     if (options.kind && work.kind !== options.kind) {
@@ -513,12 +516,12 @@ export async function pushWorkspace(
       );
     }
 
-    await connection(home, work.connection);
+    await connection(runtime, work.connection);
     if (options.origin) {
       const selected = await selectOrigin(
         options.origin,
         work.connection,
-        home,
+        runtime,
       );
 
       if (
@@ -533,7 +536,7 @@ export async function pushWorkspace(
         }
 
         work.origin = { type: selected.type, id: selected.id };
-        await save(work, home);
+        await save(work, runtime);
       }
     }
 
@@ -544,17 +547,17 @@ export async function pushWorkspace(
       );
     }
 
-    const source = await externalSource(work, home);
+    const source = await externalSource(work, runtime);
     if (source) {
-      return pushExternal(work, source, options, home);
+      return pushExternal(work, source, options, runtime);
     }
 
-    const api = packageApi(work.kind, work.connection, home);
+    const api = packageApi(work.kind, work.connection, runtime);
     if (options.publish) {
       const scope = await selectOrigin(
         `${work.origin.type}:${work.origin.id}`,
         work.connection,
-        home,
+        runtime,
       );
 
       if (!scope.canPublish) {
@@ -566,7 +569,7 @@ export async function pushWorkspace(
     }
 
     let proposal = work.proposal
-      ? await getChange(work.proposal.id, work.connection, home, work.kind)
+      ? await getChange(work.proposal.id, work.connection, runtime, work.kind)
       : undefined;
 
     if (
@@ -574,13 +577,13 @@ export async function pushWorkspace(
       options.publish &&
       proposal?.status === "merged" &&
       proposal.publishedVersion &&
-      packageFingerprint(await readDirectory(work.root)) ===
+      packageFingerprint(await readWorkingCopy(work, runtime)) ===
         packageFingerprint(decodeFiles(linkedProposal(work).files))
     ) {
       work.baseVersionId = proposal.publishedVersion.id;
       work.baseNumber = proposal.publishedVersion.number;
       work.base = linkedProposal(work).files;
-      await save(work, home);
+      await save(work, runtime);
 
       return proposal;
     }
@@ -613,7 +616,7 @@ export async function pushWorkspace(
         );
       }
 
-      const files = await readDirectory(work.root);
+      const files = await readWorkingCopy(work, runtime);
       if (packageMetadataFor(files, work.kind).name !== work.name) {
         throw new CliError(
           `This working copy's name must stay ${work.name}. Change it back, then push again.`,
@@ -639,7 +642,7 @@ export async function pushWorkspace(
           work.baseVersionId = publishedVersion(merged).id;
           work.baseNumber = publishedVersion(merged).number;
           work.base = linkedProposal(work).files;
-          await save(work, home);
+          await save(work, runtime);
 
           return merged;
         }
@@ -661,11 +664,11 @@ export async function pushWorkspace(
       };
 
       work.pending = { metadata, files: encodeFiles(files), changeId };
-      await save(work, home);
+      await save(work, runtime);
     }
 
     const pending = work.pending;
-    const upload = await archive(pending.files, home);
+    const upload = await archive(pending.files, runtime);
     try {
       proposal = pending.changeId
         ? await api.revise(pending.changeId, pending.metadata, upload)
@@ -684,7 +687,7 @@ export async function pushWorkspace(
         ].includes(error.status)
       ) {
         delete work.pending;
-        await save(work, home);
+        await save(work, runtime);
       }
 
       throw error;
@@ -698,7 +701,7 @@ export async function pushWorkspace(
     };
 
     delete work.pending;
-    await save(work, home);
+    await save(work, runtime);
     if (options.publish) {
       proposal = await api.merge(proposal.id, {
         expectedRevision: work.proposal.revision,
@@ -707,7 +710,7 @@ export async function pushWorkspace(
       work.baseVersionId = publishedVersion(proposal).id;
       work.baseNumber = publishedVersion(proposal).number;
       work.base = work.proposal.files;
-      await save(work, home);
+      await save(work, runtime);
     }
 
     return proposal;
@@ -720,17 +723,19 @@ export async function pushWorkspace(
  */
 export async function createWorkspace(
   { name, origin, kind }: { name: string; origin: string; kind: PackageKind },
-  { target, cwd = process.cwd(), home }: WorkingFolderOptions,
+  { target, runtime }: WorkingFolderOptions,
 ): Promise<CreatedPackage> {
-  return locked(home, async () => {
+  const { cwd } = runtime;
+
+  return locked(runtime, async () => {
     if (!NAME.test(name)) {
       throw new CliError(
         `${name} isn't a valid name. Use lowercase letters, digits and hyphens, such as my-skill.`,
       );
     }
 
-    const conn = await connection(home);
-    const scope = await selectOrigin(origin, conn, home);
+    const conn = await connection(runtime);
+    const scope = await selectOrigin(origin, conn, runtime);
 
     const path = resolve(cwd, target ?? name);
     await mkdir(dirname(path), { recursive: true });
@@ -738,7 +743,7 @@ export async function createWorkspace(
     const root = await realpath(path);
     const entries = assetKinds[kind].scaffold(name);
     try {
-      await writePackage(root, entries);
+      await writePackage(root, entries, runtime);
       await save(
         {
           root,
@@ -751,7 +756,7 @@ export async function createWorkspace(
           base: [],
           conflicts: [],
         },
-        home,
+        runtime,
       );
 
       return { root, kind, name };

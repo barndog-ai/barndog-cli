@@ -1,3 +1,4 @@
+import { testRuntime } from "./runtime.js";
 import { describe, expect, test } from "vitest";
 import type { Command } from "commander";
 
@@ -43,6 +44,8 @@ import {
   UUID_V4,
 } from "../shared/patterns.js";
 import { createProgram } from "../program.js";
+import { WINDOWS_DEVICE_NAME } from "../platform.js";
+import { PLAIN_WORD } from "../shared/shell.js";
 import { safe } from "../ui/format.js";
 
 const sha1 = "3f786850e387550fdab836ed7e6dc881de23001b";
@@ -336,11 +339,16 @@ describe("repository URLs", () => {
     ["~user/skills", "~user/skills"],
     ["a/~/b", "a/~/b"],
   ])("expandHome %j", (path, expected) => {
-    expect(expandHome(path, "/home/me")).toBe(expected);
+    expect(expandHome(path, testRuntime("/home/me"))).toBe(expected);
   });
 
   test.each([
     ["/abs", true],
+    ["C:\\assets\\skill", true],
+    ["C:/assets/skill", true],
+    ["\\\\server\\share\\skill", true],
+    [".\\skill", true],
+    ["~\\skill", true],
     [".", true],
     ["..", true],
     ["./x", true],
@@ -354,6 +362,37 @@ describe("repository URLs", () => {
     ["https://github.com/o/r", false],
   ])("looksLocal %j → %s", (source, expected) => {
     expect(looksLocal(source)).toBe(expected);
+  });
+});
+
+describe("shell words", () => {
+  test.each([
+    ["claude", true],
+    ["v1.2-rc_3", true],
+    ["a b", false],
+    ["$HOME", false],
+    ["/usr/bin/node", false],
+    ["it's", false],
+    ["", false],
+  ])("PLAIN_WORD %j → %s", (word, expected) => {
+    expect(PLAIN_WORD.test(word)).toBe(expected);
+  });
+});
+
+describe("Windows file names", () => {
+  test.each([
+    ["CON", true],
+    ["con.txt", true],
+    ["LPT1.log", true],
+    ["com9", true],
+    ["nul.tar.gz", true],
+    ["console", false],
+    ["com10", false],
+    ["lpt0", false],
+    ["acon", false],
+    ["", false],
+  ])("WINDOWS_DEVICE_NAME %j → %s", (name, expected) => {
+    expect(WINDOWS_DEVICE_NAME.test(name)).toBe(expected);
   });
 });
 

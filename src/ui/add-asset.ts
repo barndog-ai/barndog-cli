@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../runtime.js";
 import { CliError } from "../errors.js";
 import { scopeExists } from "../features/imports/discover.js";
 import { type UpdateMode } from "../features/imports/local.js";
@@ -26,7 +27,7 @@ export type AddOptions = {
  * prompts, so choices must come from flags.
  */
 export type AddContext = {
-  home: string;
+  runtime: RuntimeContext;
   interactive: boolean;
   write: (line: string) => void;
   prompts: AddPrompts;
@@ -77,7 +78,7 @@ export async function updateMode(options: AddOptions, context: AddContext) {
 }
 
 export async function finish(context: AddContext) {
-  const events = await synchronize(undefined, context.home, undefined, {
+  const events = await synchronize(undefined, context.runtime, undefined, {
     prompt: false,
   });
 

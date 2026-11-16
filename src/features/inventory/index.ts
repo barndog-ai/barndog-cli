@@ -1,8 +1,9 @@
+import type { RuntimeContext } from "../../runtime.js";
 import { basename } from "node:path";
 import { readSettings, SetupRequiredError } from "../../config/settings.js";
 import { selectionState } from "../../config/environment.js";
 import { readState } from "../../config/state.js";
-import { treeFingerprint } from "../../shared/tree.js";
+import { treeFingerprint } from "../workspace/tree.js";
 import { linkTarget } from "../environment/transaction.js";
 import { environmentCatalog } from "../server/catalog.js";
 import { openRepoSource } from "../workspace/workspace-source.js";
@@ -92,7 +93,9 @@ function leftoverState(modified: boolean, offline: boolean): InventoryState {
  * Compares configured selections, catalog and installed files to report status;
  * unreachable sources fall back to local state.
  */
-export async function inventory(home: string): Promise<Inventory> {
+export async function inventory(runtime: RuntimeContext): Promise<Inventory> {
+  const { home } = runtime;
+
   const settings = await readSettings(home);
   if (!settings) {
     throw new SetupRequiredError();
@@ -109,7 +112,7 @@ export async function inventory(home: string): Promise<Inventory> {
   // The same comparisons that stop sync, so status can't call these up to date.
   const modified = new Set<string>();
   for (const tree of installed) {
-    const actual = await treeFingerprint(tree.path);
+    const actual = await treeFingerprint(tree.path, runtime);
     if (tree.fingerprint && actual !== null && actual !== tree.fingerprint) {
       modified.add(tree.id);
     }
@@ -123,7 +126,7 @@ export async function inventory(home: string): Promise<Inventory> {
   }
 
   let offline: string | null = null;
-  const repo = openRepoSource(settings, home, { refresh: "auto" });
+  const repo = openRepoSource(settings, runtime, { refresh: "auto" });
   if (conn || repo) {
     try {
       const { catalog: primaryCatalog, scopes: loadScopes } =
@@ -138,15 +141,15 @@ export async function inventory(home: string): Promise<Inventory> {
             };
           }
 
-          const remote = await environmentCatalog(home, conn);
+          const remote = await environmentCatalog(runtime, conn);
 
           return {
             catalog: remote.catalog,
-            scopes: () => scopes(remote.connection, home),
+            scopes: () => scopes(remote.connection, runtime),
           };
         })();
 
-      const overlay = localOverlay(settings, home);
+      const overlay = localOverlay(settings, runtime);
       const catalog = overlay
         ? await mergeLocalCatalog(primaryCatalog, overlay)
         : primaryCatalog;
@@ -254,10 +257,8 @@ export async function inventory(home: string): Promise<Inventory> {
       continue;
     }
 
-    const installedFolder = installed
-      .find((t) => t.id === id)
-      ?.path.split("/")
-      .pop();
+    const installedPath = installed.find((t) => t.id === id)?.path;
+    const installedFolder = installedPath ? basename(installedPath) : undefined;
 
     const unlinkedName = kind === "mcp" ? entry?.key : installedFolder;
     const name = link ? basename(link.target) : (unlinkedName ?? id);

@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../runtime.js";
 import { environmentChooser } from "./environment-onboarding.js";
 import { authStatus, configuredServer } from "../features/auth/session.js";
 import {
@@ -113,10 +114,10 @@ function flagChoice(options: {
 /** Starting over always offers every source; a saved server is only the default. */
 async function chooseSource(
   previous: Settings | null,
-  home: string,
+  runtime: RuntimeContext,
   choose: (current?: SetupChoice) => Promise<SetupChoice> = chooseConnection,
 ): Promise<SetupChoice> {
-  const server = await configuredServer(home);
+  const server = await configuredServer(runtime);
   if (!previous) {
     return server ? { kind: "cloud", server } : choose();
   }
@@ -142,16 +143,16 @@ export async function runSetup(options: {
     targets: { value: string; name: string }[],
   ) => Promise<string>;
   confirmApply?: (settings: Settings) => Promise<boolean>;
-  home: string;
+  runtime: RuntimeContext;
   interactive?: boolean;
   write?: (message: string) => void;
   confirmRestart?: () => Promise<boolean>;
   choose?: ChooseHarnesses;
   chooseEnvironment?: ChooseEnvironment;
-  cwd?: string;
   detected?: DetectedHarness[];
 }): Promise<void> {
-  const { home } = options;
+  const { runtime } = options;
+  const { home } = runtime;
   const write = options.write ?? console.log;
   const previous = await readSettings(home);
   if (previous) {
@@ -205,7 +206,7 @@ export async function runSetup(options: {
 
   const choice: SetupChoice =
     flagChoice(options) ??
-    (await chooseSource(previous, home, options.chooseConnection));
+    (await chooseSource(previous, options.runtime, options.chooseConnection));
 
   const server = choice.kind === "cloud" ? choice.server : undefined;
   let workspace: ChosenWorkspace | undefined;
@@ -214,7 +215,7 @@ export async function runSetup(options: {
 
   if (choice.kind === "local") {
     const fresh = !existsSync(barndogPaths(home).localWorkspace);
-    const local = await localWorkspace(home);
+    const local = await localWorkspace(options.runtime);
     workspace = { kind: "local", local };
     // A folder made for this run shouldn't outlive a setup that didn't finish.
     if (fresh) {
@@ -226,11 +227,14 @@ export async function runSetup(options: {
   }
 
   if (choice.kind === "git") {
-    const url = checkRepositoryUrl(await cloneOrigin(choice.url));
+    const url = checkRepositoryUrl(
+      await cloneOrigin(choice.url, options.runtime),
+    );
+
     let head: RemoteHead = null;
     let cloned: GitWorkspace | null = null;
     try {
-      head = await inspectRepository(url);
+      head = await inspectRepository(url, options.runtime);
     } catch (error) {
       if (!(error instanceof RepositoryAccessError)) {
         throw error;
@@ -257,7 +261,7 @@ export async function runSetup(options: {
         throw error;
       }
 
-      cloned = await cloneGitWorkspace(url, home);
+      cloned = await cloneGitWorkspace(url, options.runtime);
     }
 
     if (!head && !cloned) {
@@ -281,11 +285,11 @@ export async function runSetup(options: {
       git:
         cloned ??
         (head
-          ? await connectGitWorkspace(url, head.branch, home)
+          ? await connectGitWorkspace(url, head.branch, options.runtime)
           : await createGitWorkspace(
               url,
               basename(url).replace(/\.git$/, "") || "Workspace",
-              home,
+              options.runtime,
             )),
     };
 
@@ -309,18 +313,18 @@ export async function runSetup(options: {
     write(`${dim("Workspace")}  ${server}`);
     let session;
     try {
-      session = await authStatus(home, server);
+      session = await authStatus(options.runtime, server);
     } catch (error) {
       if (!(error instanceof LoginRequiredError)) {
         throw error;
       }
 
       await runLogin(
-        { server, browser: options.browser !== false, home, force: true },
+        { server, browser: options.browser !== false, runtime, force: true },
         write,
       );
 
-      session = await authStatus(home, server);
+      session = await authStatus(options.runtime, server);
     }
 
     write(
@@ -332,7 +336,7 @@ export async function runSetup(options: {
     previous && choice.kind !== "local" ? previous.localWorkspace : undefined;
 
   const localCount = keptFolder
-    ? await localRepoSource(keptFolder, home)
+    ? await localRepoSource(keptFolder, options.runtime)
         .model()
         .then((model) => model.assets.length + model.knowledge.length)
         .catch(() => 0)
@@ -346,11 +350,10 @@ export async function runSetup(options: {
   write("");
   let environmentChoices: EnvironmentChoices | undefined;
   const initialized = initialize({
-    home,
+    runtime,
     server,
     workspace,
     keepLocal: localChoice === "leave" ? undefined : keptFolder,
-    cwd: options.cwd,
     chooseEnvironment: async (choices) => {
       environmentChoices = choices;
 
@@ -449,7 +452,7 @@ export async function runSetup(options: {
     apply: connected
       ? async (settings) => {
           for (const line of renderSyncOutput(
-            await synchronize(undefined, home, settings),
+            await synchronize(undefined, options.runtime, settings),
           )) {
             write(line);
           }
@@ -477,12 +480,14 @@ export async function runSetup(options: {
     const to =
       choice.kind === "cloud"
         ? await (options.chooseMoveTarget ?? chooseMoveTarget)(
-            await cloudMoveTargets(home),
+            await cloudMoveTargets(options.runtime),
           )
         : undefined;
 
     write("");
-    for (const line of renderMove(await moveLocalAssets({ to }, home))) {
+    for (const line of renderMove(
+      await moveLocalAssets({ to }, options.runtime),
+    )) {
       write(line);
     }
   }

@@ -1,3 +1,4 @@
+import { testRuntime } from "./runtime.js";
 import { HTTP_STATUS } from "../shared/constants.js";
 
 import { updateCredentials } from "../features/auth/credentials.js";
@@ -109,7 +110,7 @@ async function fixture(t: TestContext) {
     developerId: dev,
   };
 
-  await updateCredentials(home, (credentials) => {
+  await updateCredentials(testRuntime(home), (credentials) => {
     credentials.servers[connection.server] = {
       token: "a".repeat(43),
       expiresAt: new Date(Date.now() + 3600000).toISOString(),
@@ -152,12 +153,17 @@ async function fixture(t: TestContext) {
 
 test("publishedSkills retrieves every page before selection; rejects malformed and cyclic pagination", async (t) => {
   const f = await fixture(t);
-  expect((await publishedSkills(f.connection, f.home)).length).toBe(105);
+  expect(
+    (await publishedSkills(f.connection, testRuntime(f.home))).length,
+  ).toBe(105);
+
   f.repeat();
-  await expect(publishedSkills(f.connection, f.home)).rejects.toThrow(
-    /invalid page of results/,
-  );
+  await expect(
+    publishedSkills(f.connection, testRuntime(f.home)),
+  ).rejects.toThrow(/invalid page of results/);
 
   f.malformed();
-  await expect(publishedSkills(f.connection, f.home)).rejects.toThrow();
+  await expect(
+    publishedSkills(f.connection, testRuntime(f.home)),
+  ).rejects.toThrow();
 });

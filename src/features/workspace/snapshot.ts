@@ -1,4 +1,5 @@
-import { POSIX_MODE } from "../../shared/constants.js";
+import { fileExecutable } from "../../platform.js";
+import type { RuntimeContext } from "../../runtime.js";
 
 import { createHash } from "node:crypto";
 import { lstat, readFile, readdir, readlink } from "node:fs/promises";
@@ -72,7 +73,10 @@ function treeObject(children: { name: string; mode: string; hash: string }[]) {
 const ignored = new Set([".git", ".DS_Store"]);
 
 /** Reads a folder and names it exactly as Git would, without needing Git. */
-export async function folderSnapshot(root: string): Promise<Snapshot> {
+export async function folderSnapshot(
+  root: string,
+  runtime: RuntimeContext,
+): Promise<Snapshot> {
   const entries: SnapshotEntry[] = [];
   const paths = new Map<string, string>();
 
@@ -96,10 +100,9 @@ export async function folderSnapshot(root: string): Promise<Snapshot> {
         mode = GIT_MODE.symlink;
       } else if (info.isFile()) {
         hash = gitObjectHash("blob", await readFile(absolute));
-        mode =
-          info.mode & POSIX_MODE.executableBits
-            ? GIT_MODE.executable
-            : GIT_MODE.file;
+        mode = (await fileExecutable(absolute, info.mode, runtime))
+          ? GIT_MODE.executable
+          : GIT_MODE.file;
 
         paths.set(hash, absolute);
       } else {
@@ -135,8 +138,12 @@ export async function folderSnapshot(root: string): Promise<Snapshot> {
 export async function gitSnapshot(
   repo: string,
   commit: string,
+  runtime: RuntimeContext,
 ): Promise<Snapshot> {
-  const listing = await git(["ls-tree", "-r", "-t", "-z", commit], { repo });
+  const listing = await git(["ls-tree", "-r", "-t", "-z", commit], runtime, {
+    repo,
+  });
+
   const entries = listing
     .toString("utf8")
     .split("\0")
@@ -163,7 +170,7 @@ export async function gitSnapshot(
         return new Map();
       }
 
-      const output = await git(["cat-file", "--batch"], {
+      const output = await git(["cat-file", "--batch"], runtime, {
         repo,
         input: unique.join("\n") + "\n",
       });

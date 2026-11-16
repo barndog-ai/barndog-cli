@@ -1,8 +1,10 @@
+import type { CliError } from "../errors.js";
+import { testRuntime } from "./runtime.js";
 import { HTTP_STATUS, POSIX_MODE } from "../shared/constants.js";
 
 import { expect, test, type TestContext } from "vitest";
 import { createServer } from "node:http";
-import { mkdtemp, stat, rm, readFile, chmod } from "node:fs/promises";
+import { mkdtemp, mkdir, stat, rm, readFile, chmod } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -139,7 +141,7 @@ test("browser verification, pending polling, private credential storage, status 
   let verification;
   const result = await login({
     server: f.origin,
-    home: f.home,
+    runtime: testRuntime(f.home),
     verification: async (value) => {
       verification = value;
     },
@@ -153,12 +155,17 @@ test("browser verification, pending polling, private credential storage, status 
   });
 
   const path = join(f.home, ".barndog", "credentials.json");
-  expect((await stat(path)).mode & 0o777).toBe(0o600);
-  expect((await stat(join(f.home, ".barndog"))).mode & 0o777).toBe(
-    POSIX_MODE.privateDirectory,
-  );
+  if (process.platform === "win32") {
+    // The ACL itself is checked in platform.test.ts with a faked PowerShell.
+    expect((await stat(path)).isFile()).toBe(true);
+  } else {
+    expect((await stat(path)).mode & 0o777).toBe(0o600);
+    expect((await stat(join(f.home, ".barndog"))).mode & 0o777).toBe(
+      POSIX_MODE.privateDirectory,
+    );
+  }
 
-  expect((await authStatus(f.home)).context.developer.id).toBe(
+  expect((await authStatus(testRuntime(f.home))).context.developer.id).toBe(
     f.context.developer.id,
   );
 
@@ -168,16 +175,21 @@ test("browser verification, pending polling, private credential storage, status 
       .every((request) => !request.authorization),
   ).toBeTruthy();
 
-  expect((await logout(f.home)).revoked).toBe(true);
+  expect((await logout(testRuntime(f.home))).revoked).toBe(true);
   expect(f.revoked()).toBe(true);
-  expect((await readCredentials(f.home)).servers[f.origin]).toBe(undefined);
+  expect((await readCredentials(testRuntime(f.home))).servers[f.origin]).toBe(
+    undefined,
+  );
+
   expect(await readFile(path, "utf8")).not.toContain(f.token);
-  await expect(authStatus(f.home)).rejects.toThrow(/barndog login/);
+  await expect(authStatus(testRuntime(f.home))).rejects.toThrow(
+    /barndog login/,
+  );
 });
 
 test("API selections prevent account switches without changing saved credentials", async (t) => {
   const f = await fixture(t);
-  await updateCredentials(f.home, (value) => {
+  await updateCredentials(testRuntime(f.home), (value) => {
     value.servers[f.origin] = {
       token: "a".repeat(43),
       expiresAt: new Date(Date.now() + 3600000).toISOString(),
@@ -203,12 +215,16 @@ test("API selections prevent account switches without changing saved credentials
     f.home,
   );
 
-  const before = await readCredentials(f.home);
+  const before = await readCredentials(testRuntime(f.home));
   await expect(
-    login({ server: f.origin, home: f.home, verification: async () => {} }),
+    login({
+      server: f.origin,
+      runtime: testRuntime(f.home),
+      verification: async () => {},
+    }),
   ).rejects.toThrow(/Remove them before switching server/);
 
-  expect(await readCredentials(f.home)).toStrictEqual(before);
+  expect(await readCredentials(testRuntime(f.home))).toStrictEqual(before);
   expect(f.revoked()).toBe(true);
 });
 
@@ -228,27 +244,55 @@ test("authenticated transport rejects insecure origins, redirects, cross-server 
   }
 
   await expect(
-    serverFetch(f.origin, f.home)(`${f.origin}/v1/context`),
+    serverFetch(f.origin, testRuntime(f.home))(`${f.origin}/v1/context`),
   ).rejects.toThrow(/barndog login/);
 
-  await login({ server: f.origin, home: f.home, verification: async () => {} });
+  await login({
+    server: f.origin,
+    runtime: testRuntime(f.home),
+    verification: async () => {},
+  });
+
   await expect(
-    serverFetch(f.origin, f.home)("https://example.com/v1/context"),
+    serverFetch(
+      f.origin,
+      testRuntime(f.home),
+    )("https://example.com/v1/context"),
   ).rejects.toThrow(/another server/);
 
   f.redirect();
   await expect(
-    serverFetch(f.origin, f.home)(`${f.origin}/v1/context`),
+    serverFetch(f.origin, testRuntime(f.home))(`${f.origin}/v1/context`),
   ).rejects.toThrow();
 
-  await chmod(
-    join(f.home, ".barndog", "credentials.json"),
-    POSIX_MODE.regularFile,
-  );
+  // Windows relies on the ACL set on every write, not a check on read.
+  if (process.platform !== "win32") {
+    await chmod(
+      join(f.home, ".barndog", "credentials.json"),
+      POSIX_MODE.regularFile,
+    );
 
-  await expect(readCredentials(f.home)).rejects.toThrow(
-    /must be a regular file only you can read/,
-  );
+    await expect(readCredentials(testRuntime(f.home))).rejects.toThrow(
+      /can be read by other users on this machine/,
+    );
+  }
+});
+
+test("a credentials path that isn't a file is refused with a command that clears it", async () => {
+  const home = await mkdtemp(join(tmpdir(), "barndog-credentials-"));
+  try {
+    await mkdir(join(home, ".barndog", "credentials.json"), {
+      recursive: true,
+    });
+
+    await expect(readCredentials(testRuntime(home))).rejects.toSatisfy(
+      (error: CliError) =>
+        /isn't a regular file/.test(error.message) &&
+        error.command?.endsWith("barndog login") === true,
+    );
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
 });
 
 test("cancelling login never creates a credential", async (t) => {
@@ -257,7 +301,7 @@ test("cancelling login never creates a credential", async (t) => {
   await expect(
     login({
       server: f.origin,
-      home: f.home,
+      runtime: testRuntime(f.home),
       signal: controller.signal,
       verification: async () => {
         controller.abort();
@@ -265,7 +309,9 @@ test("cancelling login never creates a credential", async (t) => {
     }),
   ).rejects.toThrow();
 
-  expect((await readCredentials(f.home)).servers).toStrictEqual({});
+  expect((await readCredentials(testRuntime(f.home))).servers).toStrictEqual(
+    {},
+  );
 });
 
 test("auth command parsing delegates flags and never renders credentials", async () => {

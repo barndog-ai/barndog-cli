@@ -1,4 +1,5 @@
 /** `barndog mcp add`: brings MCP servers from JSON or a coding tool into the local workspace. */
+import { localPath } from "../platform.js";
 import { CliError } from "../errors.js";
 import {
   addMcpServers,
@@ -22,11 +23,14 @@ async function serversToAdd(
   }
 
   if (options.file) {
-    return parseMcpText(await readFile(options.file, "utf8"), name);
+    return parseMcpText(
+      await readFile(localPath(options.file, context.runtime), "utf8"),
+      name,
+    );
   }
 
   const fromHarness = async () => {
-    const all = (await harnessServers(context.home)).filter(
+    const all = (await harnessServers(context.runtime)).filter(
       (s) => !options.from || s.harness === options.from,
     );
 
@@ -139,7 +143,7 @@ export async function addMcp(
   let replace = options.replace;
   const conflicts = (
     await Promise.all(
-      servers.map((s) => conflictingEntries(s.name, context.home)),
+      servers.map((s) => conflictingEntries(s.name, context.runtime)),
     )
   ).flat();
 
@@ -158,7 +162,7 @@ export async function addMcp(
     }
   }
 
-  const result = await addMcpServers(servers, { replace }, context.home);
+  const result = await addMcpServers(servers, { replace }, context.runtime);
   for (const added of result.added) {
     context.write(`${ok("✔")} Added ${bold(added)}`);
   }

@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../runtime.js";
 import open from "open";
 import {
   login,
@@ -48,20 +49,20 @@ export async function runLogin(
   options: {
     server?: string;
     browser: boolean;
-    home: string;
+    runtime: RuntimeContext;
     force?: boolean;
   },
   write: (message: string) => void,
 ) {
   const server =
     options.server ??
-    (await configuredServer(options.home)) ??
+    (await configuredServer(options.runtime)) ??
     (process.stdin.isTTY && process.stdout.isTTY
       ? await promptServer()
       : undefined);
 
   if (server && !options.force) {
-    const current = await authStatus(options.home, server).catch((error) => {
+    const current = await authStatus(options.runtime, server).catch((error) => {
       if (error instanceof LoginRequiredError) {
         return undefined;
       }
@@ -93,7 +94,7 @@ export async function runLogin(
   try {
     const result = await login({
       server,
-      home: options.home,
+      runtime: options.runtime,
       signal: controller.signal,
       verification: async (details) => {
         write(`\n${heading("sign-in")}\n`);
@@ -142,9 +143,9 @@ export async function runLogin(
  */
 export async function runLogout(
   write: (message: string) => void,
-  home: string,
+  runtime: RuntimeContext,
 ) {
-  const result = await logout(home);
+  const result = await logout(runtime);
   write(
     result.revoked
       ? `${ok("✔")} Signed out of ${result.server}.`
@@ -158,18 +159,18 @@ export async function runLogout(
  */
 export async function showAuthStatus(
   output: Output,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<void> {
   const { write } = output;
   let result: AuthStatus;
   try {
-    result = await authStatus(home);
+    result = await authStatus(runtime);
   } catch (error) {
     if (!(error instanceof LoginRequiredError)) {
       throw error;
     }
 
-    const server = await configuredServer(home).catch(() => undefined);
+    const server = await configuredServer(runtime).catch(() => undefined);
     if (output.json) {
       write(json({ signedIn: false, server: server ?? null }));
     } else {
@@ -182,7 +183,7 @@ export async function showAuthStatus(
     return;
   }
 
-  const credential = (await readCredentials(home)).servers[result.server];
+  const credential = (await readCredentials(runtime)).servers[result.server];
   if (output.json) {
     write(
       json({

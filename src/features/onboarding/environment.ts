@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../../runtime.js";
 import { z } from "zod";
 import { teamMemberSchema } from "@barndog-ai/api-contract";
 import {
@@ -42,9 +43,9 @@ export type OnboardingChoices = {
  */
 export async function onboardingEnvironment(
   settings: Settings,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<OnboardingChoices> {
-  const repo = openRepoSource(settings, home, { refresh: "none" });
+  const repo = openRepoSource(settings, runtime, { refresh: "none" });
   if (repo) {
     const model = await repo.model();
 
@@ -66,11 +67,11 @@ export async function onboardingEnvironment(
   }
 
   const { connection, catalog } = await environmentCatalog(
-    home,
+    runtime,
     settings.connection,
   );
 
-  const visible = await scopes(connection, home);
+  const visible = await scopes(connection, runtime);
   const teams = visible.filter((scope) => scope.type === "team");
   const memberTeamIds: string[] = [];
   // Bound concurrent requests when using servers with the existing membership API.
@@ -83,7 +84,7 @@ export async function onboardingEnvironment(
       teams.slice(offset, offset + TEAM_FETCH_CONCURRENCY).map(async (team) => {
         const members = await parsed(
           z.array(teamMemberSchema),
-          apiClient(connection.server, home).GET("/v1/teams/{id}/members", {
+          apiClient(connection.server, runtime).GET("/v1/teams/{id}/members", {
             params: { path: { id: team.id } },
           }),
         );

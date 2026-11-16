@@ -1,4 +1,7 @@
-import { HTTP_STATUS, POSIX_MODE } from "../shared/constants.js";
+import { fileExecutable } from "../platform.js";
+import { inspectNative } from "./native.js";
+import { testRuntime } from "./runtime.js";
+import { HTTP_STATUS } from "../shared/constants.js";
 
 import { assert, expect, test } from "vitest";
 import { createServer } from "node:http";
@@ -62,9 +65,11 @@ async function filesIn(directory: string) {
       .map(async (path) => [
         path,
         await readFile(join(directory, path), "utf8"),
-        ((await stat(join(directory, path))).mode &
-          POSIX_MODE.executableBits) !==
-          0,
+        await fileExecutable(
+          join(directory, path),
+          (await stat(join(directory, path))).mode,
+          testRuntime(directory),
+        ),
       ]),
   );
 }
@@ -201,14 +206,18 @@ test("installed folders update file by file without replacing the folder", async
   await writeFile(join(target, "SKILL.md"), "v1");
   await writeFile(join(target, "old", "gone.md"), "x");
   const before = (await stat(target)).ino;
-  await mirrorTree(target, [
-    { path: "SKILL.md", data: Buffer.from("v2"), executable: false },
-    {
-      path: "scripts/run.sh",
-      data: Buffer.from("#!/bin/sh"),
-      executable: true,
-    },
-  ]);
+  await mirrorTree(
+    target,
+    [
+      { path: "SKILL.md", data: Buffer.from("v2"), executable: false },
+      {
+        path: "scripts/run.sh",
+        data: Buffer.from("#!/bin/sh"),
+        executable: true,
+      },
+    ],
+    testRuntime(root),
+  );
 
   expect((await stat(target)).ino).toBe(before);
   expect(await filesIn(target)).toStrictEqual([
@@ -223,9 +232,11 @@ test("a folder in an installed package can become a file", async (t) => {
   const target = join(root, "review");
   await mkdir(join(target, "docs", "nested"), { recursive: true });
   await writeFile(join(target, "docs", "nested", "a.md"), "x");
-  await mirrorTree(target, [
-    { path: "docs", data: Buffer.from("file"), executable: false },
-  ]);
+  await mirrorTree(
+    target,
+    [{ path: "docs", data: Buffer.from("file"), executable: false }],
+    testRuntime(root),
+  );
 
   expect((await filesIn(target)).map(([path]) => path)).toStrictEqual(["docs"]);
 });
@@ -252,7 +263,7 @@ test("a journal can't restore a kept folder that has vanished", async (t) => {
     }),
   );
 
-  await locked(home, async () => {});
+  await locked(testRuntime(home), async () => {});
   await expect(
     stat(join(home, ".barndog", "pending-sync.json")),
   ).rejects.toThrow();
@@ -441,7 +452,7 @@ test("sync resolves MCP name clashes, persists renames and restores the plain na
   );
 
   const url = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
-  await updateCredentials(home, (credentials) => {
+  await updateCredentials(testRuntime(home), (credentials) => {
     credentials.selectedServer = url;
     credentials.servers[url] = {
       token,
@@ -468,7 +479,7 @@ test("sync resolves MCP name clashes, persists renames and restores the plain na
       parseJson(await readFile(join(home, ".claude.json"), "utf8")).mcpServers,
     );
 
-  const skipped = await synchronize(undefined, home, undefined, {
+  const skipped = await synchronize(undefined, testRuntime(home), undefined, {
     prompt: false,
   });
 
@@ -483,7 +494,7 @@ test("sync resolves MCP name clashes, persists renames and restores the plain na
     /barndog mcp rename docs --origin org --as org-acme-docs/,
   );
 
-  await synchronize(undefined, home, undefined, {
+  await synchronize(undefined, testRuntime(home), undefined, {
     resolveClash: async () => "rename-incoming",
   });
 
@@ -505,7 +516,7 @@ test("sync resolves MCP name clashes, persists renames and restores the plain na
     home,
   );
 
-  const restored = await synchronize(undefined, home, undefined, {
+  const restored = await synchronize(undefined, testRuntime(home), undefined, {
     prompt: false,
   });
 
@@ -520,9 +531,14 @@ test("sync resolves MCP name clashes, persists renames and restores the plain na
     home,
   );
 
-  const withKnowledge = await synchronize(undefined, home, undefined, {
-    prompt: false,
-  });
+  const withKnowledge = await synchronize(
+    undefined,
+    testRuntime(home),
+    undefined,
+    {
+      prompt: false,
+    },
+  );
 
   expect(
     withKnowledge.some(
@@ -534,7 +550,9 @@ test("sync resolves MCP name clashes, persists renames and restores the plain na
   ).toBeTruthy();
 
   expect(
-    await readFile(join(home, ".claude", "settings.json"), "utf8"),
+    inspectNative(
+      await readFile(join(home, ".claude", "settings.json"), "utf8"),
+    ),
   ).toMatch(/entry\/knowledge-startup\.js/);
 
   expect(((await readSettings(home)) as Settings).localNames).toBe(undefined);
@@ -552,7 +570,7 @@ test("installed folders are journaled and an interrupted copy is completed on re
 
   const path = join(barndogPaths(home).installed("skill"), "team-web-review");
   const after = packageFingerprint(
-    await desiredEntries(source, "team-web-review"),
+    await desiredEntries(source, "team-web-review", testRuntime(home)),
   );
 
   const write = {
@@ -564,7 +582,7 @@ test("installed folders are journaled and an interrupted copy is completed on re
     rename: "team-web-review",
   };
 
-  await transact(home, [write]);
+  await transact(testRuntime(home), [write]);
   expect(await readFile(join(path, "SKILL.md"), "utf8")).toMatch(
     /name: team-web-review/,
   );
@@ -576,7 +594,7 @@ test("installed folders are journaled and an interrupted copy is completed on re
     JSON.stringify({ version: 1, writes: [{ ...write, before: "old" }] }),
   );
 
-  await locked(home, async () => {});
+  await locked(testRuntime(home), async () => {});
   expect((await filesIn(path)).map(([path]) => path)).toStrictEqual([
     "SKILL.md",
   ]);
@@ -606,7 +624,11 @@ test("cache pruning keeps only the versions installed folders use", async (t) =>
 
   await mkdir(join(root, "skills", skill, ".stage-leftover"));
   expect(
-    await pruneCache(cacheKey(conn), home, new Set([current, hookCurrent])),
+    await pruneCache(
+      cacheKey(conn),
+      testRuntime(home),
+      new Set([current, hookCurrent]),
+    ),
   ).toBe(3);
 
   const exists = (path: string) =>

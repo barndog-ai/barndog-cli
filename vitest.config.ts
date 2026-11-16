@@ -6,7 +6,7 @@ export default defineConfig({
     setupFiles: ["src/tests/setup.ts"],
     globalSetup: ["src/tests/global-setup.ts"],
     // Several tests drive real Git repositories and child processes.
-    testTimeout: 30_000,
+    testTimeout: 60_000,
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],

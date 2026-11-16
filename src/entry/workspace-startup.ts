@@ -9,8 +9,13 @@ try {
     [fileURLToPath(new URL("../cli.js", import.meta.url)), "sync", "--auto"],
     {
       detached: true,
+      windowsHide: true,
       stdio: "ignore",
-      env: { ...process.env, HOME: process.argv[2] },
+      env: {
+        ...process.env,
+        HOME: process.argv[2],
+        USERPROFILE: process.argv[2],
+      },
     },
   );
 

@@ -1,3 +1,6 @@
+import { directoryFingerprint, writePackage } from "./directory.js";
+import { fixSteps, removeCommand } from "../../platform.js";
+import type { RuntimeContext } from "../../runtime.js";
 import { POSIX_MODE } from "../../shared/constants.js";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, rename, rm, lstat } from "node:fs/promises";
@@ -6,9 +9,6 @@ import { z } from "zod";
 import {
   defaultLimits,
   parsePackage,
-  packageFingerprint,
-  directoryFingerprint,
-  writePackage,
   type PackageEntry,
 } from "@barndog-ai/api-contract/package";
 import type { Connection } from "../../config/settings.js";
@@ -39,9 +39,11 @@ export function cacheKey(conn: Connection) {
  */
 export async function pruneCache(
   key: string,
-  home: string,
+  runtime: RuntimeContext,
   keep: ReadonlySet<string>,
 ) {
+  const { home } = runtime;
+
   const root = barndogPaths(home).packageCache(key);
   let removed = 0;
   const children = async (path: string) =>
@@ -85,9 +87,10 @@ type CachedAsset = { id: string; name: string; revision: string };
 export async function storePackage(
   kind: PackageKind,
   asset: CachedAsset,
-  { key, home }: { key: string; home: string },
+  { key, runtime }: { key: string; runtime: RuntimeContext },
   load: () => Promise<PackageEntry[]>,
 ) {
+  const { home } = runtime;
   const parent = join(
     barndogPaths(home).packageCache(key),
     assetFolders[kind],
@@ -102,12 +105,18 @@ export async function storePackage(
 
     if (
       !saved.success ||
-      (await directoryFingerprint(join(root, asset.name))) !==
+      (await directoryFingerprint(join(root, asset.name), runtime)) !==
         saved.data.fingerprint
     ) {
       throw new CliError(
         `The downloaded copy of ${asset.name} in ${root} was changed on this machine, so BarnDog won't use it.`,
-        `rm -r ${root} && barndog sync`,
+        "Delete that folder; the next sync downloads it again.",
+        {
+          command: fixSteps(
+            [removeCommand(root, runtime.platform), "barndog sync"],
+            runtime.platform,
+          ),
+        },
       );
     }
   };
@@ -128,10 +137,16 @@ export async function storePackage(
   const entries = await load();
   const stage = join(parent, `.stage-${randomUUID()}`);
   try {
-    await writePackage(join(stage, asset.name), entries);
+    await writePackage(join(stage, asset.name), entries, runtime);
+    // Read back, so Windows (no executable bits) records what `check` will see.
     await writeAtomic(
       packageManifest(stage),
-      JSON.stringify({ fingerprint: packageFingerprint(entries) }),
+      JSON.stringify({
+        fingerprint: await directoryFingerprint(
+          join(stage, asset.name),
+          runtime,
+        ),
+      }),
     );
 
     await rename(stage, target);
@@ -235,15 +250,15 @@ export async function cachedPackage(
     version: { commit: string; number: number };
   },
   conn: Connection,
-  home: string,
+  runtime: RuntimeContext,
 ) {
   return storePackage(
     kind,
     { id: asset.id, name: asset.name, revision: asset.version.commit },
-    { key: cacheKey(conn), home },
+    { key: cacheKey(conn), runtime },
     async () => {
       const entries = await unpackDownload(
-        packageDownloads[kind](apiClient(conn.server, home), asset),
+        packageDownloads[kind](apiClient(conn.server, runtime), asset),
         {
           kind,
           commit: asset.version.commit,

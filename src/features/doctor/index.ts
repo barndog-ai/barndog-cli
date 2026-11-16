@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../../runtime.js";
 import { readSettings, type GitWorkspace } from "../../config/settings.js";
 import { remoteHead } from "../workspace/git.js";
 import { branchProtected } from "../workspace/publish.js";
@@ -23,10 +24,10 @@ const failure = (error: unknown) => ({
   fix: error instanceof CliError ? error.hint : undefined,
 });
 
-async function gitChecks(workspace: GitWorkspace, home: string) {
+async function gitChecks(workspace: GitWorkspace, runtime: RuntimeContext) {
   const checks: Check[] = [];
   try {
-    await remoteHead(workspace.url);
+    await remoteHead(workspace.url, runtime);
     checks.push({
       name: "Git access",
       status: "ok",
@@ -38,7 +39,7 @@ async function gitChecks(workspace: GitWorkspace, home: string) {
     return checks;
   }
 
-  const state = await readFetchState(workspace.workspaceId, home);
+  const state = await readFetchState(workspace.workspaceId, runtime);
   checks.push({
     name: "Last fetch",
     status: state.fetchedAt ? "ok" : "warn",
@@ -51,6 +52,7 @@ async function gitChecks(workspace: GitWorkspace, home: string) {
   const protectedBranch = await branchProtected(
     workspace.url,
     workspace.branch,
+    runtime,
   );
 
   if (protectedBranch !== true) {
@@ -68,7 +70,9 @@ async function gitChecks(workspace: GitWorkspace, home: string) {
 }
 
 /** Every check runs; one failure never hides the others. */
-export async function doctor(home: string): Promise<Check[]> {
+export async function doctor(runtime: RuntimeContext): Promise<Check[]> {
+  const { home } = runtime;
+
   const checks: Check[] = [];
   let settings;
   try {
@@ -96,7 +100,7 @@ export async function doctor(home: string): Promise<Check[]> {
     detail: barndogPaths(home).settings,
   });
 
-  const detected = await detectHarnesses({ home });
+  const detected = await detectHarnesses(runtime);
   for (const harness of settings.harnesses) {
     const found = detected.find((d) => d.id === harness)?.evidence;
     checks.push({
@@ -112,7 +116,7 @@ export async function doctor(home: string): Promise<Check[]> {
   const connected = settings.connection;
   if (connected) {
     try {
-      const session = await authStatus(home, connected.server);
+      const session = await authStatus(runtime, connected.server);
       checks.push({
         name: "Session",
         status: "ok",
@@ -132,11 +136,11 @@ export async function doctor(home: string): Promise<Check[]> {
   }
 
   if (settings.gitWorkspace) {
-    checks.push(...(await gitChecks(settings.gitWorkspace, home)));
+    checks.push(...(await gitChecks(settings.gitWorkspace, runtime)));
   }
 
   try {
-    const events = await synchronize(undefined, home, undefined, {
+    const events = await synchronize(undefined, runtime, undefined, {
       dryRun: true,
       prompt: false,
     });

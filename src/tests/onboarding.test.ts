@@ -1,3 +1,4 @@
+import { testRuntime } from "./runtime.js";
 import { POSIX_MODE } from "../shared/constants.js";
 
 import { assert, expect, test, type TestContext } from "vitest";
@@ -35,36 +36,52 @@ test("detection uses executable PATH entries and macOS app installations, not sk
   const bin = join(home, "bin");
   const apps = join(home, "Applications");
   await mkdir(bin);
-  await writeFile(join(bin, "codex"), "#!/bin/sh\nexit 0\n");
-  await chmod(join(bin, "codex"), POSIX_MODE.executableFile);
+  await writeFile(
+    join(bin, process.platform === "win32" ? "codex.cmd" : "codex"),
+    "#!/bin/sh\nexit 0\n",
+  );
+
+  await chmod(
+    join(bin, process.platform === "win32" ? "codex.cmd" : "codex"),
+    POSIX_MODE.executableFile,
+  );
+
   await writeFile(join(bin, "claude"), "not executable");
   await mkdir(join(apps, "Cursor.app", "Contents", "MacOS"), {
     recursive: true,
   });
 
   await mkdir(join(home, ".claude", "skills"), { recursive: true });
-  const found = await detectHarnesses({
-    home,
-    path: bin,
-    platform: "darwin",
-    appDirectories: [apps],
-  });
+  const found = await detectHarnesses(
+    // Only the temporary home: no desktop apps installed on this machine.
+    testRuntime(home, {
+      env: { PATH: bin, XDG_DATA_HOME: home, XDG_DATA_DIRS: home },
+    }),
+    process.platform === "darwin" ? { appDirectories: [apps] } : {},
+  );
 
   expect(found.find((item) => item.id === "claude")!.evidence).toBe(null);
   expect(found.find((item) => item.id === "codex")!.evidence).toBe(
-    join(bin, "codex"),
+    join(bin, process.platform === "win32" ? "codex.cmd" : "codex"),
   );
 
   expect(found.find((item) => item.id === "cursor")!.evidence).toBe(
-    join(apps, "Cursor.app"),
+    process.platform === "darwin" ? join(apps, "Cursor.app") : null,
   );
 });
 
 test("first onboarding requires explicit selection and saves machine settings; re-init keeps choices", async (t) => {
   const home = await setup(t);
-  const detected = await detectHarnesses({ home, path: "", platform: "linux" });
+  const detected = await detectHarnesses(
+    // XDG_DATA_DIRS keeps apps installed on this machine out of the result.
+    testRuntime(home, {
+      env: { PATH: "", XDG_DATA_DIRS: home },
+      platform: "linux",
+    }),
+  );
+
   await initialize({
-    home,
+    runtime: testRuntime(home),
     detected,
     choose: async (choices) => {
       expect(choices.every((choice) => !choice.checked)).toBeTruthy();
@@ -79,7 +96,7 @@ test("first onboarding requires explicit selection and saves machine settings; r
   });
 
   await initialize({
-    home,
+    runtime: testRuntime(home),
     detected,
     choose: async (choices) => {
       expect(choices.find((choice) => choice.value === "codex")!.checked).toBe(
@@ -102,21 +119,28 @@ test("first onboarding requires explicit selection and saves machine settings; r
 
 test("cancelling onboarding preserves previous settings or leaves first-time setup absent", async (t) => {
   const home = await setup(t);
-  const detected = await detectHarnesses({ home, path: "", platform: "linux" });
+  const detected = await detectHarnesses(
+    // XDG_DATA_DIRS keeps apps installed on this machine out of the result.
+    testRuntime(home, {
+      env: { PATH: "", XDG_DATA_DIRS: home },
+      platform: "linux",
+    }),
+  );
+
   const choose = async (): Promise<never> => {
     throw new Error("cancelled");
   };
 
-  await expect(initialize({ home, detected, choose })).rejects.toThrow(
-    /cancelled/,
-  );
+  await expect(
+    initialize({ runtime: testRuntime(home), detected, choose }),
+  ).rejects.toThrow(/cancelled/);
 
   expect(await readSettings(home)).toBe(null);
   await saveSettings({ harnesses: ["cursor"] }, home);
   const original = await readFile(barndogPaths(home).settings, "utf8");
-  await expect(initialize({ home, detected, choose })).rejects.toThrow(
-    /cancelled/,
-  );
+  await expect(
+    initialize({ runtime: testRuntime(home), detected, choose }),
+  ).rejects.toThrow(/cancelled/);
 
   expect(await readFile(barndogPaths(home).settings, "utf8")).toBe(original);
 });
@@ -164,7 +188,7 @@ test("bare invocation reports existing configuration without prompting or rewrit
   const original = await readFile(barndogPaths(home).settings, "utf8");
   const messages: string[] = [];
   await runSetup({
-    home,
+    runtime: testRuntime(home),
     interactive: false,
     write: (message) => messages.push(message),
     choose: async () => {
@@ -186,7 +210,7 @@ test("declining or cancelling restart leaves the configuration untouched", async
   const original = await readFile(barndogPaths(home).settings, "utf8");
   const messages: string[] = [];
   const options = {
-    home,
+    runtime: testRuntime(home),
     restart: true,
     interactive: true,
     write: (message: string) => messages.push(message),
@@ -214,7 +238,7 @@ test("confirmed restart reopens harness selection while preserving saved setting
   await saveSettings({ harnesses: ["codex"], knowledge: false }, home);
   let confirmed = false;
   await runSetup({
-    home,
+    runtime: testRuntime(home),
     restart: true,
     interactive: true,
     local: true,
@@ -242,12 +266,12 @@ test("confirmed restart reopens harness selection while preserving saved setting
 
 test("first setup skips restart confirmation and still requires an interactive terminal", async (t) => {
   const home = await setup(t);
-  await expect(runSetup({ home, interactive: false })).rejects.toThrow(
-    /interactive terminal/,
-  );
+  await expect(
+    runSetup({ runtime: testRuntime(home), interactive: false }),
+  ).rejects.toThrow(/interactive terminal/);
 
   await runSetup({
-    home,
+    runtime: testRuntime(home),
     restart: true,
     interactive: true,
     local: true,
@@ -269,7 +293,12 @@ test("reinitializing harness selection preserves the rest of the home configurat
   const home = await setup(t);
   await saveSettings({ harnesses: ["codex"], knowledge: false }, home);
   expect(barndogPaths(home).settings).toBe(join(home, ".barndog/config.yaml"));
-  await initialize({ home, detected: [], choose: async () => ["claude"] });
+  await initialize({
+    runtime: testRuntime(home),
+    detected: [],
+    choose: async () => ["claude"],
+  });
+
   expect(await readSettings(home)).toStrictEqual({
     harnesses: ["claude"],
     knowledge: false,

@@ -1,4 +1,6 @@
-import { spawn } from "node:child_process";
+import { homedir } from "node:os";
+import crossSpawn from "cross-spawn";
+import { isWindows, stopProcessTree } from "../platform.js";
 import { mcpDefinitionSchema } from "@barndog-ai/api-contract";
 import { CliError } from "../errors.js";
 
@@ -18,21 +20,32 @@ try {
     throw new Error("A stdio configuration is required");
   }
 
-  const env = { ...process.env };
+  const runtime = {
+    home: homedir(),
+    cwd: process.cwd(),
+    env: { ...process.env },
+    platform: process.platform,
+  };
+
+  const env = { ...runtime.env };
   for (const [name, reference] of Object.entries(definition.environment)) {
-    if (!process.env[reference.secretRef]) {
+    if (!runtime.env[reference.secretRef]) {
       throw new CliError(
         `${reference.secretRef} isn't set in your environment. Set it, then restart your coding tool.`,
       );
     }
 
-    env[name] = process.env[reference.secretRef];
+    env[name] = runtime.env[reference.secretRef];
   }
 
-  const child = spawn(definition.command, definition.args, {
+  // cross-spawn finds the command on PATH and also starts Windows .cmd shims
+  // (such as npx) with safely quoted arguments.
+  const child = crossSpawn(definition.command, definition.args, {
     env,
     stdio: "inherit",
-    detached: process.platform !== "win32",
+    detached: !isWindows(runtime.platform),
+    cwd: runtime.cwd,
+    windowsHide: true,
   });
 
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
@@ -43,19 +56,11 @@ try {
       }
 
       try {
-        if (process.platform !== "win32") {
-          process.kill(-pid, signal);
-        } else {
-          child.kill(signal);
-        }
+        stopProcessTree(child, runtime, signal);
 
         const timer = setTimeout(() => {
           try {
-            if (process.platform !== "win32") {
-              process.kill(-pid, "SIGKILL");
-            } else {
-              child.kill("SIGKILL");
-            }
+            stopProcessTree(child, runtime);
           } catch {
             /* exited */
           }

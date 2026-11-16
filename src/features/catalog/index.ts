@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../../runtime.js";
 import { SHORT_COMMIT_LENGTH } from "../../shared/constants.js";
 
 import { readSettings, type Connection } from "../../config/settings.js";
@@ -12,7 +13,7 @@ import type { CatalogAsset } from "../asset-kinds/index.js";
 
 type CatalogFetcher = (
   conn: Connection,
-  home: string,
+  runtime: RuntimeContext,
 ) => Promise<CatalogAsset[]>;
 
 /** Beside the code that calls them, because each imports a network module. */
@@ -28,11 +29,13 @@ const catalogFetchers: Record<AssetKind, CatalogFetcher> = {
  */
 export async function searchCatalog(
   kind: AssetKind,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<CatalogAsset[]> {
-  const shared = await sharedCatalog(kind, home);
+  const { home } = runtime;
+
+  const shared = await sharedCatalog(kind, runtime);
   const settings = await readSettings(home);
-  const overlay = settings && localOverlay(settings, home);
+  const overlay = settings && localOverlay(settings, runtime);
   if (!overlay) {
     return shared;
   }
@@ -64,10 +67,14 @@ export async function searchCatalog(
 
 async function sharedCatalog(
   kind: AssetKind,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<CatalogAsset[]> {
+  const { home } = runtime;
+
   const settings = await readSettings(home);
-  const repo = settings && openRepoSource(settings, home, { refresh: "auto" });
+  const repo =
+    settings && openRepoSource(settings, runtime, { refresh: "auto" });
+
   if (repo) {
     return (await repo.model()).assets
       .filter((asset) => asset.kind === kind && !asset.invalid)
@@ -91,5 +98,5 @@ async function sharedCatalog(
     );
   }
 
-  return catalogFetchers[kind](settings.connection, home);
+  return catalogFetchers[kind](settings.connection, runtime);
 }

@@ -1,3 +1,5 @@
+import { localPath } from "../../platform.js";
+import type { RuntimeContext } from "../../runtime.js";
 import { synchronize } from "../environment/sync.js";
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
@@ -47,11 +49,14 @@ import { allPages } from "../server/pages.js";
 import { changeAssetId, type PackageChange } from "./results.js";
 
 /** Who an ID is, when the server will say; IDs still print if it won't. */
-const developerNames = (home: string): Promise<Record<string, string>> =>
-  developers(undefined, home).then(
+const developerNames = (
+  runtime: RuntimeContext,
+): Promise<Record<string, string>> => {
+  return developers(undefined, runtime).then(
     (people) => Object.fromEntries(people.map((p) => [p.id, p.name])),
     () => ({}),
   );
+};
 
 /**
  * A text file's closing newline isn't part of the selected lines. With a known line
@@ -181,7 +186,12 @@ type Backend =
   | { type: "local"; path: string }
   | { type: "cloud" };
 
-async function backend(home: string, origin?: string): Promise<Backend> {
+async function backend(
+  runtime: RuntimeContext,
+  origin?: string,
+): Promise<Backend> {
+  const { home } = runtime;
+
   const settings = await readSettings(home);
   if (settings?.gitWorkspace) {
     return { type: "git", workspace: settings.gitWorkspace };
@@ -204,8 +214,8 @@ const noLocalReview = (path: string) =>
     "barndog sync",
   );
 
-async function cloudConnection(home: string, origin?: string) {
-  const where = await backend(home, origin);
+async function cloudConnection(runtime: RuntimeContext, origin?: string) {
+  const where = await backend(runtime, origin);
   if (where.type === "git") {
     throw new CliError(
       "Reviews happen as pull requests on your Git host in a Git repo workspace.",
@@ -217,7 +227,7 @@ async function cloudConnection(home: string, origin?: string) {
     throw noLocalReview(where.path);
   }
 
-  return connection(home);
+  return connection(runtime);
 }
 
 /**
@@ -227,10 +237,9 @@ async function cloudConnection(home: string, origin?: string) {
  */
 export async function createPackage(
   target: WorkingCopyTarget,
-  cwd = process.cwd(),
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<CreatedPackage> {
-  const where = await backend(home, target.origin);
+  const where = await backend(runtime, target.origin);
   if (where.type === "local") {
     throw noLocalReview(where.path);
   }
@@ -239,14 +248,13 @@ export async function createPackage(
     return createGitAsset(
       where.workspace,
       { ...target, target: target.directory },
-      cwd,
-      home,
+      runtime,
     );
   }
 
   return createWorkspace(
     { name: target.name, origin: target.origin, kind: target.kind },
-    { target: target.directory, cwd, home },
+    { target: target.directory, runtime },
   );
 }
 
@@ -256,10 +264,9 @@ export async function createPackage(
  */
 export async function pullPackage(
   target: WorkingCopyTarget,
-  cwd = process.cwd(),
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<PulledPackage> {
-  const where = await backend(home, target.origin);
+  const where = await backend(runtime, target.origin);
   if (where.type === "local") {
     throw noLocalReview(where.path);
   }
@@ -268,14 +275,13 @@ export async function pullPackage(
     return pullGitAsset(
       where.workspace,
       { ...target, target: target.directory },
-      cwd,
-      home,
+      runtime,
     );
   }
 
   return pullCloudPackage(
     { name: target.name, origin: target.origin, kind: target.kind },
-    { target: target.directory, cwd, home },
+    { target: target.directory, runtime },
   );
 }
 
@@ -284,17 +290,16 @@ export async function pullPackage(
  * Refused in a local workspace.
  */
 export async function updateWorkingCopy(
-  cwd = process.cwd(),
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<UpdatedWorkingCopy> {
-  const where = await backend(home);
+  const where = await backend(runtime);
   if (where.type === "local") {
     throw noLocalReview(where.path);
   }
 
   return where.type === "git"
-    ? updateGitWorkingCopy(cwd, home)
-    : updateWorkspace(cwd, home);
+    ? updateGitWorkingCopy(runtime)
+    : updateWorkspace(runtime);
 }
 
 /**
@@ -302,18 +307,17 @@ export async function updateWorkingCopy(
  * to describe the machine-wide environment instead.
  */
 export async function workingStatus(
-  cwd = process.cwd(),
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<WorkingCopyStatus | EnvironmentStatus> {
-  const where = await backend(home);
+  const where = await backend(runtime);
   if (where.type === "local") {
     return { mode: "environment" };
   }
 
   try {
     return where.type === "git"
-      ? await gitWorkingStatus(cwd, home)
-      : await workspaceStatus(cwd, home);
+      ? await gitWorkingStatus(runtime)
+      : await workspaceStatus(runtime);
   } catch (error) {
     if (!(error instanceof NoWorkingCopyError)) {
       throw error;
@@ -328,17 +332,16 @@ export async function workingStatus(
  * The dry-run path can still fetch and populate caches.
  */
 export async function workingDiff(
-  cwd = process.cwd(),
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<FileDiff[] | EnvironmentPreview> {
-  const status = await workingStatus(cwd, home);
+  const status = await workingStatus(runtime);
   if ("changes" in status) {
     return status.changes;
   }
 
   return {
     mode: "environment-preview",
-    events: await synchronize(undefined, home, undefined, { dryRun: true }),
+    events: await synchronize(undefined, runtime, undefined, { dryRun: true }),
   };
 }
 
@@ -348,17 +351,16 @@ export async function workingDiff(
  */
 export async function pushWorkingCopy(
   options: PushOptions,
-  cwd = process.cwd(),
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<PushResult> {
-  const where = await backend(home, options.origin);
+  const where = await backend(runtime, options.origin);
   if (where.type === "local") {
     throw noLocalReview(where.path);
   }
 
   return where.type === "git"
-    ? pushGitWorkingCopy(where.workspace, options, cwd, home)
-    : pushWorkspace(options, cwd, home);
+    ? pushGitWorkingCopy(where.workspace, options, runtime)
+    : pushWorkspace(options, runtime);
 }
 
 /**
@@ -367,21 +369,23 @@ export async function pushWorkingCopy(
  */
 export async function resolveFile(
   path: string,
-  cwd = process.cwd(),
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<ConflictResolution> {
-  const where = await backend(home);
+  const where = await backend(runtime);
   if (where.type === "local") {
     throw noLocalReview(where.path);
   }
 
   return where.type === "git"
-    ? resolveGitConflict(path, cwd, home)
-    : resolveConflict(path, cwd, home);
+    ? resolveGitConflict(path, runtime)
+    : resolveConflict(path, runtime);
 }
 
-async function publishedPackage(target: PackageTarget, home: string) {
-  const where = await backend(home, target.origin);
+async function publishedPackage(
+  target: PackageTarget,
+  runtime: RuntimeContext,
+) {
+  const where = await backend(runtime, target.origin);
   if (where.type === "local") {
     throw noLocalReview(where.path);
   }
@@ -390,15 +394,15 @@ async function publishedPackage(target: PackageTarget, home: string) {
     return where;
   }
 
-  const conn = await connection(home);
+  const conn = await connection(runtime);
 
   return {
     type: "cloud" as const,
-    api: packageApi(target.kind, conn, home),
+    api: packageApi(target.kind, conn, runtime),
     published: await selectPackage(
       { name: target.name, selector: target.origin, kind: target.kind },
       conn,
-      home,
+      runtime,
     ),
   };
 }
@@ -406,16 +410,16 @@ async function publishedPackage(target: PackageTarget, home: string) {
 /** Newest last. */
 export async function packageVersions(
   target: PackageTarget,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<PackageVersion[]> {
-  const where = await publishedPackage(target, home);
+  const where = await publishedPackage(target, runtime);
   if (where.type === "git") {
-    return gitVersions(where.workspace, target, home);
+    return gitVersions(where.workspace, target, runtime);
   }
 
   const [rows, names] = await Promise.all([
     where.api.versions(where.published.id),
-    developerNames(home),
+    developerNames(runtime),
   ]);
 
   return rows.map((row) => ({
@@ -430,11 +434,11 @@ export async function packageVersions(
  */
 export async function versionFiles(
   target: VersionTarget,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<VersionFiles> {
-  const where = await publishedPackage(target, home);
+  const where = await publishedPackage(target, runtime);
   if (where.type === "git") {
-    return gitVersionFiles(where.workspace, target, home);
+    return gitVersionFiles(where.workspace, target, runtime);
   }
 
   return where.api.content(
@@ -445,11 +449,11 @@ export async function versionFiles(
 
 export async function diffVersions(
   target: VersionRange,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<FileDiff[]> {
-  const where = await publishedPackage(target, home);
+  const where = await publishedPackage(target, runtime);
   if (where.type === "git") {
-    return gitVersionDiff(where.workspace, target, home);
+    return gitVersionDiff(where.workspace, target, runtime);
   }
 
   return where.api.diff(where.published.id, {
@@ -464,9 +468,9 @@ export async function diffVersions(
  */
 export async function listChanges(
   { kind }: ChangeListOptions,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<PackageChange[]> {
-  const api = packageApi(kind, await cloudConnection(home), home);
+  const api = packageApi(kind, await cloudConnection(runtime), runtime);
 
   return allPages((cursor) => api.changes(cursor));
 }
@@ -477,20 +481,20 @@ export async function listChanges(
  */
 export async function showChange(
   target: ChangeTarget,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<ChangeDetails> {
-  const conn = await cloudConnection(home);
+  const conn = await cloudConnection(runtime);
   const id = z.uuid().parse(target.id);
   const { kind } = target;
-  const api = packageApi(kind, conn, home);
+  const api = packageApi(kind, conn, runtime);
   const change = await api.change(id);
   const [files, names, versions] = await Promise.all([
     downloadChange(
       { id, revision: change.revision, commit: change.commit },
       conn,
-      { home, kind },
+      { runtime, kind },
     ),
-    developerNames(home),
+    developerNames(runtime),
     // The base number is a nicety; show the change without it if this fails.
     change.baseVersionId
       ? api.versions(changeAssetId(change)).catch(() => [])
@@ -516,9 +520,9 @@ export async function showChange(
  */
 export async function changeDiff(
   target: ChangeDiffTarget,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<FileDiff[]> {
-  const api = packageApi(target.kind, await cloudConnection(home), home);
+  const api = packageApi(target.kind, await cloudConnection(runtime), runtime);
 
   return api.changeDiff(z.uuid().parse(target.id), {
     revision: target.revision,
@@ -526,9 +530,12 @@ export async function changeDiff(
   });
 }
 
-async function changeAtRevision(target: ChangeRevision, home: string) {
+async function changeAtRevision(
+  target: ChangeRevision,
+  runtime: RuntimeContext,
+) {
   return {
-    api: packageApi(target.kind, await cloudConnection(home), home),
+    api: packageApi(target.kind, await cloudConnection(runtime), runtime),
     id: z.uuid().parse(target.id),
     body: {
       expectedRevision: z.number().int().positive().parse(target.revision),
@@ -543,9 +550,9 @@ async function changeAtRevision(target: ChangeRevision, home: string) {
 export async function reviewChange(
   decision: ReviewDecision,
   target: ChangeRevision,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<PackageChange> {
-  const { api, id, body } = await changeAtRevision(target, home);
+  const { api, id, body } = await changeAtRevision(target, runtime);
 
   return api.review(id, {
     ...body,
@@ -559,9 +566,9 @@ export async function reviewChange(
  */
 export async function rejectChange(
   target: ChangeRevision,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<PackageChange> {
-  const { api, id, body } = await changeAtRevision(target, home);
+  const { api, id, body } = await changeAtRevision(target, runtime);
 
   return api.reject(id, body);
 }
@@ -572,9 +579,9 @@ export async function rejectChange(
  */
 export async function mergeChange(
   target: ChangeRevision,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<PackageChange> {
-  const { api, id, body } = await changeAtRevision(target, home);
+  const { api, id, body } = await changeAtRevision(target, runtime);
 
   return api.merge(id, body);
 }
@@ -586,11 +593,11 @@ export async function mergeChange(
  */
 export async function commentOnChange(
   options: CommentOptions,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<PackageChange> {
-  const { api, id, body } = await changeAtRevision(options, home);
+  const { api, id, body } = await changeAtRevision(options, runtime);
   const text = options.bodyFile
-    ? await readFile(options.bodyFile, "utf8")
+    ? await readFile(localPath(options.bodyFile, runtime), "utf8")
     : options.body;
 
   if (!text?.trim()) {
@@ -614,11 +621,13 @@ export async function commentOnChange(
     startLine: options.startLine,
     endLine: options.endLine,
     replacement: options.replacementFile
-      ? selectedText(await readFile(options.replacementFile, "utf8"))
+      ? selectedText(
+          await readFile(localPath(options.replacementFile, runtime), "utf8"),
+        )
       : undefined,
     expectedContent: options.expectedFile
       ? selectedText(
-          await readFile(options.expectedFile, "utf8"),
+          await readFile(localPath(options.expectedFile, runtime), "utf8"),
           options.startLine && options.endLine
             ? options.endLine - options.startLine + 1
             : undefined,
@@ -630,18 +639,18 @@ export async function commentOnChange(
 /** Creates a new revision; the author runs `barndog pull` to receive it. */
 export async function applySuggestion(
   target: ThreadRevision,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<PackageChange> {
-  const { api, id, body } = await changeAtRevision(target, home);
+  const { api, id, body } = await changeAtRevision(target, runtime);
 
   return api.applySuggestion(id, z.uuid().parse(target.thread), body);
 }
 
 export async function setDiscussionResolved(
   target: ThreadResolution,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<PackageChange> {
-  const { api, id, body } = await changeAtRevision(target, home);
+  const { api, id, body } = await changeAtRevision(target, runtime);
 
   return api.resolve(id, z.uuid().parse(target.thread), {
     ...body,

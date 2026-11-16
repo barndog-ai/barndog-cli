@@ -1,3 +1,5 @@
+import { isWindows, localPath, stopProcessTree } from "../../platform.js";
+import type { RuntimeContext } from "../../runtime.js";
 import { MILLISECONDS_PER_SECOND } from "../../shared/constants.js";
 
 import { readFile } from "node:fs/promises";
@@ -8,7 +10,8 @@ import { hookManifestSchema, hookSchema } from "@barndog-ai/api-contract";
 import type { Harness } from "../../harnesses/types.js";
 import { selectAsset } from "../server/catalog.js";
 import { cachedPackage } from "../workspace/packages.js";
-import { hookCommand, runtimeRequirements } from "../native/adapters.js";
+import { runtimeRequirements } from "../native/adapters.js";
+import { hookInvocation } from "../native/hook-shell.js";
 import { readSettings } from "../../config/settings.js";
 import { repoForOrigin, selectRepoAsset } from "../workspace/assets.js";
 import { CliError } from "../../errors.js";
@@ -22,19 +25,25 @@ const DEFAULT_HOOK_TIMEOUT_SECONDS = 10;
 /** CLI hook test policy caps execution at ten minutes. */
 const MAX_HOOK_TIMEOUT_SECONDS = 600;
 
-async function hookPackage(name: string, origin: string, home: string) {
+async function hookPackage(
+  name: string,
+  origin: string,
+  runtime: RuntimeContext,
+) {
+  const { home } = runtime;
+
   const settings = await readSettings(home);
-  const repo = settings && repoForOrigin(settings, home, origin);
+  const repo = settings && repoForOrigin(settings, runtime, origin);
   if (repo) {
     const asset = selectRepoAsset(await repo.model(), "hook", name, origin);
 
     return repo.packageFolder("hook", asset);
   }
 
-  const selected = await selectAsset("hook", name, origin, home);
+  const selected = await selectAsset("hook", name, origin, runtime);
   const asset = hookSchema.parse(selected.asset);
 
-  return cachedPackage("hook", asset, selected.connection, home);
+  return cachedPackage("hook", asset, selected.connection, runtime);
 }
 
 export type HookTestOptions = {
@@ -65,15 +74,11 @@ export async function testHook(
   name: string,
   origin: string,
   options: HookTestOptions,
-  { home, cwd = process.cwd() }: { home: string; cwd?: string },
+  runtime: RuntimeContext,
 ): Promise<HookTestResult> {
-  if (process.platform === "win32") {
-    throw new CliError(
-      "Testing command Hooks needs a POSIX shell, so it doesn't work on Windows yet.",
-    );
-  }
+  const { cwd } = runtime;
 
-  const root = await hookPackage(name, origin, home);
+  const root = await hookPackage(name, origin, runtime);
   const manifest = hookManifestSchema.parse(
     parse(await readFile(join(root, "hook.yaml"), "utf8")),
   );
@@ -89,6 +94,7 @@ export async function testHook(
   const unmet = await runtimeRequirements(
     options.harness,
     implementation.requirements,
+    runtime,
   );
 
   if (unmet) {
@@ -124,7 +130,7 @@ export async function testHook(
     );
   }
 
-  const input = await readFile(options.input);
+  const input = await readFile(localPath(options.input, runtime));
   if (input.length > HOOK_IO_LIMIT_BYTES) {
     throw new CliError("The --input file is over 1 MiB.");
   }
@@ -143,30 +149,27 @@ export async function testHook(
     );
   }
 
-  const child = spawn(
-    "/bin/sh",
-    ["-c", hookCommand(root, handler.command, options.harness)],
-    {
-      cwd,
-      stdio: ["pipe", "pipe", "pipe"],
-      detached: true,
-    },
+  const shell = await hookInvocation(
+    root,
+    handler.command,
+    options.harness,
+    runtime,
   );
+
+  const child = spawn(shell.command, shell.args, {
+    cwd,
+    stdio: ["pipe", "pipe", "pipe"],
+    env: { ...runtime.env },
+    detached: !isWindows(runtime.platform),
+    windowsHide: true,
+  });
 
   let stdout = "";
   let stderr = "";
   let length = 0;
   let timedOut = false;
 
-  const stop = () => {
-    if (child.pid) {
-      try {
-        process.kill(-child.pid, "SIGKILL");
-      } catch {
-        /* exited */
-      }
-    }
-  };
+  const stop = () => stopProcessTree(child, runtime);
 
   const timer = setTimeout(() => {
     timedOut = true;

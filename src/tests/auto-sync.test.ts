@@ -1,3 +1,5 @@
+import { inspectNative } from "./native.js";
+import { testRuntime } from "./runtime.js";
 import { HTTP_STATUS } from "../shared/constants.js";
 
 import { expect, test } from "vitest";
@@ -74,7 +76,7 @@ async function connectedHome(t: TestContext, extra: Partial<Settings> = {}) {
 
   const url = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
 
-  await updateCredentials(home, (credentials) => {
+  await updateCredentials(testRuntime(home), (credentials) => {
     credentials.selectedServer = url;
     credentials.servers[url] = {
       token: "t".repeat(43),
@@ -116,7 +118,7 @@ async function connectedHome(t: TestContext, extra: Partial<Settings> = {}) {
       if (fail) {
         throw new Error("sync failed");
       }
-    }, home);
+    }, testRuntime(home));
 
   return { home, backend, expire, run, syncs: () => syncs };
 }
@@ -201,7 +203,7 @@ test("a local folder beside cloud always syncs", async (t) => {
 test("syncing a cloud workspace registers the session-start sync", async (t) => {
   const { home } = await connectedHome(t);
 
-  await synchronize(undefined, home);
+  await synchronize(undefined, testRuntime(home));
 
   const settings = JSON.parse(
     await readFile(join(home, ".claude/settings.json"), "utf8"),
@@ -210,7 +212,9 @@ test("syncing a cloud workspace registers the session-start sync", async (t) => 
   expect(
     settings.hooks.SessionStart.some(
       (entry: { hooks: { command: string }[] }) =>
-        entry.hooks[0]!.command.includes("entry/workspace-startup.js"),
+        inspectNative(entry.hooks[0]!.command).includes(
+          "entry/workspace-startup.js",
+        ),
     ),
   ).toBeTruthy();
 });
@@ -221,7 +225,7 @@ test("sync rewrites legacy harness entry paths and stays idempotent", async (t) 
     knowledge: true,
   });
 
-  await synchronize(undefined, home);
+  await synchronize(undefined, testRuntime(home));
 
   const stateFile = join(home, ".barndog/state.json");
   const state = JSON.parse(await readFile(stateFile, "utf8"));
@@ -244,10 +248,10 @@ test("sync rewrites legacy harness entry paths and stays idempotent", async (t) 
     await writeFile(file, legacyPaths(await readFile(file, "utf8")));
   }
 
-  await synchronize(undefined, home);
+  await synchronize(undefined, testRuntime(home));
 
   for (const file of files) {
-    const text = await readFile(file, "utf8");
+    const text = inspectNative(await readFile(file, "utf8"));
     expect(text).toContain("entry/workspace-startup.js");
     expect(text).toContain("entry/knowledge-startup.js");
     expect(text).not.toContain("features/git-workspace/startup.js");
@@ -258,7 +262,7 @@ test("sync rewrites legacy harness entry paths and stays idempotent", async (t) 
     [...files, stateFile].map((file) => readFile(file, "utf8")),
   );
 
-  await synchronize(undefined, home);
+  await synchronize(undefined, testRuntime(home));
   expect(
     await Promise.all(
       [...files, stateFile].map((file) => readFile(file, "utf8")),

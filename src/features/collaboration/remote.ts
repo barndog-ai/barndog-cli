@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../../runtime.js";
 import { type Skill } from "@barndog-ai/api-contract";
 import { publishedSkills } from "../skills/catalog.js";
 import { publishedHooks } from "../hooks/catalog.js";
@@ -22,9 +23,9 @@ export async function selectPackage(
     kind,
   }: { name: string; selector: string; kind: PackageKind },
   conn: Connection,
-  home: string,
+  runtime: RuntimeContext,
 ) {
-  const values = await packageCatalogs[kind](conn, home);
+  const values = await packageCatalogs[kind](conn, runtime);
   const matches = values.filter(
     (s) => s.name === name && matchesOrigin(s.origin, selector, conn),
   );
@@ -37,16 +38,16 @@ export async function selectPackage(
   return match;
 }
 
-type DownloadOptions = { home: string; kind: PackageKind };
+type DownloadOptions = { runtime: RuntimeContext; kind: PackageKind };
 
 /** The package of one published version, checked against that version's commit. */
 export function downloadVersion(
   version: { id: string; number: number; commit: string },
   conn: Connection,
-  { home, kind }: DownloadOptions,
+  { runtime, kind }: DownloadOptions,
 ) {
   return unpackDownload(
-    packageApi(kind, conn, home).versionPackage(version.id, version.number),
+    packageApi(kind, conn, runtime).versionPackage(version.id, version.number),
     { kind, commit: version.commit, subject: "the package" },
   );
 }
@@ -55,10 +56,10 @@ export function downloadVersion(
 export function downloadChange(
   change: { id: string; revision: number; commit: string },
   conn: Connection,
-  { home, kind }: DownloadOptions,
+  { runtime, kind }: DownloadOptions,
 ) {
   return unpackDownload(
-    packageApi(kind, conn, home).changePackage(change.id, change.revision),
+    packageApi(kind, conn, runtime).changePackage(change.id, change.revision),
     { kind, commit: change.commit, subject: "the package" },
   );
 }
@@ -67,10 +68,10 @@ export function downloadChange(
 export function downloadPull(
   pull: { connectionId: string; number: number; head: string },
   conn: Connection,
-  { home, kind }: DownloadOptions,
+  { runtime, kind }: DownloadOptions,
 ) {
   return unpackDownload(
-    apiClient(conn.server, home).GET(
+    apiClient(conn.server, runtime).GET(
       "/v1/git-connections/{id}/pulls/{number}/package",
       {
         params: { path: { id: pull.connectionId, number: pull.number } },
@@ -84,14 +85,14 @@ export function downloadPull(
 export function getChange(
   id: string,
   conn: Connection,
-  home: string,
+  runtime: RuntimeContext,
   kind: PackageKind,
 ): Promise<PackageChange> {
-  return packageApi(kind, conn, home).change(id);
+  return packageApi(kind, conn, runtime).change(id);
 }
 
 /** Every published package of a kind that you can see. */
 const packageCatalogs: Record<
   PackageKind,
-  (conn: Connection, home: string) => Promise<(Skill | Hook)[]>
+  (conn: Connection, runtime: RuntimeContext) => Promise<(Skill | Hook)[]>
 > = { skill: publishedSkills, hook: publishedHooks };

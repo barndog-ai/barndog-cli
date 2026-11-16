@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../../runtime.js";
 import {
   contextSchema,
   listOutputSchema,
@@ -16,9 +17,9 @@ import { allPages } from "../server/pages.js";
  */
 export async function publishedSkills(
   connection: Connection,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<Skill[]> {
-  const client = apiClient(connection.server, home);
+  const client = apiClient(connection.server, runtime);
   const context = contextSchema.parse((await client.GET("/v1/context")).data);
   if (
     context.organization.id !== connection.organizationId ||
@@ -61,9 +62,9 @@ export async function publishedSkills(
 
 export async function skillCatalog(
   connection: Connection,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<CatalogAsset[]> {
-  return (await publishedSkills(connection, home)).map((skill) => ({
+  return (await publishedSkills(connection, runtime)).map((skill) => ({
     id: skill.id,
     kind: "skill",
     name: skill.name,

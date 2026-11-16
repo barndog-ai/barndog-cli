@@ -1,4 +1,5 @@
 /** `barndog skills add`: brings Skills from a repository or folder into the local workspace. */
+import type { RuntimeContext } from "../runtime.js";
 import { join } from "node:path";
 import { CliError } from "../errors.js";
 import {
@@ -49,14 +50,19 @@ function assertDistinctNames(chosen: SkillCandidate[], url: string) {
 async function withSkillSource(
   source: string,
   folder: string | null,
-  home: string,
+  runtime: RuntimeContext,
   use: (remote: RemoteRepo) => Promise<void>,
 ) {
   if (folder) {
-    return use(await readFolder(folder, home));
+    return use(await readFolder(folder, runtime));
   }
 
-  return fetchRemote(parseLocation(source), { allowPrompt: true }, use);
+  return fetchRemote(
+    parseLocation(source),
+    { allowPrompt: true },
+    use,
+    runtime,
+  );
 }
 
 function assertFolderOptions(options: AddOptions, folder: string | null) {
@@ -116,10 +122,10 @@ export async function addSkills(
   options: AddOptions,
   context: AddContext,
 ) {
-  assertSourceExists(url, context.home);
-  const folder = await plainFolder(url, context.home);
+  assertSourceExists(url, context.runtime);
+  const folder = await plainFolder(url, context.runtime);
   assertFolderOptions(options, folder);
-  await withSkillSource(url, folder, context.home, async (remote) => {
+  await withSkillSource(url, folder, context.runtime, async (remote) => {
     const { skills, skipped } = discoverSkills(remote);
     for (const skip of skipped) {
       context.write(`${warn("!")} ${skip.path}: ${skip.reason}`);
@@ -187,7 +193,7 @@ export async function addSkills(
           remote,
           root: skill.root,
         },
-        context.home,
+        context.runtime,
       );
 
       if (transfer !== "move") {

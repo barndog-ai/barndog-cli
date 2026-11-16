@@ -13,10 +13,10 @@ const version = z
   ).version;
 
 /** What `barndog --version` prints: enough to tell builds apart in a support report. */
-export function versionReport() {
+export function versionReport(platform: NodeJS.Platform) {
   return [
     `barndog ${version}`,
-    `Node.js ${process.version} on ${process.platform} ${process.arch}`,
+    `Node.js ${process.version} on ${platform} ${process.arch}`,
     `Default server ${defaultServer}`,
   ].join("\n");
 }

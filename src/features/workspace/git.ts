@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../../runtime.js";
 import { execFile, spawn } from "node:child_process";
 import { stat } from "node:fs/promises";
 
@@ -70,8 +71,12 @@ export type GitOptions = {
 const inherited = ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_PREFIX"];
 
 /** Runs system Git with repository hooks and the arbitrary-command transport disabled. */
-export function git(args: string[], options: GitOptions = {}): Promise<Buffer> {
-  const env: NodeJS.ProcessEnv = { ...process.env };
+export function git(
+  args: string[],
+  runtime: RuntimeContext,
+  options: GitOptions = {},
+): Promise<Buffer> {
+  const env: NodeJS.ProcessEnv = { ...runtime.env };
   for (const name of inherited) {
     delete env[name];
   }
@@ -93,6 +98,8 @@ export function git(args: string[], options: GitOptions = {}): Promise<Buffer> {
       ],
       {
         encoding: "buffer",
+        cwd: runtime.cwd,
+        windowsHide: true,
         env: { ...env, ...options.env },
         maxBuffer: GIT_OUTPUT_LIMIT_MIB * BYTES_PER_KIB * BYTES_PER_KIB,
         timeout: options.timeoutMs ?? GIT_TIMEOUT_MS,
@@ -121,8 +128,11 @@ export function git(args: string[], options: GitOptions = {}): Promise<Buffer> {
 }
 
 /** Runs Git attached to the terminal, so its own prompts and errors reach the developer. */
-export function gitInTerminal(args: string[]): Promise<void> {
-  const env: NodeJS.ProcessEnv = { ...process.env };
+export function gitInTerminal(
+  args: string[],
+  runtime: RuntimeContext,
+): Promise<void> {
+  const env: NodeJS.ProcessEnv = { ...runtime.env };
   for (const name of inherited) {
     delete env[name];
   }
@@ -137,7 +147,7 @@ export function gitInTerminal(args: string[]): Promise<void> {
         "protocol.ext.allow=never",
         ...args,
       ],
-      { env, stdio: "inherit" },
+      { env, cwd: runtime.cwd, stdio: "inherit", windowsHide: true },
     );
 
     child.once("error", reject);
@@ -153,17 +163,23 @@ export function gitInTerminal(args: string[]): Promise<void> {
  * Runs Git with the supplied arguments and returns UTF-8 stdout with
  * surrounding whitespace removed.
  */
-export const gitText = async (args: string[], options?: GitOptions) =>
-  (await git(args, options)).toString("utf8").trim();
+export const gitText = async (
+  args: string[],
+  runtime: RuntimeContext,
+  options?: GitOptions,
+) => (await git(args, runtime, options)).toString("utf8").trim();
 
 /** Lets `--repo` name a clone on disk: the workspace is the remote it came from. */
-export async function cloneOrigin(value: string): Promise<string> {
+export async function cloneOrigin(
+  value: string,
+  runtime: RuntimeContext,
+): Promise<string> {
   try {
     if (!(await stat(value.trim())).isDirectory()) {
       return value;
     }
 
-    return await gitText(["config", "--get", "remote.origin.url"], {
+    return await gitText(["config", "--get", "remote.origin.url"], runtime, {
       repo: value.trim(),
     });
   } catch {
@@ -256,14 +272,19 @@ export function parseRemoteHead(output: string, url: string): RemoteHead {
 /** Reads a remote's default branch; null means the repository is empty. */
 export async function remoteHead(
   url: string,
+  runtime: RuntimeContext,
   allowPrompt = false,
 ): Promise<RemoteHead> {
   let output: string;
   try {
-    output = await gitText(["ls-remote", "--symref", "--", url, "HEAD"], {
-      allowPrompt,
-      timeoutMs: 60_000,
-    });
+    output = await gitText(
+      ["ls-remote", "--symref", "--", url, "HEAD"],
+      runtime,
+      {
+        allowPrompt,
+        timeoutMs: 60_000,
+      },
+    );
   } catch (error) {
     if (error instanceof GitError) {
       throw new RepositoryAccessError(

@@ -111,7 +111,7 @@ async function reportCoverage(
     name,
     LOCAL_ORIGIN,
     undefined,
-    context.home,
+    context.runtime,
   );
 
   if (!prompt) {
@@ -145,8 +145,8 @@ export async function addHook(
   options: AddOptions,
   context: AddContext,
 ) {
-  assertSourceExists(url, context.home);
-  if (await plainFolder(url, context.home)) {
+  assertSourceExists(url, context.runtime);
+  if (await plainFolder(url, context.runtime)) {
     throw new CliError(
       `${url} isn't a Git repo, and Hooks can only be added from one for now.`,
       "git init, commit the Hook, then run barndog hooks add again",
@@ -157,174 +157,187 @@ export async function addHook(
   const fallback =
     slugify(basename(url.replace(/\/$/, "").replace(/\.git$/, ""))) || "hook";
 
-  await fetchRemote(location, { allowPrompt: true }, async (remote) => {
-    const { candidates, skipped } = discoverHooks(remote, fallback);
-    for (const skip of skipped) {
-      context.write(`${warn("!")} ${skip.path}: ${skip.reason}`);
-    }
-
-    let [candidate] = candidates;
-    if (!candidate) {
-      throw notFound(remote, url, "Hook");
-    }
-
-    const wanted = only(options.only ?? []);
-    if (candidates.length > 1) {
-      if (wanted) {
-        candidate = candidates.find((c) => c.name === wanted) ?? candidate;
-      } else if (!context.interactive) {
-        throw new CliError(
-          `${url} has several Hooks: ${candidates.map((c) => c.name).join(", ")}.`,
-          "barndog hooks add <url> --only <name>",
-        );
-      } else {
-        const picked = await context.prompts.chooseOne(
-          "Which Hook do you want?",
-          candidates.map((c, index) => ({
-            name:
-              c.type === "package"
-                ? `${c.name}  ${dim(folderLabel(c.root))}`
-                : c.name,
-            value: String(index),
-            ...(c.type === "package"
-              ? { description: `Description: ${c.description}` }
-              : {}),
-          })),
-        );
-
-        candidate = candidates[Number(picked)] ?? candidate;
+  await fetchRemote(
+    location,
+    { allowPrompt: true },
+    async (remote) => {
+      const { candidates, skipped } = discoverHooks(remote, fallback);
+      for (const skip of skipped) {
+        context.write(`${warn("!")} ${skip.path}: ${skip.reason}`);
       }
-    }
 
-    const mode = await updateMode(options, context);
-    if (candidate.type === "package") {
-      const name = options.as ?? candidate.name;
-      const entries = candidate.entries.map((entry) =>
-        entry.path === "hook.yaml" && name !== candidate.name
-          ? {
-              ...entry,
-              data: Buffer.from(setYamlName(entry.data.toString("utf8"), name)),
-            }
-          : entry,
+      let [candidate] = candidates;
+      if (!candidate) {
+        throw notFound(remote, url, "Hook");
+      }
+
+      const wanted = only(options.only ?? []);
+      if (candidates.length > 1) {
+        if (wanted) {
+          candidate = candidates.find((c) => c.name === wanted) ?? candidate;
+        } else if (!context.interactive) {
+          throw new CliError(
+            `${url} has several Hooks: ${candidates.map((c) => c.name).join(", ")}.`,
+            "barndog hooks add <url> --only <name>",
+          );
+        } else {
+          const picked = await context.prompts.chooseOne(
+            "Which Hook do you want?",
+            candidates.map((c, index) => ({
+              name:
+                c.type === "package"
+                  ? `${c.name}  ${dim(folderLabel(c.root))}`
+                  : c.name,
+              value: String(index),
+              ...(c.type === "package"
+                ? { description: `Description: ${c.description}` }
+                : {}),
+            })),
+          );
+
+          candidate = candidates[Number(picked)] ?? candidate;
+        }
+      }
+
+      const mode = await updateMode(options, context);
+      if (candidate.type === "package") {
+        const name = options.as ?? candidate.name;
+        const entries = candidate.entries.map((entry) =>
+          entry.path === "hook.yaml" && name !== candidate.name
+            ? {
+                ...entry,
+                data: Buffer.from(
+                  setYamlName(entry.data.toString("utf8"), name),
+                ),
+              }
+            : entry,
+        );
+
+        const saved = await saveImported(
+          { kind: "hook", name, entries, mode, remote, root: candidate.root },
+          context.runtime,
+        );
+
+        context.write(`${ok("✔")} Added ${bold(name)}`);
+        await reportCoverage(name, saved.path, context);
+
+        return;
+      }
+
+      const modes = new Map(
+        remote.snapshot.entries.map((e) => [e.path, e.mode]),
       );
 
+      const executable = (script: string) =>
+        modes.get(script) === GIT_MODE.executable;
+
+      // Settings the author shipped answer every question, and no other tool is offered.
+      const written = harnesses.filter(
+        (h) => candidate.implementations[h]?.length,
+      );
+
+      let plan: Partial<Record<Harness, DraftEvent[]>>;
+      if (written.length) {
+        const chosen =
+          context.interactive && written.length > 1
+            ? (
+                await context.prompts.chooseMany(
+                  "Which coding tools should this Hook support?",
+                  written.map((h) => ({
+                    name: `${adapters[h].name}  ${dim(`found in this ${remote.path ? "folder" : "repo"}`)}`,
+                    short: adapters[h].name,
+                    value: h,
+                    checked: true,
+                  })),
+                )
+              ).filter(isHarness)
+            : written;
+
+        const { implementations } = candidate;
+        plan = Object.fromEntries(
+          chosen.map((h) => [h, implementations[h] ?? []]),
+        );
+      } else if (context.interactive) {
+        plan = await pickHookPlan(candidate, executable, context);
+      } else {
+        throw new CliError(
+          "These scripts need events chosen for each coding tool. Run this in a terminal to choose them.",
+        );
+      }
+
+      if (!Object.values(plan).some((events) => events?.length)) {
+        throw new CliError("No events were chosen, so nothing was added.");
+      }
+
+      const name =
+        options.as ??
+        (context.interactive
+          ? (await context.prompts.text("Hook name", candidate.name)).trim()
+          : candidate.name);
+
+      const description =
+        options.description ??
+        (context.interactive
+          ? (
+              await context.prompts.text(
+                "What does it do?",
+                `Hook from ${remote.url}`,
+              )
+            ).trim()
+          : `Hook from ${remote.url}`);
+
+      const built = buildHookPackage(remote, {
+        name,
+        description,
+        implementations: plan,
+      });
+
+      context.write(dim("These commands will run on this machine:"));
+      for (const [harness, events] of Object.entries(plan)) {
+        for (const event of events ?? []) {
+          context.write(
+            dim(
+              `  ${harness}  ${event.event}${event.matcher ? ` (${event.matcher})` : ""}  ${event.script}`,
+            ),
+          );
+        }
+      }
+
+      if (
+        context.interactive &&
+        !(await context.prompts.yes("Add this Hook?"))
+      ) {
+        throw new CliError("Nothing was added.");
+      }
+
       const saved = await saveImported(
-        { kind: "hook", name, entries, mode, remote, root: candidate.root },
-        context.home,
+        {
+          kind: "hook",
+          name,
+          entries: built.entries,
+          mode,
+          remote,
+          root: built.root,
+          files: built.files,
+        },
+        context.runtime,
       );
 
       context.write(`${ok("✔")} Added ${bold(name)}`);
-      await reportCoverage(name, saved.path, context);
-
-      return;
-    }
-
-    const modes = new Map(remote.snapshot.entries.map((e) => [e.path, e.mode]));
-    const executable = (script: string) =>
-      modes.get(script) === GIT_MODE.executable;
-
-    // Settings the author shipped answer every question, and no other tool is offered.
-    const written = harnesses.filter(
-      (h) => candidate.implementations[h]?.length,
-    );
-
-    let plan: Partial<Record<Harness, DraftEvent[]>>;
-    if (written.length) {
-      const chosen =
-        context.interactive && written.length > 1
-          ? (
-              await context.prompts.chooseMany(
-                "Which coding tools should this Hook support?",
-                written.map((h) => ({
-                  name: `${adapters[h].name}  ${dim(`found in this ${remote.path ? "folder" : "repo"}`)}`,
-                  short: adapters[h].name,
-                  value: h,
-                  checked: true,
-                })),
-              )
-            ).filter(isHarness)
-          : written;
-
-      const { implementations } = candidate;
-      plan = Object.fromEntries(
-        chosen.map((h) => [h, implementations[h] ?? []]),
-      );
-    } else if (context.interactive) {
-      plan = await pickHookPlan(candidate, executable, context);
-    } else {
-      throw new CliError(
-        "These scripts need events chosen for each coding tool. Run this in a terminal to choose them.",
-      );
-    }
-
-    if (!Object.values(plan).some((events) => events?.length)) {
-      throw new CliError("No events were chosen, so nothing was added.");
-    }
-
-    const name =
-      options.as ??
-      (context.interactive
-        ? (await context.prompts.text("Hook name", candidate.name)).trim()
-        : candidate.name);
-
-    const description =
-      options.description ??
-      (context.interactive
-        ? (
-            await context.prompts.text(
-              "What does it do?",
-              `Hook from ${remote.url}`,
-            )
-          ).trim()
-        : `Hook from ${remote.url}`);
-
-    const built = buildHookPackage(remote, {
-      name,
-      description,
-      implementations: plan,
-    });
-
-    context.write(dim("These commands will run on this machine:"));
-    for (const [harness, events] of Object.entries(plan)) {
-      for (const event of events ?? []) {
-        context.write(
-          dim(
-            `  ${harness}  ${event.event}${event.matcher ? ` (${event.matcher})` : ""}  ${event.script}`,
-          ),
-        );
+      for (const harness of harnesses) {
+        const { trustNote } = adapters[harness].hooks;
+        if (trustNote && plan[harness]?.length) {
+          context.write(dim(trustNote));
+        }
       }
-    }
 
-    if (context.interactive && !(await context.prompts.yes("Add this Hook?"))) {
-      throw new CliError("Nothing was added.");
-    }
-
-    const saved = await saveImported(
-      {
-        kind: "hook",
-        name,
-        entries: built.entries,
-        mode,
-        remote,
-        root: built.root,
-        files: built.files,
-      },
-      context.home,
-    );
-
-    context.write(`${ok("✔")} Added ${bold(name)}`);
-    for (const harness of harnesses) {
-      const { trustNote } = adapters[harness].hooks;
-      if (trustNote && plan[harness]?.length) {
-        context.write(dim(trustNote));
+      // Scripts placed by hand were given their tools on purpose.
+      if (written.length) {
+        await reportCoverage(name, saved.path, context);
       }
-    }
-
-    // Scripts placed by hand were given their tools on purpose.
-    if (written.length) {
-      await reportCoverage(name, saved.path, context);
-    }
-  });
+    },
+    context.runtime,
+  );
 
   await finish(context);
 }

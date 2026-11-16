@@ -1,3 +1,5 @@
+import { localPath } from "../../platform.js";
+import type { RuntimeContext } from "../../runtime.js";
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
 import {
@@ -130,6 +132,7 @@ export type SetPreview = {
 
 async function overrideResolution(
   options: Overrides,
+  runtime: RuntimeContext,
 ): Promise<OverrideResolution | undefined> {
   if (options.decisions) {
     return {
@@ -143,7 +146,11 @@ async function overrideResolution(
             })
             .strict(),
         )
-        .parse(JSON.parse(await readFile(options.decisions, "utf8"))),
+        .parse(
+          JSON.parse(
+            await readFile(localPath(options.decisions, runtime), "utf8"),
+          ),
+        ),
     };
   }
 
@@ -177,7 +184,7 @@ function assetChange(change: AssetChange, assetId: string): SelectionAction {
 }
 
 type Workspace = {
-  home: string;
+  runtime: RuntimeContext;
   settings: Settings;
   identity: { organizationId: string; developerId?: string };
   catalog: AssetCatalog;
@@ -187,12 +194,12 @@ type Workspace = {
 };
 
 /** Cloud answers these through its API; repo workspaces answer them from files. */
-async function workspaceAccess(settings: Settings, home: string) {
-  const overlay = localOverlay(settings, home);
+async function workspaceAccess(settings: Settings, runtime: RuntimeContext) {
+  const overlay = localOverlay(settings, runtime);
   const merge = (catalog: AssetCatalog) =>
     overlay ? mergeLocalCatalog(catalog, overlay) : catalog;
 
-  const source = openRepoSource(settings, home);
+  const source = openRepoSource(settings, runtime);
   if (source) {
     const model = await source.model();
 
@@ -204,16 +211,18 @@ async function workspaceAccess(settings: Settings, home: string) {
     };
   }
 
-  const { connection: conn, catalog } = await environmentCatalog(home);
+  const { connection: conn, catalog } = await environmentCatalog(runtime);
 
   return {
     identity: conn,
     catalog: await merge(catalog),
-    scopes: () => scopes(conn, home),
+    scopes: () => scopes(conn, runtime),
   };
 }
 
-async function readRequiredSettings(home: string) {
+async function readRequiredSettings(runtime: RuntimeContext) {
+  const { home } = runtime;
+
   const settings = await readSettings(home);
   if (!settings) {
     throw new SetupRequiredError();
@@ -223,16 +232,16 @@ async function readRequiredSettings(home: string) {
 }
 
 function withLockedWorkspace<T>(
-  home: string,
+  runtime: RuntimeContext,
   operation: (workspace: Workspace) => Promise<T>,
 ): Promise<T> {
-  return locked(home, async () => {
-    const settings = await readRequiredSettings(home);
-    const access = await workspaceAccess(settings, home);
+  return locked(runtime, async () => {
+    const settings = await readRequiredSettings(runtime);
+    const access = await workspaceAccess(settings, runtime);
 
     return operation({
       ...access,
-      home,
+      runtime,
       settings,
       current: selectionState(settings),
     });
@@ -246,7 +255,7 @@ async function syncSelection(
 ): Promise<Applied> {
   return {
     status: "applied",
-    events: await synchronize(undefined, workspace.home, next, {
+    events: await synchronize(undefined, workspace.runtime, next, {
       catalog: workspace.catalog,
       source: workspace.source,
     }),
@@ -260,7 +269,7 @@ async function applyChange(
   overrides: Overrides,
   origin: string | undefined,
 ): Promise<SelectionOutcome> {
-  const resolution = await overrideResolution(overrides);
+  const resolution = await overrideResolution(overrides, workspace.runtime);
   const result = (() => {
     try {
       return applySelectionAction(
@@ -345,9 +354,9 @@ function assetId(
 export function changeAsset(
   change: AssetChange,
   target: AssetTarget & Overrides,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<SelectionOutcome> {
-  return withLockedWorkspace(home, async (workspace) => {
+  return withLockedWorkspace(runtime, async (workspace) => {
     const id = assetId(workspace, target, change);
 
     return applyChange(
@@ -362,14 +371,14 @@ export function changeAsset(
 export function changeAssets(
   change: AssetChange,
   target: AssetIds & Overrides,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<SelectionOutcome> {
-  return withLockedWorkspace(home, async (workspace) => {
+  return withLockedWorkspace(runtime, async (workspace) => {
     if (!target.ids.length) {
       return { status: "applied", events: [] };
     }
 
-    const resolution = await overrideResolution(target);
+    const resolution = await overrideResolution(target, workspace.runtime);
     let state = workspace.current;
     for (const id of target.ids) {
       const result = applySelectionAction(
@@ -393,9 +402,9 @@ export function changeAssets(
 /** `reset`, or `as` set to the published name, drops the local name. */
 export function renameAsset(
   target: AssetRename,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<Applied> {
-  return withLockedWorkspace(home, async (workspace) => {
+  return withLockedWorkspace(runtime, async (workspace) => {
     const { settings, catalog, current } = workspace;
     const id = assetId(workspace, target, "rename");
     const asset = catalog.assets.find((a) => a.id === id);
@@ -413,7 +422,7 @@ export function renameAsset(
         );
       }
 
-      const held = await installedNames(workspace.home);
+      const held = await installedNames(runtime);
       const taken = catalog.assets.find(
         (a) =>
           a.id !== id &&
@@ -444,8 +453,8 @@ export function renameAsset(
   });
 }
 
-export function listSets(home: string): Promise<SetsList> {
-  return withLockedWorkspace(home, async ({ scopes, current, catalog }) => ({
+export function listSets(runtime: RuntimeContext): Promise<SetsList> {
+  return withLockedWorkspace(runtime, async ({ scopes, current, catalog }) => ({
     available: (await scopes()).filter((s) => s.type !== "dev"),
     subscriptions: current.subscriptions,
     diagnostics: resolveAssets(catalog, current).diagnostics,
@@ -497,8 +506,11 @@ function scopeAssets(workspace: Workspace, scope: Scope) {
   );
 }
 
-export function previewSet(origin: string, home: string): Promise<SetPreview> {
-  return withLockedWorkspace(home, async (workspace) => ({
+export function previewSet(
+  origin: string,
+  runtime: RuntimeContext,
+): Promise<SetPreview> {
+  return withLockedWorkspace(runtime, async (workspace) => ({
     assets: scopeAssets(workspace, await findScope(workspace, origin)),
     selectedAssetIds: resolveAssets(
       workspace.catalog,
@@ -513,9 +525,9 @@ export function previewSet(origin: string, home: string): Promise<SetPreview> {
  */
 export function installSet(
   options: SetSelection,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<SelectionOutcome> {
-  return withLockedWorkspace(home, async (workspace) =>
+  return withLockedWorkspace(runtime, async (workspace) =>
     applyChange(
       workspace,
       {
@@ -535,9 +547,9 @@ export function installSet(
  */
 export function installSetAssets(
   options: SetAssets,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<Applied> {
-  return withLockedWorkspace(home, async (workspace) => {
+  return withLockedWorkspace(runtime, async (workspace) => {
     const scope = await findScope(workspace, options.origin);
     const available = scopeAssets(workspace, scope);
     const ids = z.array(z.uuidv4()).parse(options.assetIds);
@@ -588,9 +600,9 @@ export function installSetAssets(
 export function changeSet(
   change: SetChange,
   options: SetTarget,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<SelectionOutcome> {
-  return withLockedWorkspace(home, async (workspace) => {
+  return withLockedWorkspace(runtime, async (workspace) => {
     const scope = await findScope(workspace, options.origin, {
       forRemoval: change === "remove",
     });
@@ -609,9 +621,9 @@ export function changeSet(
 /** Replaces the subscriptions of the same type (team or repository). */
 export function switchSet(
   options: SetSelection,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<SelectionOutcome> {
-  return withLockedWorkspace(home, async (workspace) => {
+  return withLockedWorkspace(runtime, async (workspace) => {
     const scope = await findScope(workspace, options.origin);
     if (scope.type !== "team" && scope.type !== "repo") {
       throw new CliError(
@@ -633,9 +645,12 @@ export function switchSet(
 }
 
 /** Whether coding tools are told at session start which knowledge documents exist. */
-export function setKnowledge(enabled: boolean, home: string): Promise<Applied> {
-  return locked(home, async () => {
-    const settings = await readRequiredSettings(home);
+export function setKnowledge(
+  enabled: boolean,
+  runtime: RuntimeContext,
+): Promise<Applied> {
+  return locked(runtime, async () => {
+    const settings = await readRequiredSettings(runtime);
     if (
       !settings.connection &&
       !settings.gitWorkspace &&
@@ -646,7 +661,7 @@ export function setKnowledge(enabled: boolean, home: string): Promise<Applied> {
 
     return {
       status: "applied",
-      events: await synchronize(undefined, home, {
+      events: await synchronize(undefined, runtime, {
         ...settings,
         knowledge: enabled,
       }),

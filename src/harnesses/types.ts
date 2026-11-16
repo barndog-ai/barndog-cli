@@ -1,6 +1,10 @@
 import type { McpDefinition } from "@barndog-ai/api-contract";
 
+import type { DesktopApp } from "../platform.js";
+
 export type Harness = "claude" | "codex" | "cursor";
+
+type WindowsHookShell = "bash" | "powershell";
 
 type HookEvent = {
   name: string;
@@ -23,6 +27,11 @@ type HookProfile = {
    * them and `src/tests/patterns.test.ts` covers them.
    */
   settings: readonly RegExp[];
+  /**
+   * The shell the tool runs a hook command line in on Windows, from its hook
+   * reference (on macOS and Linux every tool uses `sh`).
+   */
+  windowsShell: WindowsHookShell;
   /** Variables the tool gives its own plugin hooks to find their files. */
   rootVariables: readonly string[];
   /** The user-level hook settings file BarnDog writes, relative to the home directory. */
@@ -94,7 +103,8 @@ export type HarnessAdapter = {
   name: string;
   skillRoot: string;
   commands: readonly string[];
-  macApp: string;
+  /** The desktop app whose installation counts as evidence (see `installedApplication()`). */
+  desktopApp: DesktopApp;
   hooks: HookProfile;
   mcp: McpProfile;
   /** Absent when the tool has no such variable. */

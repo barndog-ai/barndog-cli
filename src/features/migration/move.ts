@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../../runtime.js";
 import { randomBytes } from "node:crypto";
 import { basename } from "node:path";
 
@@ -104,23 +105,23 @@ const knowledgeOf = (item: Candidate) =>
   defined(item.content, `${item.name} has no knowledge content`);
 
 /** A one-off destination: nothing about this machine's own setup changes. */
-async function repoDestination(value: string, home: string) {
-  const url = checkRepositoryUrl(await cloneOrigin(value));
-  const head = await inspectRepository(url);
+async function repoDestination(value: string, runtime: RuntimeContext) {
+  const url = checkRepositoryUrl(await cloneOrigin(value, runtime));
+  const head = await inspectRepository(url, runtime);
 
   return head
-    ? connectGitWorkspace(url, head.branch, home)
+    ? connectGitWorkspace(url, head.branch, runtime)
     : createGitWorkspace(
         url,
         basename(url).replace(/\.git$/, "") || "Workspace",
-        home,
+        runtime,
       );
 }
 
-async function serverDestination(value: string, home: string) {
+async function serverDestination(value: string, runtime: RuntimeContext) {
   const server = normalizeServer(value);
   try {
-    return await connectionContext(server, home);
+    return await connectionContext(server, runtime);
   } catch (error) {
     if (error instanceof LoginRequiredError) {
       throw new CliError(
@@ -271,11 +272,13 @@ async function moveToGit(
   workspace: GitWorkspace,
   items: Candidate[],
   to: string | undefined,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<MoveResult> {
-  const shared = await gitRepoSource(workspace, home).model();
+  const { home } = runtime;
+
+  const shared = await gitRepoSource(workspace, runtime).model();
   const tip = defined(
-    await acceptedCommit(workspace.workspaceId, home),
+    await acceptedCommit(workspace.workspaceId, runtime),
     "This Git workspace hasn't been fetched yet",
   );
 
@@ -329,27 +332,46 @@ async function moveToGit(
   }
 
   const title = `Move ${moving.length} local asset${moving.length === 1 ? "" : "s"} into the workspace`;
-  const commit = await commitFiles(repo, tip, {
-    files: moving.flatMap((entry) => entry.files),
-    message: title,
-  });
+  const commit = await commitFiles(
+    repo,
+    tip,
+    {
+      files: moving.flatMap((entry) => entry.files),
+      message: title,
+    },
+    { ...{}, runtime },
+  );
 
   // A workspace with nothing in it has nothing to review against.
   if (!shared.assets.length && !shared.knowledge.length) {
-    await pushCommit(repo, commit, workspace.branch);
-    await git(["update-ref", trackingRef(workspace.branch), commit], { repo });
-    await recordFetch(workspace, commit, home);
+    await pushCommit(repo, commit, workspace.branch, {
+      runtime,
+      allowPrompt: false,
+    });
+
+    await git(["update-ref", trackingRef(workspace.branch), commit], runtime, {
+      repo,
+    });
+
+    await recordFetch(workspace, commit, runtime);
     result.direct = true;
     result.branch = workspace.branch;
   } else {
     const branch = `barndog/local-move-${randomBytes(MOVE_BRANCH_RANDOM_BYTES).toString("hex")}`;
-    await pushCommit(repo, commit, branch);
-    const opened = await openPullRequest({
-      url: workspace.url,
-      base: workspace.branch,
-      branch,
-      title,
+    await pushCommit(repo, commit, branch, {
+      runtime,
+      allowPrompt: false,
     });
+
+    const opened = await openPullRequest(
+      {
+        url: workspace.url,
+        base: workspace.branch,
+        branch,
+        title,
+      },
+      runtime,
+    );
 
     result.branch = branch;
     result.url = opened.url ?? null;
@@ -370,9 +392,9 @@ async function moveToCloud(
   conn: Connection,
   items: Candidate[],
   to: string | undefined,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<MoveResult> {
-  const scope = await selectOrigin(to ?? "me", conn, home);
+  const scope = await selectOrigin(to ?? "me", conn, runtime);
   if (!scope.canPublish) {
     throw new CliError(
       `You can't publish to ${originLabel(scope)}.`,
@@ -380,17 +402,17 @@ async function moveToCloud(
     );
   }
 
-  const { catalog } = await environmentCatalog(home, conn);
+  const { catalog } = await environmentCatalog(runtime, conn);
   const docs = (
     await parsed(
       knowledgeIndexSchema,
-      apiClient(conn.server, home).GET("/v1/knowledge", {
+      apiClient(conn.server, runtime).GET("/v1/knowledge", {
         params: { query: { limit: PAGE_SIZE } },
       }),
     )
   ).documents;
 
-  const visible = await scopes(conn, home);
+  const visible = await scopes(conn, runtime);
   const org = visible.find((s) => s.type === "org");
   const rows: MoveRow[] = [];
   for (const item of items) {
@@ -414,7 +436,7 @@ async function moveToCloud(
               content: knowledgeOf(item),
             },
             conn,
-            home,
+            runtime,
           );
 
           rows.push({ ...base, status: "moved" });
@@ -450,9 +472,14 @@ async function moveToCloud(
       };
 
       if (asset.kind === "mcp") {
-        await publishMcp(asset, scope, conn, home);
+        await publishMcp(asset, scope, conn, runtime);
       } else {
-        await publishPackage({ ...asset, kind: asset.kind }, scope, conn, home);
+        await publishPackage(
+          { ...asset, kind: asset.kind },
+          scope,
+          conn,
+          runtime,
+        );
       }
 
       rows.push({ ...base, status: "moved" });
@@ -471,9 +498,11 @@ async function moveToCloud(
 /** Copies local assets into the shared workspace; the local folder is never deleted. */
 export function moveLocalAssets(
   options: MoveOptions,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<MoveResult> {
-  return locked(home, async () => {
+  const { home } = runtime;
+
+  return locked(runtime, async () => {
     const settings = await readSettings(home);
     if (!settings) {
       throw new SetupRequiredError();
@@ -483,7 +512,7 @@ export function moveLocalAssets(
       throw new CliError("This machine has no local assets to move.");
     }
 
-    const overlay = localRepoSource(settings.localWorkspace, home);
+    const overlay = localRepoSource(settings.localWorkspace, runtime);
     const shared =
       options.repo || options.server
         ? null
@@ -513,27 +542,27 @@ export function moveLocalAssets(
     const moveItems = async () => {
       if (options.repo) {
         return moveToGit(
-          await repoDestination(options.repo, home),
+          await repoDestination(options.repo, runtime),
           items,
           options.to,
-          home,
+          runtime,
         );
       }
 
       if (options.server) {
         return moveToCloud(
-          await serverDestination(options.server, home),
+          await serverDestination(options.server, runtime),
           items,
           options.to,
-          home,
+          runtime,
         );
       }
 
       if (settings.gitWorkspace) {
-        return moveToGit(settings.gitWorkspace, items, options.to, home);
+        return moveToGit(settings.gitWorkspace, items, options.to, runtime);
       }
 
-      return moveToCloud(await connection(home), items, options.to, home);
+      return moveToCloud(await connection(runtime), items, options.to, runtime);
     };
 
     const result = await moveItems();
@@ -554,7 +583,7 @@ export function moveLocalAssets(
     );
 
     if (moved.length) {
-      await synchronize(undefined, home, undefined, { prompt: false });
+      await synchronize(undefined, runtime, undefined, { prompt: false });
     }
 
     return result;
@@ -574,7 +603,11 @@ export type LocalAssets = {
   }[];
 };
 
-export async function listLocalAssets(home: string): Promise<LocalAssets> {
+export async function listLocalAssets(
+  runtime: RuntimeContext,
+): Promise<LocalAssets> {
+  const { home } = runtime;
+
   const settings = await readSettings(home);
   if (!settings || !settings.localWorkspace) {
     throw new CliError(
@@ -583,7 +616,7 @@ export async function listLocalAssets(home: string): Promise<LocalAssets> {
     );
   }
 
-  const source = localRepoSource(settings.localWorkspace, home);
+  const source = localRepoSource(settings.localWorkspace, runtime);
   const model = await source.model();
   const moved = await readMoved(source.label);
   const state = (path: string, invalid?: string): LocalAssetState => {
@@ -614,9 +647,9 @@ export async function listLocalAssets(home: string): Promise<LocalAssets> {
 }
 
 /** Where setup can offer to send local assets in a Cloud Workspace; personal first. */
-export async function cloudMoveTargets(home: string) {
-  const conn = await connection(home);
-  const visible = await scopes(conn, home);
+export async function cloudMoveTargets(runtime: RuntimeContext) {
+  const conn = await connection(runtime);
+  const visible = await scopes(conn, runtime);
 
   return visible
     .filter(

@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../../runtime.js";
 import { hookListSchema } from "@barndog-ai/api-contract";
 import type { Connection } from "../../config/settings.js";
 import type { Hook, CatalogAsset } from "../asset-kinds/index.js";
@@ -7,9 +8,9 @@ import { allPages } from "../server/pages.js";
 /** Every published Hook you can see, as the server describes it. */
 export async function publishedHooks(
   conn: Connection,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<Hook[]> {
-  const client = apiClient(conn.server, home);
+  const client = apiClient(conn.server, runtime);
 
   return allPages(async (cursor) => {
     const page = hookListSchema.parse(
@@ -34,9 +35,9 @@ export async function publishedHooks(
 
 export async function hookCatalog(
   conn: Connection,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<CatalogAsset[]> {
-  return (await publishedHooks(conn, home)).map((hook) => ({
+  return (await publishedHooks(conn, runtime)).map((hook) => ({
     id: hook.id,
     kind: "hook",
     name: hook.name,

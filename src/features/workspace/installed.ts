@@ -1,15 +1,23 @@
+import { assertPackagePaths } from "../../platform.js";
+import type { RuntimeContext } from "../../runtime.js";
 import { POSIX_MODE } from "../../shared/constants.js";
 
 import { chmod, lstat, mkdir, readdir, rm, rmdir } from "node:fs/promises";
 import { join } from "node:path";
 import { type PackageEntry } from "@barndog-ai/api-contract/package";
 import { type PackageKind } from "../../config/selection.js";
-import { readTree } from "../../shared/tree.js";
+import { readTree } from "./tree.js";
 import { setYamlName, splitFrontMatter } from "../../shared/patterns.js";
 import { writeAtomic } from "../../shared/files.js";
 import { barndogPaths } from "../../config/paths.js";
 
-export function installedPath(home: string, kind: PackageKind, name: string) {
+export function installedPath(
+  runtime: RuntimeContext,
+  kind: PackageKind,
+  name: string,
+) {
+  const { home } = runtime;
+
   return join(barndogPaths(home).installed(kind), name);
 }
 
@@ -44,8 +52,9 @@ export function renameSkillEntries(
 export async function desiredEntries(
   source: string,
   rename: string | null,
+  runtime: RuntimeContext,
 ): Promise<PackageEntry[]> {
-  const entries = await readTree(source);
+  const entries = await readTree(source, runtime);
 
   return rename ? renameSkillEntries(entries, rename) : entries;
 }
@@ -66,12 +75,17 @@ async function removeEmptyDirectories(directory: string) {
  * Mirrors entries into an existing folder file by file. The folder itself is never
  * replaced, so harness file watchers observe edits instead of a vanished directory.
  */
-export async function mirrorTree(directory: string, entries: PackageEntry[]) {
+export async function mirrorTree(
+  directory: string,
+  entries: PackageEntry[],
+  runtime: RuntimeContext,
+) {
+  assertPackagePaths(entries, runtime.platform);
   await mkdir(directory, { recursive: true, mode: POSIX_MODE.executableFile });
   const wanted = new Map(entries.map((entry) => [entry.path, entry]));
   let current: PackageEntry[] = [];
   try {
-    current = await readTree(directory);
+    current = await readTree(directory, runtime);
   } catch {
     await rm(directory, { recursive: true, force: true });
     await mkdir(directory, {

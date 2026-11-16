@@ -1,8 +1,10 @@
+import { localPath } from "../../platform.js";
+import type { RuntimeContext } from "../../runtime.js";
 import { POSIX_MODE } from "../../shared/constants.js";
 import { readState } from "../../config/state.js";
 import { readFile, mkdir } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import { spawn } from "node:child_process";
+import crossSpawn from "cross-spawn";
 import { z } from "zod";
 import {
   mcpDefinitionSchema,
@@ -55,23 +57,25 @@ export type McpUpdateInput = McpWriteInput & {
   expectedVersion: string;
 };
 
-async function readDefinition(file: string) {
-  return mcpDefinitionSchema.parse(JSON.parse(await readFile(file, "utf8")));
+async function readDefinition(file: string, runtime: RuntimeContext) {
+  return mcpDefinitionSchema.parse(
+    JSON.parse(await readFile(localPath(file, runtime), "utf8")),
+  );
 }
 
 /** Publishes a new MCP configuration in a scope. */
 export async function createMcp(
   input: McpWriteInput,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<McpServer> {
-  const conn = await connection(home);
-  const scope = await selectOrigin(input.origin, conn, home);
+  const conn = await connection(runtime);
+  const scope = await selectOrigin(input.origin, conn, runtime);
 
-  const definition = await readDefinition(input.file);
+  const definition = await readDefinition(input.file, runtime);
 
   return parsed(
     mcpSchema,
-    apiClient(conn.server, home).POST("/v1/mcps", {
+    apiClient(conn.server, runtime).POST("/v1/mcps", {
       body: {
         name: input.name,
         origin: { type: scope.type, id: scope.id },
@@ -85,16 +89,16 @@ export async function createMcp(
 /** Publishes a new revision of an MCP configuration, against the inspected version. */
 export async function updateMcp(
   input: McpUpdateInput,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<McpServer> {
-  const conn = await connection(home);
-  await selectOrigin(input.origin, conn, home);
-  const definition = await readDefinition(input.file);
-  const selected = await selectAsset("mcp", input.name, input.origin, home);
+  const conn = await connection(runtime);
+  await selectOrigin(input.origin, conn, runtime);
+  const definition = await readDefinition(input.file, runtime);
+  const selected = await selectAsset("mcp", input.name, input.origin, runtime);
 
   return parsed(
     mcpSchema,
-    apiClient(conn.server, home).POST("/v1/mcps/{id}/versions", {
+    apiClient(conn.server, runtime).POST("/v1/mcps/{id}/versions", {
       params: { path: { id: selected.reference.id } },
       body: {
         definition,
@@ -109,40 +113,47 @@ export async function updateMcp(
 export async function showMcp(
   name: string,
   origin: string,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<RepoAssetView | PublishedAsset> {
+  const { home } = runtime;
+
   const settings = await readSettings(home);
-  const repo = settings && repoForOrigin(settings, home, origin);
+  const repo = settings && repoForOrigin(settings, runtime, origin);
   if (repo) {
     return showRepoAsset(
       selectRepoAsset(await repo.model(), "mcp", name, origin),
     );
   }
 
-  return (await selectAsset("mcp", name, origin, home)).asset;
+  return (await selectAsset("mcp", name, origin, runtime)).asset;
 }
 
 export async function mcpVersions(
   name: string,
   origin: string,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<PackageVersion[] | McpVersion[]> {
+  const { home } = runtime;
+
   const settings = await readSettings(home);
   if (settings?.gitWorkspace) {
     return gitVersions(
       settings.gitWorkspace,
       { name, origin, kind: "mcp" },
-      home,
+      runtime,
     );
   }
 
-  const selected = await selectAsset("mcp", name, origin, home);
+  const selected = await selectAsset("mcp", name, origin, runtime);
 
   return parsed(
     z.array(mcpVersionSchema),
-    apiClient(selected.connection.server, home).GET("/v1/mcps/{id}/versions", {
-      params: { path: { id: selected.reference.id } },
-    }),
+    apiClient(selected.connection.server, runtime).GET(
+      "/v1/mcps/{id}/versions",
+      {
+        params: { path: { id: selected.reference.id } },
+      },
+    ),
   );
 }
 
@@ -154,10 +165,12 @@ export async function authenticateMcp(
   name: string,
   origin: string,
   harness: Harness,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<McpAuthentication> {
+  const { home } = runtime;
+
   const settings = await readSettings(home);
-  const repo = settings && repoForOrigin(settings, home, origin);
+  const repo = settings && repoForOrigin(settings, runtime, origin);
   const asset = repo
     ? await (async () => {
         const found = selectRepoAsset(await repo.model(), "mcp", name, origin);
@@ -172,7 +185,7 @@ export async function authenticateMcp(
         };
       })()
     : await (async () => {
-        const selected = await selectAsset("mcp", name, origin, home);
+        const selected = await selectAsset("mcp", name, origin, runtime);
         const parsed = mcpSchema.parse(selected.asset);
 
         return {
@@ -229,10 +242,11 @@ export async function authenticateMcp(
 
   const cwd = barndogPaths(home).nativeAuth;
   await mkdir(cwd, { recursive: true, mode: POSIX_MODE.privateDirectory });
-  const child = spawn(command, [...loginArguments, asset.name], {
+  // cross-spawn also starts Windows .cmd shims, such as an npm-installed claude.
+  const child = crossSpawn(command, [...loginArguments, asset.name], {
     cwd,
     stdio: "inherit",
-    env: process.env,
+    env: { ...runtime.env },
   });
 
   const code = await new Promise<number>((resolve, reject) => {

@@ -1,3 +1,5 @@
+import { resolve } from "node:path";
+import type { RuntimeContext } from "./runtime.js";
 import { Command, Help, Option } from "commander";
 import { homedir } from "node:os";
 import { styleText } from "node:util";
@@ -130,6 +132,9 @@ export type ProgramOptions = Partial<Omit<CommandContext, "mode" | "home">> & {
   interactive?: boolean;
   /** Tests pass a temporary directory; the CLI uses the real home directory. */
   home?: string;
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+  platform?: NodeJS.Platform;
   /** Stops commands the current setup can't run. The CLI always passes one. */
   guard?: (path: string[], options: Record<string, unknown>) => Promise<void>;
   /** Dims commands this setup can't run in help. */
@@ -336,11 +341,26 @@ function guardRequiredOptions(parent: Command, guard: Guard) {
   });
 }
 
+/** Process entry points capture ambient inputs here; downstream code receives this object. */
+export function captureRuntime(
+  options: Partial<RuntimeContext> = {},
+): RuntimeContext {
+  const cwd = resolve(options.cwd ?? process.cwd());
+
+  return {
+    home: resolve(cwd, options.home ?? homedir()),
+    cwd,
+    env: { ...(options.env ?? process.env) },
+    platform: options.platform ?? process.platform,
+  };
+}
+
 /** Construct a fresh parser for every invocation or test; command behavior is independently injectable. */
 export function createProgram(options: ProgramOptions = {}): Command {
   const write = options.write ?? console.log;
   // The one place the real home directory is read; everything below takes it.
-  const home = options.home ?? homedir();
+  const runtime = options.runtime ?? captureRuntime(options);
+  const { home } = runtime;
   const mode: Mode = {
     json: false,
     interactive: options.interactive ?? interactiveTerminal(),
@@ -348,48 +368,47 @@ export function createProgram(options: ProgramOptions = {}): Command {
 
   const context: CommandContext = {
     applySuggestion:
-      options.applySuggestion ?? ((target) => applySuggestion(target, home)),
-    changeDiff: options.changeDiff ?? ((target) => changeDiff(target, home)),
+      options.applySuggestion ?? ((target) => applySuggestion(target, runtime)),
+    changeDiff: options.changeDiff ?? ((target) => changeDiff(target, runtime)),
     commentOnChange:
-      options.commentOnChange ?? ((options) => commentOnChange(options, home)),
+      options.commentOnChange ??
+      ((options) => commentOnChange(options, runtime)),
     createPackage:
-      options.createPackage ??
-      ((target) => createPackage(target, undefined, home)),
+      options.createPackage ?? ((target) => createPackage(target, runtime)),
     diffVersions:
-      options.diffVersions ?? ((target) => diffVersions(target, home)),
+      options.diffVersions ?? ((target) => diffVersions(target, runtime)),
     listChanges:
-      options.listChanges ?? ((options) => listChanges(options, home)),
-    mergeChange: options.mergeChange ?? ((target) => mergeChange(target, home)),
+      options.listChanges ?? ((options) => listChanges(options, runtime)),
+    mergeChange:
+      options.mergeChange ?? ((target) => mergeChange(target, runtime)),
     packageVersions:
-      options.packageVersions ?? ((target) => packageVersions(target, home)),
+      options.packageVersions ?? ((target) => packageVersions(target, runtime)),
     pullPackage:
-      options.pullPackage ?? ((target) => pullPackage(target, undefined, home)),
+      options.pullPackage ?? ((target) => pullPackage(target, runtime)),
     pushWorkingCopy:
       options.pushWorkingCopy ??
-      ((options) => pushWorkingCopy(options, undefined, home)),
+      ((options) => pushWorkingCopy(options, runtime)),
     rejectChange:
-      options.rejectChange ?? ((target) => rejectChange(target, home)),
-    resolveFile:
-      options.resolveFile ?? ((path) => resolveFile(path, undefined, home)),
+      options.rejectChange ?? ((target) => rejectChange(target, runtime)),
+    resolveFile: options.resolveFile ?? ((path) => resolveFile(path, runtime)),
     reviewChange:
       options.reviewChange ??
-      ((decision, target) => reviewChange(decision, target, home)),
+      ((decision, target) => reviewChange(decision, target, runtime)),
     setDiscussionResolved:
       options.setDiscussionResolved ??
-      ((target) => setDiscussionResolved(target, home)),
-    showChange: options.showChange ?? ((target) => showChange(target, home)),
+      ((target) => setDiscussionResolved(target, runtime)),
+    showChange: options.showChange ?? ((target) => showChange(target, runtime)),
     updateWorkingCopy:
-      options.updateWorkingCopy ?? (() => updateWorkingCopy(undefined, home)),
+      options.updateWorkingCopy ?? (() => updateWorkingCopy(runtime)),
     versionFiles:
-      options.versionFiles ?? ((target) => versionFiles(target, home)),
-    workingDiff: options.workingDiff ?? (() => workingDiff(undefined, home)),
-    workingStatus:
-      options.workingStatus ?? (() => workingStatus(undefined, home)),
-    login: options.login ?? ((login) => runLogin({ ...login, home }, write)),
-    logout: options.logout ?? (() => runLogout(write, home)),
+      options.versionFiles ?? ((target) => versionFiles(target, runtime)),
+    workingDiff: options.workingDiff ?? (() => workingDiff(runtime)),
+    workingStatus: options.workingStatus ?? (() => workingStatus(runtime)),
+    login: options.login ?? ((login) => runLogin({ ...login, runtime }, write)),
+    logout: options.logout ?? (() => runLogout(write, runtime)),
     authStatus:
       options.authStatus ??
-      (() => showAuthStatus({ write, json: mode.json }, home)),
+      (() => showAuthStatus({ write, json: mode.json }, runtime)),
     setup:
       options.setup ??
       ((restart, server, setupOptions) =>
@@ -398,124 +417,137 @@ export function createProgram(options: ProgramOptions = {}): Command {
           server,
           ...setupOptions,
           write: options.write,
-          home,
+          runtime,
         })),
     changeAsset:
       options.changeAsset ??
-      ((change, target) => changeAsset(change, target, home)),
+      ((change, target) => changeAsset(change, target, runtime)),
     changeAssets:
       options.changeAssets ??
-      ((change, target) => changeAssets(change, target, home)),
-    renameAsset: options.renameAsset ?? ((target) => renameAsset(target, home)),
-    listSets: options.listSets ?? (() => listSets(home)),
-    previewSet: options.previewSet ?? ((origin) => previewSet(origin, home)),
-    installSet: options.installSet ?? ((options) => installSet(options, home)),
+      ((change, target) => changeAssets(change, target, runtime)),
+    renameAsset:
+      options.renameAsset ?? ((target) => renameAsset(target, runtime)),
+    listSets: options.listSets ?? (() => listSets(runtime)),
+    previewSet: options.previewSet ?? ((origin) => previewSet(origin, runtime)),
+    installSet:
+      options.installSet ?? ((options) => installSet(options, runtime)),
     installSetAssets:
       options.installSetAssets ??
-      ((options) => installSetAssets(options, home)),
+      ((options) => installSetAssets(options, runtime)),
     changeSet:
       options.changeSet ??
-      ((change, options) => changeSet(change, options, home)),
-    switchSet: options.switchSet ?? ((options) => switchSet(options, home)),
+      ((change, options) => changeSet(change, options, runtime)),
+    switchSet: options.switchSet ?? ((options) => switchSet(options, runtime)),
     setKnowledge:
-      options.setKnowledge ?? ((enabled) => setKnowledge(enabled, home)),
-    doctor: options.doctor ?? (() => doctor(home)),
-    workspaceUrl: options.workspaceUrl ?? (() => workspaceUrl(home)),
-    repoStatus: options.repoStatus ?? (() => repoStatus(home)),
-    listLocalAssets: options.listLocalAssets ?? (() => listLocalAssets(home)),
+      options.setKnowledge ?? ((enabled) => setKnowledge(enabled, runtime)),
+    doctor: options.doctor ?? (() => doctor(runtime)),
+    workspaceUrl: options.workspaceUrl ?? (() => workspaceUrl(runtime)),
+    repoStatus: options.repoStatus ?? (() => repoStatus(runtime)),
+    listLocalAssets:
+      options.listLocalAssets ?? (() => listLocalAssets(runtime)),
     knowledgeProblems:
-      options.knowledgeProblems ?? (() => knowledgeProblems(home)),
-    githubStatus: options.githubStatus ?? (() => githubStatus(home)),
+      options.knowledgeProblems ?? (() => knowledgeProblems(runtime)),
+    githubStatus: options.githubStatus ?? (() => githubStatus(runtime)),
     githubInstallations:
-      options.githubInstallations ?? (() => githubInstallations(home)),
-    githubList: options.githubList ?? (() => githubList(home)),
-    validateFolder: options.validateFolder ?? validateFolder,
-    migrate: options.migrate ?? ((options) => migrate(options, home)),
+      options.githubInstallations ?? (() => githubInstallations(runtime)),
+    githubList: options.githubList ?? (() => githubList(runtime)),
+    validateFolder:
+      options.validateFolder ??
+      ((directory) => validateFolder(directory, runtime)),
+    migrate: options.migrate ?? ((options) => migrate(options, runtime)),
     moveLocalAssets:
-      options.moveLocalAssets ?? ((options) => moveLocalAssets(options, home)),
+      options.moveLocalAssets ??
+      ((options) => moveLocalAssets(options, runtime)),
     updateImported:
       options.updateImported ??
-      ((kind, name, options) => updateImported(kind, name, options, home)),
-    showMcp: options.showMcp ?? ((name, origin) => showMcp(name, origin, home)),
-    createMcp: options.createMcp ?? ((input) => createMcp(input, home)),
-    updateMcp: options.updateMcp ?? ((input) => updateMcp(input, home)),
+      ((kind, name, options) => updateImported(kind, name, options, runtime)),
+    showMcp:
+      options.showMcp ?? ((name, origin) => showMcp(name, origin, runtime)),
+    createMcp: options.createMcp ?? ((input) => createMcp(input, runtime)),
+    updateMcp: options.updateMcp ?? ((input) => updateMcp(input, runtime)),
     mcpVersions:
       options.mcpVersions ??
-      ((name, origin) => mcpVersions(name, origin, home)),
+      ((name, origin) => mcpVersions(name, origin, runtime)),
     authenticateMcp:
       options.authenticateMcp ??
-      ((name, origin, harness) => authenticateMcp(name, origin, harness, home)),
+      ((name, origin, harness) =>
+        authenticateMcp(name, origin, harness, runtime)),
     testHook:
       options.testHook ??
       ((name, origin, testOptions) =>
-        testHook(name, origin, testOptions, { home })),
+        testHook(name, origin, testOptions, runtime)),
     hookCompatibility:
       options.hookCompatibility ??
-      ((name, origin) => hookCompatibility(name, origin, home)),
+      ((name, origin) => hookCompatibility(name, origin, runtime)),
     adaptHook:
       options.adaptHook ??
-      ((name, origin, targets) => adaptHook(name, origin, targets, home)),
-    knowledgeGet: options.knowledgeGet ?? ((name) => knowledgeGet(name, home)),
-    developers: options.developers ?? ((search) => developers(search, home)),
+      ((name, origin, targets) => adaptHook(name, origin, targets, runtime)),
+    knowledgeGet:
+      options.knowledgeGet ?? ((name) => knowledgeGet(name, runtime)),
+    developers: options.developers ?? ((search) => developers(search, runtime)),
     developerAssets:
       options.developerAssets ??
-      ((selector, search) => developerAssets(selector, search, home)),
-    promote: options.promote ?? ((input) => promote(input, home)),
-    fork: options.fork ?? ((input) => fork(input, home)),
-    githubAuth: options.githubAuth ?? (() => githubAuth(home)),
-    githubInstall: options.githubInstall ?? (() => githubInstall(home)),
+      ((selector, search) => developerAssets(selector, search, runtime)),
+    promote: options.promote ?? ((input) => promote(input, runtime)),
+    fork: options.fork ?? ((input) => fork(input, runtime)),
+    githubAuth: options.githubAuth ?? (() => githubAuth(runtime)),
+    githubInstall: options.githubInstall ?? (() => githubInstall(runtime)),
     githubConnect:
-      options.githubConnect ?? ((options) => githubConnect(options, home)),
+      options.githubConnect ?? ((options) => githubConnect(options, runtime)),
     githubImport:
-      options.githubImport ?? ((options) => githubImport(options, home)),
+      options.githubImport ?? ((options) => githubImport(options, runtime)),
     githubImportCopy:
       options.githubImportCopy ??
-      ((options) => githubImportCopy(options, home)),
+      ((options) => githubImportCopy(options, runtime)),
     githubCreateRepository:
       options.githubCreateRepository ??
-      ((options) => githubCreateRepository(options, home)),
+      ((options) => githubCreateRepository(options, runtime)),
     githubShow:
-      options.githubShow ?? ((connectionId) => githubShow(connectionId, home)),
+      options.githubShow ??
+      ((connectionId) => githubShow(connectionId, runtime)),
     githubSync:
-      options.githubSync ?? ((connectionId) => githubSync(connectionId, home)),
+      options.githubSync ??
+      ((connectionId) => githubSync(connectionId, runtime)),
     githubRemoteHead:
       options.githubRemoteHead ??
-      ((connectionId) => githubRemoteHead(connectionId, home)),
+      ((connectionId) => githubRemoteHead(connectionId, runtime)),
     githubResolveMirror:
       options.githubResolveMirror ??
-      ((options) => githubResolveMirror(options, home)),
+      ((options) => githubResolveMirror(options, runtime)),
     githubPullsList:
       options.githubPullsList ??
-      ((connectionId) => githubPullsList(connectionId, home)),
+      ((connectionId) => githubPullsList(connectionId, runtime)),
     githubPullsShow:
       options.githubPullsShow ??
-      ((connectionId, number) => githubPullsShow(connectionId, number, home)),
+      ((connectionId, number) =>
+        githubPullsShow(connectionId, number, runtime)),
     githubPullsCreate:
       options.githubPullsCreate ??
-      ((options) => githubPullsCreate(options, home)),
+      ((options) => githubPullsCreate(options, runtime)),
     githubPullsRevise:
       options.githubPullsRevise ??
-      ((options) => githubPullsRevise(options, home)),
+      ((options) => githubPullsRevise(options, runtime)),
     githubPullsReview:
       options.githubPullsReview ??
-      ((options) => githubPullsReview(options, home)),
+      ((options) => githubPullsReview(options, runtime)),
     githubPullsComment:
       options.githubPullsComment ??
-      ((options) => githubPullsComment(options, home)),
+      ((options) => githubPullsComment(options, runtime)),
     githubPullsMerge:
       options.githubPullsMerge ??
-      ((options) => githubPullsMerge(options, home)),
+      ((options) => githubPullsMerge(options, runtime)),
     knowledgeList:
-      options.knowledgeList ?? ((always) => knowledgeList(always, home)),
+      options.knowledgeList ?? ((always) => knowledgeList(always, runtime)),
     synchronize:
       options.synchronize ??
-      ((path, syncOptions) => synchronize(path, home, undefined, syncOptions)),
-    inventory: options.inventory ?? (() => inventory(home)),
+      ((path, syncOptions) =>
+        synchronize(path, runtime, undefined, syncOptions)),
+    inventory: options.inventory ?? (() => inventory(runtime)),
     searchCatalog:
-      options.searchCatalog ?? ((kind) => searchCatalog(kind, home)),
+      options.searchCatalog ?? ((kind) => searchCatalog(kind, runtime)),
     write,
     mode,
-    home,
+    runtime,
   };
 
   const program = new Command()
@@ -539,7 +571,11 @@ export function createProgram(options: ProgramOptions = {}): Command {
       styleOptionDescription: (text) => styleText("dim", text),
       ...(options.setupMode ? limitedHelp(options.setupMode) : {}),
     })
-    .version(versionReport(), "-V, --version", "Show the version and build")
+    .version(
+      versionReport(runtime.platform),
+      "-V, --version",
+      "Show the version and build",
+    )
     .option("--json", "Print machine-readable JSON")
     .option("--no-interactive", "Never prompt; fail with a hint instead")
     .addOption(
@@ -577,7 +613,7 @@ export function createProgram(options: ProgramOptions = {}): Command {
       mode.interactive &&
       flags.interactive !== false &&
       !mode.json &&
-      !process.env.CI;
+      !runtime.env.CI;
 
     if (!options.synchronize && mode.interactive) {
       clashPrompt.resolver = promptClash;

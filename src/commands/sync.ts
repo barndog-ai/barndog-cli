@@ -33,14 +33,16 @@ export function registerSync(program: Command, context: CommandContext): void {
                 refresh: "auto",
                 prompt: false,
               }),
-            context.home,
+            context.runtime,
           ).catch(() => undefined);
 
           return;
         }
 
         const configPath =
-          options.config === undefined ? undefined : resolve(options.config);
+          options.config === undefined
+            ? undefined
+            : resolve(context.runtime.cwd, options.config);
 
         const events = await context.synchronize(
           configPath,

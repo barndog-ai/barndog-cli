@@ -1,3 +1,4 @@
+import { testRuntime } from "./runtime.js";
 import {
   lstat,
   mkdir,
@@ -23,13 +24,13 @@ async function temporaryHome(t: TestContext) {
 
 test("sync needs setup and refuses invalid settings before writing anything", async (t) => {
   const home = await temporaryHome(t);
-  await expect(synchronize(undefined, home)).rejects.toBeInstanceOf(
-    SetupRequiredError,
-  );
+  await expect(
+    synchronize(undefined, testRuntime(home)),
+  ).rejects.toBeInstanceOf(SetupRequiredError);
 
   await mkdir(join(home, ".barndog"), { recursive: true });
   await writeFile(barndogPaths(home).settings, "harnesses: [typo]\n");
-  await expect(synchronize(undefined, home)).rejects.toThrow(
+  await expect(synchronize(undefined, testRuntime(home))).rejects.toThrow(
     /config\.yaml isn't valid/,
   );
 
@@ -44,6 +45,6 @@ test("an explicit config file is read instead and never changes the home configu
   const before = await readFile(barndogPaths(home).settings, "utf8");
   const override = join(home, "override.yaml");
   await writeFile(override, "harnesses: [codex]\n");
-  await synchronize(override, home);
+  await synchronize(override, testRuntime(home));
   expect(await readFile(barndogPaths(home).settings, "utf8")).toBe(before);
 });

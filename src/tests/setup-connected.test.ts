@@ -1,3 +1,4 @@
+import { testRuntime } from "./runtime.js";
 import { HTTP_STATUS } from "../shared/constants.js";
 
 import { assert, expect, test } from "vitest";
@@ -155,7 +156,7 @@ for (const state of ["missing", "expired", "valid", "revoked"] as const) {
 
     const origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
     if (state !== "missing") {
-      await updateCredentials(home, (credentials) => {
+      await updateCredentials(testRuntime(home), (credentials) => {
         credentials.selectedServer = origin;
         credentials.servers[origin] = {
           token,
@@ -173,7 +174,7 @@ for (const state of ["missing", "expired", "valid", "revoked"] as const) {
     const output: string[] = [];
     let connections = 0;
     const options = {
-      home,
+      runtime: testRuntime(home),
       cwd: home,
       interactive: true,
       browser: false,
@@ -201,7 +202,10 @@ for (const state of ["missing", "expired", "valid", "revoked"] as const) {
     expect(connections).toBe(state === "missing" ? 1 : 0);
     expect(output.join("\n")).toMatch(/Alice · Acme/);
     expect(output.join("\n")).toMatch(/Setup cancelled/);
-    expect((await readCredentials(home)).selectedServer).toBe(origin);
+    expect((await readCredentials(testRuntime(home))).selectedServer).toBe(
+      origin,
+    );
+
     expect(output.join("\n")).not.toContain(token);
 
     await runSetup({ ...options, confirmApply: async () => true });
@@ -220,24 +224,35 @@ for (const state of ["missing", "expired", "valid", "revoked"] as const) {
 
     expect(logins).toBe(state === "valid" ? 0 : 1);
     if (state === "valid") {
-      await installSet({ origin: "org", mode: "all" }, home);
-      const preview = await previewSet("org", home);
+      await installSet({ origin: "org", mode: "all" }, testRuntime(home));
+      const preview = await previewSet("org", testRuntime(home));
       expect(preview.assets.map((asset) => asset.id)).toStrictEqual([mcpId]);
       const original = await readFile(barndogPaths(home).settings, "utf8");
       await expect(
-        installSetAssets({ origin: "org", assetIds: [randomUUID()] }, home),
+        installSetAssets(
+          { origin: "org", assetIds: [randomUUID()] },
+          testRuntime(home),
+        ),
       ).rejects.toThrow(/listed twice or aren't in/);
 
       expect(await readFile(barndogPaths(home).settings, "utf8")).toBe(
         original,
       );
 
-      await installSetAssets({ origin: "org", assetIds: [] }, home);
+      await installSetAssets(
+        { origin: "org", assetIds: [] },
+        testRuntime(home),
+      );
+
       expect(await readFile(barndogPaths(home).settings, "utf8")).toBe(
         original,
       );
 
-      await installSetAssets({ origin: "org", assetIds: [mcpId] }, home);
+      await installSetAssets(
+        { origin: "org", assetIds: [mcpId] },
+        testRuntime(home),
+      );
+
       const custom = await readSettings(home);
       assert(custom);
       expect(custom.environment?.subscriptions).toStrictEqual([]);
@@ -259,7 +274,7 @@ test("local setup is explicit and final cancellation preserves saved settings", 
   t.onTestFinished(() => rm(home, { recursive: true, force: true }));
   await saveSettings({ harnesses: ["claude"] }, home);
   await runSetup({
-    home,
+    runtime: testRuntime(home),
     restart: true,
     interactive: true,
     local: true,

@@ -1,3 +1,6 @@
+import { registeredHook } from "./native.js";
+import { bashShell } from "../platform.js";
+import { testRuntime } from "./runtime.js";
 import { expect, test } from "vitest";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -11,7 +14,7 @@ import {
 import { nativeFile } from "../harnesses/registry.js";
 import { locked, transact } from "../features/environment/transaction.js";
 import { fileText } from "../shared/files.js";
-import { mcpEntry, hookCommand } from "../features/native/adapters.js";
+import { mcpEntry } from "../features/native/adapters.js";
 import { createProgram } from "../program.js";
 import { spawnSync } from "node:child_process";
 
@@ -178,7 +181,7 @@ test("MCP adapters retain secret references and support Codex environment aliase
       harness,
       { id, name: "docs" },
       definition,
-      "/fixture",
+      testRuntime("/fixture"),
     );
 
     if (harness === "codex") {
@@ -195,13 +198,18 @@ test("MCP adapters retain secret references and support Codex environment aliase
   }
 });
 
-test("Hook root binding preserves author quoting and paths containing spaces and quotes", () => {
+test("Hook root binding preserves author quoting and paths containing spaces and quotes", async () => {
   const root = "/tmp/a folder's package";
+  const shell = await bashShell(testRuntime("/tmp"));
   const result = spawnSync(
-    "/bin/sh",
+    shell.command,
     [
-      "-c",
-      hookCommand(root, 'printf "%s" "${BARNDOG_HOOK_ROOT}/scripts/check.sh"'),
+      ...shell.args,
+      registeredHook(
+        root,
+        'printf "%s" "${BARNDOG_HOOK_ROOT}/scripts/check.sh"',
+        testRuntime("/tmp"),
+      ),
     ],
     { encoding: "utf8" },
   );
@@ -217,9 +225,9 @@ test("interrupted native writes roll forward and refuse to overwrite later user 
     b = nativeFile("cursor", "mcp", home);
 
   await expect(
-    locked(home, () =>
+    locked(testRuntime(home), () =>
       transact(
-        home,
+        testRuntime(home),
         [
           { kind: "file", path: a, before: null, after: '{"mcpServers":{}}' },
           { kind: "file", path: b, before: null, after: '{"mcpServers":{}}' },
@@ -237,14 +245,14 @@ test("interrupted native writes roll forward and refuse to overwrite later user 
   expect(await fileText(a)).not.toBe(null);
   expect(await fileText(b)).toBe(null);
   await writeFile(a, '{"mcpServers":{},"userSetting":true}');
-  await expect(locked(home, async () => undefined)).rejects.toThrow(
-    /changed after a sync was interrupted/,
-  );
+  await expect(
+    locked(testRuntime(home), async () => undefined),
+  ).rejects.toThrow(/changed after a sync was interrupted/);
 
   expect(await fileText(a)).toBe('{"mcpServers":{},"userSetting":true}');
   expect(await fileText(b)).toBe(null);
   await writeFile(a, '{"mcpServers":{}}');
-  await locked(home, async () => undefined);
+  await locked(testRuntime(home), async () => undefined);
   expect(await fileText(b)).toBe('{"mcpServers":{}}');
   expect(await fileText(join(home, ".barndog/pending-sync.json"))).toBe(null);
 });

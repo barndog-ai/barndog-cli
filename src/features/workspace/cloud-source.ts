@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../../runtime.js";
 import { mcpSchema } from "@barndog-ai/api-contract";
 import { assetKinds } from "../asset-kinds/index.js";
 
@@ -13,9 +14,9 @@ async function currentAsset(
   kind: AssetKind,
   reference: AssetReference,
   conn: Connection,
-  home: string,
+  runtime: RuntimeContext,
 ) {
-  const data = await getAsset(kind, reference.id, conn, home);
+  const data = await getAsset(kind, reference.id, conn, runtime);
   if (
     data.id !== reference.id ||
     data.version.id !== reference.publishedVersion ||
@@ -32,24 +33,27 @@ async function currentAsset(
  * Adapts an authenticated cloud connection to lazy catalog, package-cache and
  * MCP reads for synchronization.
  */
-export function cloudSource(conn: Connection, home: string): WorkspaceSource {
+export function cloudSource(
+  conn: Connection,
+  runtime: RuntimeContext,
+): WorkspaceSource {
   return {
     cacheKey: cacheKey(conn),
     journal: conn,
-    catalog: async () => (await environmentCatalog(home, conn)).catalog,
+    catalog: async () => (await environmentCatalog(runtime, conn)).catalog,
     packageFolder: async (kind, reference) => {
-      const data = await currentAsset(kind, reference, conn, home);
+      const data = await currentAsset(kind, reference, conn, runtime);
 
       return cachedPackage(
         kind,
         assetKinds[kind].schema.parse(data),
         conn,
-        home,
+        runtime,
       );
     },
     mcpDefinition: async (reference) =>
-      mcpSchema.parse(await currentAsset("mcp", reference, conn, home)).version
-        .definition,
+      mcpSchema.parse(await currentAsset("mcp", reference, conn, runtime))
+        .version.definition,
     invalidAssets: () => Promise.resolve(new Map()),
     notices: () => [],
   };

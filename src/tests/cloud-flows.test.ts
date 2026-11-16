@@ -1,6 +1,7 @@
+import { inspectNative } from "./native.js";
 import { expect, test } from "vitest";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { glob, mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import * as contract from "@barndog-ai/api-contract";
 import { cloud, COMMIT, ID, packageReply, packages } from "./cloud.js";
 import { sample } from "./sample.js";
@@ -49,6 +50,44 @@ test("hooks test runs the chosen command with the native input", async (t) => {
       input,
     ]),
   ).rejects.toThrow(/no cursor implementation/);
+});
+
+test("a downloaded copy changed on this machine is refused with a command that clears it", async (t) => {
+  const server = await cloud(t);
+  const input = join(server.home, "input.json");
+  await writeFile(input, JSON.stringify({ hook_event_name: "SessionStart" }));
+  const run = () =>
+    server.run([
+      "hooks",
+      "test",
+      "release-notes",
+      "--origin",
+      "org",
+      "--harness",
+      "claude",
+      "--input",
+      input,
+    ]);
+
+  await run();
+  const packages = join(server.home, ".barndog/packages");
+  const manifests: string[] = [];
+  for await (const path of glob("**/manifest.json", { cwd: packages })) {
+    manifests.push(path);
+  }
+
+  const copy = dirname(join(packages, manifests[0]!));
+  await writeFile(join(copy, "release-notes", "hook.yaml"), "edited\n");
+
+  await expect(run()).rejects.toSatisfy(
+    (error: CliError) =>
+      /was changed on this machine/.test(error.message) &&
+      error.hint === "Delete that folder; the next sync downloads it again." &&
+      error.command ===
+        (process.platform === "win32"
+          ? `Remove-Item -Recurse -Force '${copy}'; barndog sync`
+          : `rm -rf '${copy}' && barndog sync`),
+  );
 });
 
 test("sets are installed, toggled and removed against the catalog", async (t) => {
@@ -101,8 +140,10 @@ test("sets are installed, toggled and removed against the catalog", async (t) =>
 
 test("knowledge is listed at session start until it is disabled", async (t) => {
   const server = await cloud(t, { harnesses: ["claude", "cursor"] });
-  const settings = () =>
-    readFile(join(server.home, ".claude/settings.json"), "utf8");
+  const settings = async () =>
+    inspectNative(
+      await readFile(join(server.home, ".claude/settings.json"), "utf8"),
+    );
 
   await server.run(["sync"]);
   expect(await settings()).toContain("knowledge-startup.js");
@@ -477,5 +518,39 @@ test("a refusal about a change points at that kind's changes list", async (t) =>
     server.run(["hooks", "changes", "merge", ID, "--revision", "1"]),
   ).rejects.toSatisfy(
     (error: CliError) => error.hint === "barndog hooks changes list",
+  );
+});
+
+test("commands use the supplied cwd and environment without changing the process", async (t) => {
+  const server = await cloud(t, { harnesses: ["claude"] });
+  const parent = join(server.home, "elsewhere");
+  await mkdir(parent);
+  const original = process.cwd();
+  await server.run(["skills", "pull", "release-notes", "--origin", "org"], {
+    cwd: parent,
+  });
+
+  const root = join(parent, "release-notes");
+  await writeFile(
+    join(root, "SKILL.md"),
+    "---\nname: release-notes\n---\nEdited with injected cwd.\n",
+  );
+
+  expect(await server.run(["diff"], { cwd: root })).toContain(
+    "Edited with injected cwd",
+  );
+
+  expect(process.cwd()).toBe(original);
+  await expect(
+    server.run(["sync"], {
+      env: {
+        ...process.env,
+        CLAUDE_CONFIG_DIR: join(server.home, "relocated"),
+      },
+    }),
+  ).rejects.toThrow(/custom CLAUDE_CONFIG_DIR/);
+
+  expect(process.env.CLAUDE_CONFIG_DIR).not.toBe(
+    join(server.home, "relocated"),
   );
 });

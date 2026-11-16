@@ -1,3 +1,4 @@
+import { testRuntime } from "./runtime.js";
 import { describe, expect, test } from "vitest";
 import { ApiError } from "@barndog-ai/api-contract";
 import {
@@ -151,7 +152,7 @@ test("an unreachable server is a CliError with a fix", async () => {
   // Port 1 on loopback refuses connections.
   const request = serverFetch(
     "http://127.0.0.1:1",
-    tmpdir(),
+    testRuntime(tmpdir()),
     false,
   )("http://127.0.0.1:1/v1/health");
 

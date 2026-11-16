@@ -151,19 +151,30 @@ export default defineConfig([
     },
     rules: { "import-x/no-cycle": "error" },
   },
-  // Imports point down: commands → ui → features → config → harnesses → shared.
+  // Imports point down: commands → ui → features → config → harnesses → platform → shared.
   layer("src/config/*.ts", "config/ depends on no feature, UI or command.", [
     "../features/*",
     "../ui/*",
     "../commands/*",
     "../program.js",
   ]),
-  layer("src/harnesses/*.ts", "harnesses/ depends only on shared/.", [
-    "../config/*",
-    "../features/*",
-    "../ui/*",
-    "../commands/*",
-  ]),
+  layer(
+    "src/harnesses/*.ts",
+    "harnesses/ depends only on platform.ts and shared/.",
+    ["../config/*", "../features/*", "../ui/*", "../commands/*"],
+  ),
+  layer(
+    "src/{platform,runtime}.ts",
+    "platform.ts and runtime.ts depend only on shared/ and errors.ts.",
+    [
+      "./config/*",
+      "./features/*",
+      "./harnesses/*",
+      "./ui/*",
+      "./commands/*",
+      "./program.js",
+    ],
+  ),
   layer("src/features/**/*.ts", "Features don't import UI or commands.", [
     "../../ui/*",
     "../../commands/*",

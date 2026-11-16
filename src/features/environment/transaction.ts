@@ -1,3 +1,5 @@
+import { directoryLinkType } from "../../platform.js";
+import type { RuntimeContext } from "../../runtime.js";
 import { POSIX_MODE } from "../../shared/constants.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash } from "node:crypto";
@@ -15,7 +17,7 @@ import { connectionContext } from "../auth/session.js";
 import type { JournalIdentity } from "../workspace/source.js";
 import { NAME } from "../../shared/patterns.js";
 import { desiredEntries, mirrorTree } from "../workspace/installed.js";
-import { treeFingerprint } from "../../shared/tree.js";
+import { treeFingerprint } from "../workspace/tree.js";
 import { fileText, ifExists, writeAtomic } from "../../shared/files.js";
 import { withPidLock } from "../../shared/lock.js";
 import { CliError } from "../../errors.js";
@@ -102,7 +104,9 @@ export async function linkTarget(path: string): Promise<string | null> {
   return resolve(dirname(path), await readlink(path));
 }
 
-function validateWrites(writes: Write[], home: string) {
+function validateWrites(writes: Write[], runtime: RuntimeContext) {
+  const { home } = runtime;
+
   const files = new Set([
     barndogPaths(home).settings,
     barndogPaths(home).state,
@@ -149,7 +153,7 @@ function validateWrites(writes: Write[], home: string) {
   }
 }
 
-async function current(write: Write) {
+async function current(write: Write, runtime: RuntimeContext) {
   if (write.kind === "file") {
     return fileText(write.path);
   }
@@ -158,10 +162,13 @@ async function current(write: Write) {
     return linkTarget(write.path);
   }
 
-  return treeFingerprint(write.path);
+  return treeFingerprint(write.path, runtime);
 }
 
-async function applyTree(write: Extract<Write, { kind: "tree" }>) {
+async function applyTree(
+  write: Extract<Write, { kind: "tree" }>,
+  runtime: RuntimeContext,
+) {
   if (write.source === null) {
     await rm(write.path, { recursive: true, force: true });
 
@@ -173,7 +180,7 @@ async function applyTree(write: Extract<Write, { kind: "tree" }>) {
     return;
   }
 
-  const entries = await desiredEntries(write.source, write.rename);
+  const entries = await desiredEntries(write.source, write.rename, runtime);
   if (packageFingerprint(entries) !== write.after) {
     throw new CliError(
       `The downloaded copy in ${write.source} changed before it was installed.`,
@@ -181,16 +188,16 @@ async function applyTree(write: Extract<Write, { kind: "tree" }>) {
     );
   }
 
-  await mirrorTree(write.path, entries);
+  await mirrorTree(write.path, entries, runtime);
 }
 
 async function apply(
   writes: Write[],
-  home: string,
+  runtime: RuntimeContext,
   checkpoint?: (index: number) => Promise<void>,
   recovering = false,
 ) {
-  validateWrites(writes, home);
+  validateWrites(writes, runtime);
   // Check the entire recovery plan before writing any remaining destination.
   for (const write of writes) {
     // An interrupted in-place copy leaves a BarnDog-owned folder half written.
@@ -198,7 +205,7 @@ async function apply(
       continue;
     }
 
-    const value = await current(write);
+    const value = await current(write, runtime);
     if (
       value !== write.before &&
       value !== write.after &&
@@ -217,7 +224,7 @@ async function apply(
   }
 
   for (const [index, write] of writes.entries()) {
-    const value = await current(write);
+    const value = await current(write, runtime);
     if (value === write.after) {
       continue;
     }
@@ -230,7 +237,7 @@ async function apply(
         );
       }
 
-      await applyTree(write);
+      await applyTree(write, runtime);
       await checkpoint?.(index);
       continue;
     }
@@ -267,7 +274,11 @@ async function apply(
       }
 
       if (write.after !== null) {
-        await symlink(write.after, write.path, "dir");
+        await symlink(
+          write.after,
+          write.path,
+          directoryLinkType(runtime.platform),
+        );
       }
     }
 
@@ -280,7 +291,9 @@ async function apply(
  * Rejects a cloud journal when its authenticated organization or developer
  * has changed.
  */
-async function recover(home: string) {
+async function recover(runtime: RuntimeContext) {
+  const { home } = runtime;
+
   const path = barndogPaths(home).pendingSync;
   const text = await fileText(path);
 
@@ -290,7 +303,7 @@ async function recover(home: string) {
 
   const journal = journalSchema.parse(JSON.parse(text));
   if (journal.connection) {
-    const actual = await connectionContext(journal.connection.server, home);
+    const actual = await connectionContext(journal.connection.server, runtime);
     if (
       actual.organizationId !== journal.connection.organizationId ||
       actual.developerId !== journal.connection.developerId
@@ -302,7 +315,7 @@ async function recover(home: string) {
     }
   }
 
-  await apply(journal.writes, home, undefined, true);
+  await apply(journal.writes, runtime, undefined, true);
   await unlink(path);
 }
 
@@ -314,17 +327,19 @@ async function recover(home: string) {
  * `checkpoint` runs after each write is applied. Call it inside `locked()`.
  */
 export async function transact(
-  home: string,
+  runtime: RuntimeContext,
   writes: Write[],
   identity?: JournalIdentity,
   checkpoint?: (index: number) => Promise<void>,
 ) {
+  const { home } = runtime;
+
   writes = writes.filter((w) => w.before !== w.after);
   if (!writes.length) {
     return;
   }
 
-  validateWrites(writes, home);
+  validateWrites(writes, runtime);
   const config = writes.find((w) => w.path === barndogPaths(home).settings);
   if (config?.before) {
     const backup = join(
@@ -350,7 +365,7 @@ export async function transact(
     ),
   );
 
-  await apply(writes, home, checkpoint);
+  await apply(writes, runtime, checkpoint);
   await unlink(path);
 }
 
@@ -396,10 +411,11 @@ export function cleanUpIfInterrupted(cleanup: () => void) {
  * interrupted operation. Nested calls for the same home reuse the lock.
  */
 export async function locked<T>(
-  home: string,
+  runtime: RuntimeContext,
   run: () => Promise<T>,
 ): Promise<T> {
-  home = resolve(home);
+  runtime = { ...runtime, home: resolve(runtime.cwd, runtime.home) };
+  const { home } = runtime;
   if (locks.getStore()?.has(home)) {
     return run();
   }
@@ -421,7 +437,7 @@ export async function locked<T>(
         return await locks.run(
           new Set([...(locks.getStore() ?? []), home]),
           async () => {
-            await recover(home);
+            await recover(runtime);
 
             return run();
           },

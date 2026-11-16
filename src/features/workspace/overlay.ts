@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../../runtime.js";
 import type { Settings } from "../../config/settings.js";
 import type { AssetCatalog, AssetReference } from "../asset-selection/types.js";
 import type { SelectionState } from "../../config/selection.js";
@@ -61,7 +62,7 @@ export async function recordMoved(folder: string, added: MovedAsset[]) {
 /** The local folder, when it runs alongside a Git or Cloud workspace. */
 export function localOverlay(
   settings: Settings,
-  home: string,
+  runtime: RuntimeContext,
 ): RepoSource | undefined {
   if (
     !settings.localWorkspace ||
@@ -70,7 +71,7 @@ export function localOverlay(
     return undefined;
   }
 
-  return localRepoSource(settings.localWorkspace, home);
+  return localRepoSource(settings.localWorkspace, runtime);
 }
 
 /** Local copies step aside once what was moved exists in the shared workspace. */

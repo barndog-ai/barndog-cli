@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../../runtime.js";
 import { z } from "zod";
 import {
   contextSchema,
@@ -43,10 +44,13 @@ export function matchesOrigin(
 export type ApiScope = z.infer<typeof scopeSchema>;
 
 /** The scopes the developer can see: the organization, teams, repositories and their own. */
-export function scopes(conn: Connection, home: string): Promise<ApiScope[]> {
+export function scopes(
+  conn: Connection,
+  runtime: RuntimeContext,
+): Promise<ApiScope[]> {
   return parsed(
     z.array(scopeSchema),
-    apiClient(conn.server, home).GET("/v1/scopes"),
+    apiClient(conn.server, runtime).GET("/v1/scopes"),
   );
 }
 
@@ -57,9 +61,9 @@ export function scopes(conn: Connection, home: string): Promise<ApiScope[]> {
 export async function selectOrigin(
   selector: string,
   conn: Connection,
-  home: string,
+  runtime: RuntimeContext,
 ) {
-  const visible = await scopes(conn, home);
+  const visible = await scopes(conn, runtime);
   const matches = visible.filter((s) => matchesOrigin(s, selector, conn));
   const personal = splitOrigin(selector);
   if (
@@ -68,15 +72,18 @@ export async function selectOrigin(
     personal.value !== undefined
   ) {
     const actor = contextSchema.parse(
-      (await apiClient(conn.server, home).GET("/v1/context")).data,
+      (await apiClient(conn.server, runtime).GET("/v1/context")).data,
     );
 
     if (actor.developer.role === "organization_admin") {
       const members = z
         .array(memberSchema)
         .parse(
-          (await apiClient(conn.server, home).GET("/v1/organization/members"))
-            .data,
+          (
+            await apiClient(conn.server, runtime).GET(
+              "/v1/organization/members",
+            )
+          ).data,
         );
 
       for (const member of members) {

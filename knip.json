@@ -1,5 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignoreBinaries": ["taskkill.exe"],
   "entry": [
     "src/cli.ts!",
     "src/entry/knowledge-startup.ts!",

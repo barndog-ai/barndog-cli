@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../../runtime.js";
 import {
   copyToScope,
   type PromoteInput,
@@ -20,7 +21,7 @@ export type PromoteResult =
  */
 export async function promote(
   input: PromoteInput,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<PromoteResult> {
   if (input.origin === LOCAL_ORIGIN) {
     return {
@@ -32,13 +33,13 @@ export async function promote(
           to: input.target,
           as: input.newName === input.name ? undefined : input.newName,
         },
-        home,
+        runtime,
       ),
     };
   }
 
   return {
     outcome: "promoted",
-    promotion: await copyToScope("promote", input, home),
+    promotion: await copyToScope("promote", input, runtime),
   };
 }

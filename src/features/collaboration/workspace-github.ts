@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../../runtime.js";
 import { HTTP_STATUS } from "../../shared/constants.js";
 
 import { randomUUID } from "node:crypto";
@@ -17,10 +18,7 @@ import {
   packageFingerprint,
   type PackageEntry,
 } from "@barndog-ai/api-contract/package";
-import {
-  mergeEntries,
-  readDirectory,
-} from "@barndog-ai/api-contract/collaboration";
+import { mergeEntries } from "@barndog-ai/api-contract/collaboration";
 import { metadata as packageMetadataFor } from "../asset-kinds/index.js";
 import { downloadPull, downloadVersion } from "./remote.js";
 import { getAsset } from "../server/catalog.js";
@@ -31,6 +29,7 @@ import {
   save,
   applyFiles,
   type Workspace,
+  readWorkingCopy,
 } from "./workspace-store.js";
 import { defined } from "../../shared/lookup.js";
 
@@ -46,14 +45,14 @@ const publishedId = (work: { assetId?: string | null }) =>
  * any. Throws when the authority changed since the copy was made, when the
  * connection needs attention, or when an internal upload is still pending.
  */
-export async function externalSource(work: Workspace, home: string) {
+export async function externalSource(work: Workspace, runtime: RuntimeContext) {
   if (!work.assetId) {
     return undefined;
   }
 
   const connections = await parsed(
     z.array(gitConnectionSchema),
-    apiClient(work.connection.server, home).GET("/v1/git-connections"),
+    apiClient(work.connection.server, runtime).GET("/v1/git-connections"),
   );
 
   const source = connections.find(
@@ -98,7 +97,7 @@ export async function pullExternal(
     entries,
     previous,
   }: { source: GitConnection; entries: PackageEntry[]; previous: Workspace },
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<UpdatedCloudWorkingCopy> {
   work.external ??= { id: source.id };
   const conflicts = new Set<string>();
@@ -107,7 +106,7 @@ export async function pullExternal(
   if (external.pull) {
     const { pull } = await parsed(
       gitPullDetailsSchema,
-      apiClient(work.connection.server, home).GET(
+      apiClient(work.connection.server, runtime).GET(
         "/v1/git-connections/{id}/pulls/{number}",
         { params: { path: { id: source.id, number: external.pull.number } } },
       ),
@@ -117,7 +116,7 @@ export async function pullExternal(
       const remote = await downloadPull(
         { connectionId: source.id, number: pull.number, head: pull.head },
         work.connection,
-        { home, kind: work.kind },
+        { runtime, kind: work.kind },
       );
 
       const merged = await mergeEntries(
@@ -144,7 +143,7 @@ export async function pullExternal(
     work.kind,
     publishedId(work),
     work.connection,
-    home,
+    runtime,
   );
 
   if (!("commit" in asset.version)) {
@@ -161,7 +160,7 @@ export async function pullExternal(
         commit: asset.version.commit,
       },
       work.connection,
-      { home, kind: work.kind },
+      { runtime, kind: work.kind },
     );
 
     const merged = await mergeEntries(decodeFiles(work.base), entries, latest);
@@ -173,7 +172,7 @@ export async function pullExternal(
   }
 
   work.conflicts = [...conflicts];
-  await applyFiles(work, entries, home, previous);
+  await applyFiles(work, entries, runtime, previous);
 
   return {
     root: work.root,
@@ -194,11 +193,11 @@ export async function pushExternal(
   work: Workspace,
   source: GitConnection,
   options: { publish?: boolean; new?: boolean; title?: string },
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<CloudPushResult> {
   work.external ??= { id: source.id };
   const external = work.external;
-  const client = apiClient(work.connection.server, home);
+  const client = apiClient(work.connection.server, runtime);
   const merge = (number: number, expectedCommit: string) =>
     parsed(
       gitConnectionSchema,
@@ -213,7 +212,7 @@ export async function pushExternal(
       work.kind,
       publishedId(work),
       work.connection,
-      home,
+      runtime,
     );
 
     if (asset.version.id !== work.baseVersionId) {
@@ -254,7 +253,7 @@ export async function pushExternal(
       pull = undefined;
     }
 
-    const files = await readDirectory(work.root);
+    const files = await readWorkingCopy(work, runtime);
     if (packageMetadataFor(files, work.kind).name !== work.name) {
       throw new CliError(
         `This working copy's name must stay ${work.name}. Change it back, then push again.`,
@@ -283,7 +282,7 @@ export async function pushExternal(
       idempotencyKey: randomUUID(),
     };
 
-    await save(work, home);
+    await save(work, runtime);
   }
 
   const pending = external.pending;
@@ -320,7 +319,7 @@ export async function pushExternal(
       ].includes(error.status)
     ) {
       delete external.pending;
-      await save(work, home);
+      await save(work, runtime);
     }
 
     throw error;
@@ -333,7 +332,7 @@ export async function pushExternal(
   };
 
   delete external.pending;
-  await save(work, home);
+  await save(work, runtime);
   if (options.publish) {
     return merge(pull.number, external.pull.head);
   }

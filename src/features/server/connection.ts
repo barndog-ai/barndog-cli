@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../../runtime.js";
 import { contextSchema } from "@barndog-ai/api-contract";
 
 import { readSettings, type Connection } from "../../config/settings.js";
@@ -10,7 +11,12 @@ import { apiClient } from "../auth/transport.js";
  * require a particular connection, such as the one a working copy was made
  * with. Fails with a fix in a Git or local workspace, which has no server.
  */
-export async function connection(home: string, expected?: Connection) {
+export async function connection(
+  runtime: RuntimeContext,
+  expected?: Connection,
+) {
+  const { home } = runtime;
+
   const settings = await readSettings(home);
   if (
     settings &&
@@ -46,7 +52,7 @@ export async function connection(home: string, expected?: Connection) {
   }
 
   const actor = contextSchema.parse(
-    (await apiClient(saved.server, home).GET("/v1/context")).data,
+    (await apiClient(saved.server, runtime).GET("/v1/context")).data,
   );
 
   if (

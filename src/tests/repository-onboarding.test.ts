@@ -1,3 +1,4 @@
+import { testRuntime } from "./runtime.js";
 import { HTTP_STATUS } from "../shared/constants.js";
 
 import { expect, test } from "vitest";
@@ -162,7 +163,7 @@ test("connected onboarding loads actual membership without using repository sugg
 
   const address = server.address() as { port: number };
   const url = `http://127.0.0.1:${address.port}`;
-  await updateCredentials(home, (credentials) => {
+  await updateCredentials(testRuntime(home), (credentials) => {
     credentials.selectedServer = url;
     credentials.servers[url] = {
       token: "a".repeat(43),
@@ -185,8 +186,7 @@ test("connected onboarding loads actual membership without using repository sugg
 
   await saveSettings(settings, home);
   await initialize({
-    home,
-    cwd,
+    runtime: testRuntime(home, { cwd }),
     server: url,
     choose: async () => [],
     detected: [],
@@ -221,8 +221,7 @@ test("connected onboarding loads actual membership without using repository sugg
   const before = await readFile(barndogPaths(home).settings, "utf8");
   await expect(
     initialize({
-      home,
-      cwd,
+      runtime: testRuntime(home, { cwd }),
       server: url,
       detected: [],
       choose: async () => ["claude"],
@@ -233,10 +232,13 @@ test("connected onboarding loads actual membership without using repository sugg
   ).rejects.toThrow(/cancelled/);
 
   expect(await readFile(barndogPaths(home).settings, "utf8")).toBe(before);
-  const unrelated = await localRepository(home);
+  const unrelated = await localRepository(testRuntime(home, { cwd: home }));
   expect(unrelated.root).toBe(null);
   ambiguous = true;
-  const ambiguousContext = await repositoryContext(home, cwd);
+  const ambiguousContext = await repositoryContext(
+    testRuntime(home, { cwd: cwd }),
+  );
+
   expect(ambiguousContext.ambiguous).toBe(true);
   expect(ambiguousContext.repository).toBe(null);
   expect(ambiguousContext.policyScopes).toStrictEqual([
@@ -244,7 +246,7 @@ test("connected onboarding loads actual membership without using repository sugg
   ]);
 
   // Outside a working copy, status defers to the machine overview.
-  expect(await workingStatus(home, home)).toStrictEqual({
+  expect(await workingStatus(testRuntime(home, { cwd: home }))).toStrictEqual({
     mode: "environment",
   });
 });
@@ -287,7 +289,7 @@ test("local-only environment inspection and synchronization preview need no serv
   t.onTestFinished(() => rm(home, { recursive: true, force: true }));
   await saveSettings({ harnesses: ["claude", "codex"] }, home);
   const before = await readFile(barndogPaths(home).settings, "utf8");
-  const diff = (await workingDiff(home, home)) as {
+  const diff = (await workingDiff(testRuntime(home, { cwd: home }))) as {
     mode: string;
     events: unknown[];
   };

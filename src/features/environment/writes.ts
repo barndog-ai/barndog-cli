@@ -4,13 +4,14 @@
  * here touches a destination: it reads what is there now and refuses when
  * something BarnDog doesn't own, or a hand edit, is in the way.
  */
+import type { RuntimeContext } from "../../runtime.js";
 import type { Link, State } from "../../config/state.js";
 import type { Settings } from "../../config/settings.js";
 import type { PackageKind } from "../../config/selection.js";
 import { CliError } from "../../errors.js";
 import { fileText } from "../../shared/files.js";
-import { shellQuote } from "../../shared/shell.js";
-import { treeFingerprint } from "../../shared/tree.js";
+import { fixSteps, removeCommand } from "../../platform.js";
+import { treeFingerprint } from "../workspace/tree.js";
 import { assetKinds } from "../asset-kinds/index.js";
 import { patchNative, type NativeEntry } from "../native/configuration.js";
 import type { SyncEvent } from "./events.js";
@@ -55,9 +56,10 @@ function changeType(change: {
 export async function assertInstalledUntouched(
   installed: InstalledState,
   settings: Settings,
+  runtime: RuntimeContext,
 ) {
   for (const entry of installed) {
-    const actual = await treeFingerprint(entry.path);
+    const actual = await treeFingerprint(entry.path, runtime);
     if (actual !== null && actual !== entry.fingerprint) {
       throw new CliError(
         `The installed copy at ${entry.path} was edited by hand. Syncing would overwrite those edits. ${
@@ -65,9 +67,15 @@ export async function assertInstalledUntouched(
           !settings.connection &&
           !settings.gitWorkspace
             ? "To keep them, copy that folder somewhere else first."
-            : `To keep them, make an editable copy with \`barndog ${assetKinds[entry.kind].command} pull\` first.`
+            : `To keep them, make an editable copy with barndog ${assetKinds[entry.kind].command} pull first.`
         }`,
-        `rm -rf ${shellQuote(entry.path)} && barndog sync`,
+        "Delete the installed copy; the next sync installs it again.",
+        {
+          command: fixSteps(
+            [removeCommand(entry.path, runtime.platform), "barndog sync"],
+            runtime.platform,
+          ),
+        },
       );
     }
   }
@@ -81,6 +89,7 @@ export async function assertInstalledUntouched(
 export async function treeWrites(
   installed: InstalledState,
   trees: readonly InstalledTree[],
+  runtime: RuntimeContext,
 ): Promise<{ writes: Write[]; updated: Set<string> }> {
   const writes: Write[] = [];
   const updated = new Set<string>();
@@ -90,7 +99,7 @@ export async function treeWrites(
     ...trees.map((tree) => tree.path),
   ])) {
     const next = trees.find((tree) => tree.path === treePath);
-    const before = await treeFingerprint(treePath);
+    const before = await treeFingerprint(treePath, runtime);
     const after = next?.fingerprint ?? null;
 
     if (before !== null && after !== null && before !== after) {

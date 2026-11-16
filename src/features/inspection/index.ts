@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../../runtime.js";
 import { normalizeRepositoryRemote } from "@barndog-ai/api-contract";
 import type { WorkspaceModel } from "../workspace/format.js";
 import { authStatus } from "../auth/session.js";
@@ -26,8 +27,9 @@ export type RepositoryStatus = {
 async function declaredRepository(
   model: WorkspaceModel,
   cwd: string,
+  runtime: RuntimeContext,
 ): Promise<RepositoryStatus> {
-  const local = await localRepository(cwd);
+  const local = await localRepository({ ...runtime, cwd });
   const matches = Object.entries(model.config.repositories).filter(
     ([, repository]) =>
       repository.gitRemote &&
@@ -58,20 +60,23 @@ async function declaredRepository(
 }
 
 /** The workspace's web address: the server this machine is signed in to. */
-export async function workspaceUrl(home: string): Promise<string> {
-  return (await authStatus(home)).server;
+export async function workspaceUrl(runtime: RuntimeContext): Promise<string> {
+  return (await authStatus(runtime)).server;
 }
 
 /** How the Git repository in `cwd` maps to a BarnDog repository and its team. */
 export async function repoStatus(
-  home: string,
-  cwd = process.cwd(),
+  runtime: RuntimeContext,
 ): Promise<RepositoryStatus> {
+  const { home, cwd } = runtime;
+
   const settings = await readSettings(home);
-  const repo = settings && openRepoSource(settings, home, { refresh: "auto" });
+  const repo =
+    settings && openRepoSource(settings, runtime, { refresh: "auto" });
+
   if (repo) {
-    return declaredRepository(await repo.model(), cwd);
+    return declaredRepository(await repo.model(), cwd, runtime);
   }
 
-  return repositoryContext(home, cwd);
+  return repositoryContext(runtime);
 }

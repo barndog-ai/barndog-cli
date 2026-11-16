@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../../runtime.js";
 import {
   POSIX_MODE,
   HOURS_PER_DAY,
@@ -45,7 +46,7 @@ function repoSource(
     notices(): readonly string[];
     localOnly?: boolean;
   },
-  home: string,
+  runtime: RuntimeContext,
 ): RepoSource {
   let loading: Promise<WorkspaceModel> | undefined;
   const model = () =>
@@ -102,7 +103,7 @@ function repoSource(
           name: asset.name,
           revision: asset.publishedVersion,
         },
-        { key: backend.cacheKey, home },
+        { key: backend.cacheKey, runtime },
         () => Promise.resolve(asset.entries),
       );
     },
@@ -120,18 +121,18 @@ function repoSource(
  */
 export function localRepoSource(
   workspace: LocalWorkspace,
-  home: string,
+  runtime: RuntimeContext,
 ): RepoSource {
   return repoSource(
     {
       cacheKey: join("local", workspace.workspaceId),
       workspaceId: workspace.workspaceId,
       label: workspace.path,
-      open: () => folderSnapshot(workspace.path),
+      open: () => folderSnapshot(workspace.path, runtime),
       notices: () => [],
       localOnly: true,
     },
-    home,
+    runtime,
   );
 }
 
@@ -152,8 +153,10 @@ type FetchState = z.infer<typeof fetchStateSchema>;
  */
 export async function readFetchState(
   workspaceId: string,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<FetchState> {
+  const { home } = runtime;
+
   return (
     (await readJsonIfExists(
       barndogPaths(home).fetchState(workspaceId),
@@ -164,9 +167,11 @@ export async function readFetchState(
 
 async function writeFetchState(
   workspaceId: string,
-  home: string,
+  runtime: RuntimeContext,
   state: FetchState,
 ) {
+  const { home } = runtime;
+
   await writeAtomic(
     barndogPaths(home).fetchState(workspaceId),
     JSON.stringify(state),
@@ -174,10 +179,14 @@ async function writeFetchState(
 }
 
 /** Creates or repairs the bare clone; nothing is ever checked out of it. */
-export async function ensureBareClone(repo: string, url: string) {
+export async function ensureBareClone(
+  repo: string,
+  url: string,
+  runtime: RuntimeContext,
+) {
   await mkdir(repo, { recursive: true, mode: POSIX_MODE.privateDirectory });
-  await git(["init", "--quiet", "--bare", "."], { repo });
-  await git(["config", "remote.origin.url", url], { repo });
+  await git(["init", "--quiet", "--bare", "."], runtime, { repo });
+  await git(["config", "remote.origin.url", url], runtime, { repo });
 }
 
 /**
@@ -188,6 +197,7 @@ export async function ensureBareClone(repo: string, url: string) {
 export const fetchBranch = (
   repo: string,
   branch: string,
+  runtime: RuntimeContext,
   allowPrompt = false,
 ) =>
   git(
@@ -199,6 +209,7 @@ export const fetchBranch = (
       "origin",
       `+refs/heads/${branch}:refs/remotes/origin/${branch}`,
     ],
+    runtime,
     { repo, allowPrompt },
   );
 
@@ -238,14 +249,16 @@ const age = (fetchedAt: string | undefined) => {
  */
 export function gitRepoSource(
   workspace: GitWorkspace,
-  home: string,
+  runtime: RuntimeContext,
   options: SourceOptions = {},
 ): RepoSource {
+  const { home } = runtime;
+
   const repo = barndogPaths(home).bareClone(workspace.workspaceId);
   const notices: string[] = [];
 
   async function currentCommit() {
-    const state = await readFetchState(workspace.workspaceId, home);
+    const state = await readFetchState(workspace.workspaceId, runtime);
     const policy = options.refresh ?? "always";
     const recent =
       state.fetchedAt &&
@@ -262,9 +275,9 @@ export function gitRepoSource(
       return state.accepted;
     }
 
-    await ensureBareClone(repo, workspace.url);
+    await ensureBareClone(repo, workspace.url, runtime);
     try {
-      await fetchBranch(repo, workspace.branch);
+      await fetchBranch(repo, workspace.branch, runtime);
     } catch (error) {
       if (!(error instanceof GitError)) {
         throw error;
@@ -287,10 +300,11 @@ export function gitRepoSource(
 
     const tip = await gitText(
       ["rev-parse", "--verify", trackingRef(workspace.branch)],
+      runtime,
       { repo },
     );
 
-    await writeFetchState(workspace.workspaceId, home, {
+    await writeFetchState(workspace.workspaceId, runtime, {
       accepted: tip,
       fetchedAt: new Date().toISOString(),
     });
@@ -306,10 +320,10 @@ export function gitRepoSource(
       ),
       workspaceId: workspace.workspaceId,
       label: workspace.url,
-      open: async () => gitSnapshot(repo, await currentCommit()),
+      open: async () => gitSnapshot(repo, await currentCommit(), runtime),
       notices: () => notices,
     },
-    home,
+    runtime,
   );
 }
 
@@ -320,13 +334,17 @@ export function gitRepoSource(
 export async function recordFetch(
   workspace: GitWorkspace,
   commit: string,
-  home: string,
+  runtime: RuntimeContext,
 ) {
-  await writeFetchState(workspace.workspaceId, home, {
+  await writeFetchState(workspace.workspaceId, runtime, {
     accepted: commit,
     fetchedAt: new Date().toISOString(),
   });
 }
 
-export const acceptedCommit = async (workspaceId: string, home: string) =>
-  (await readFetchState(workspaceId, home)).accepted;
+export const acceptedCommit = async (
+  workspaceId: string,
+  runtime: RuntimeContext,
+) => {
+  return (await readFetchState(workspaceId, runtime)).accepted;
+};

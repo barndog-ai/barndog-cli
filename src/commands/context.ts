@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../runtime.js";
 import type { GitConnection } from "@barndog-ai/api-contract";
 import type { FileDiff } from "@barndog-ai/api-contract/collaboration";
 import type {
@@ -148,7 +149,7 @@ export type CommandContext = {
   write: (message: string) => void;
   mode: Mode;
   /** The home directory every command works in; resolved once in `createProgram()`. */
-  home: string;
+  runtime: RuntimeContext;
 } & FeatureFunctions;
 
 /**

@@ -3,6 +3,7 @@
  * importing, mirroring and syncing. Every call goes to the BarnDog server,
  * never to GitHub itself.
  */
+import type { RuntimeContext } from "../../runtime.js";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import {
@@ -106,27 +107,29 @@ function repositoryTarget(options: GithubRepositoryOptions) {
   };
 }
 
-export async function githubList(home: string): Promise<GitConnection[]> {
-  const conn = await connection(home);
+export async function githubList(
+  runtime: RuntimeContext,
+): Promise<GitConnection[]> {
+  const conn = await connection(runtime);
 
   return parsed(
     z.array(gitConnectionSchema),
-    apiClient(conn.server, home).GET("/v1/git-connections"),
+    apiClient(conn.server, runtime).GET("/v1/git-connections"),
   );
 }
 
 /** Connects a published Skill or Hook to an existing GitHub repository. */
 export async function githubConnect(
   options: GithubConnectOptions,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<GitConnection> {
-  const conn = await connection(home);
+  const conn = await connection(runtime);
   const target = repositoryTarget(options);
   const selected = await selectAsset(
     target.kind,
     options.name,
     options.origin,
-    home,
+    runtime,
   );
 
   const body = gitConnectSchema.parse({
@@ -138,18 +141,18 @@ export async function githubConnect(
 
   return parsed(
     gitConnectionSchema,
-    apiClient(conn.server, home).POST("/v1/git-connections", { body }),
+    apiClient(conn.server, runtime).POST("/v1/git-connections", { body }),
   );
 }
 
 /** Creates a Skill or Hook from a GitHub repository, which stays authoritative. */
 export async function githubImport(
   options: GithubRepositoryOptions,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<GitConnection> {
-  const conn = await connection(home);
+  const conn = await connection(runtime);
   const target = repositoryTarget(options);
-  const scope = await selectOrigin(options.origin, conn, home);
+  const scope = await selectOrigin(options.origin, conn, runtime);
   const body = gitImportSchema.parse({
     ...target,
     name: options.name,
@@ -158,18 +161,20 @@ export async function githubImport(
 
   return parsed(
     gitConnectionSchema,
-    apiClient(conn.server, home).POST("/v1/git-connections/import", { body }),
+    apiClient(conn.server, runtime).POST("/v1/git-connections/import", {
+      body,
+    }),
   );
 }
 
 /** Copies a GitHub repository into a BarnDog-owned asset with no connection left behind. */
 export async function githubImportCopy(
   options: GithubImportCopyOptions,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<GitCopyImportResult> {
-  const conn = await connection(home);
+  const conn = await connection(runtime);
   const target = repositoryTarget(options);
-  const scope = await selectOrigin(options.origin, conn, home);
+  const scope = await selectOrigin(options.origin, conn, runtime);
   const body = gitCopyImportSchema.parse({
     ...target,
     name: options.name,
@@ -179,7 +184,7 @@ export async function githubImportCopy(
 
   return parsed(
     gitCopyImportResultSchema,
-    apiClient(conn.server, home).POST("/v1/git-connections/import-copy", {
+    apiClient(conn.server, runtime).POST("/v1/git-connections/import-copy", {
       body,
     }),
   );
@@ -188,15 +193,15 @@ export async function githubImportCopy(
 /** Creates a GitHub repository for a published asset and exports its history. */
 export async function githubCreateRepository(
   options: GithubCreateRepositoryOptions,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<GitConnection> {
-  const conn = await connection(home);
+  const conn = await connection(runtime);
   const target = repositoryTarget(options);
   const selected = await selectAsset(
     target.kind,
     options.name,
     options.origin,
-    home,
+    runtime,
   );
 
   const body = gitCreateRepositorySchema.parse({
@@ -210,21 +215,24 @@ export async function githubCreateRepository(
 
   return parsed(
     gitConnectionSchema,
-    apiClient(conn.server, home).POST("/v1/git-connections/create-repository", {
-      body,
-    }),
+    apiClient(conn.server, runtime).POST(
+      "/v1/git-connections/create-repository",
+      {
+        body,
+      },
+    ),
   );
 }
 
 export async function githubShow(
   connectionId: string,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<GitConnection> {
-  const conn = await connection(home);
+  const conn = await connection(runtime);
 
   return parsed(
     gitConnectionSchema,
-    apiClient(conn.server, home).GET("/v1/git-connections/{id}", {
+    apiClient(conn.server, runtime).GET("/v1/git-connections/{id}", {
       params: connectionParams(connectionId),
     }),
   );
@@ -233,13 +241,13 @@ export async function githubShow(
 /** Syncs now instead of waiting for the server's next scheduled sync. */
 export async function githubSync(
   connectionId: string,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<GitConnection> {
-  const conn = await connection(home);
+  const conn = await connection(runtime);
 
   return parsed(
     gitConnectionSchema,
-    apiClient(conn.server, home).POST("/v1/git-connections/{id}/sync", {
+    apiClient(conn.server, runtime).POST("/v1/git-connections/{id}/sync", {
       params: connectionParams(connectionId),
     }),
   );
@@ -248,24 +256,27 @@ export async function githubSync(
 /** The repository's main commit as GitHub reports it now, not as last synced. */
 export async function githubRemoteHead(
   connectionId: string,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<GitRemoteHead> {
-  const conn = await connection(home);
+  const conn = await connection(runtime);
 
   return parsed(
     gitRemoteHeadSchema,
-    apiClient(conn.server, home).GET("/v1/git-connections/{id}/remote-head", {
-      params: connectionParams(connectionId),
-    }),
+    apiClient(conn.server, runtime).GET(
+      "/v1/git-connections/{id}/remote-head",
+      {
+        params: connectionParams(connectionId),
+      },
+    ),
   );
 }
 
 /** Settles a mirror that diverged from BarnDog; refused if either side moved since it was inspected. */
 export async function githubResolveMirror(
   options: GithubResolveMirrorOptions,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<MirrorResolved> {
-  const conn = await connection(home);
+  const conn = await connection(runtime);
   const body = gitMirrorResolutionSchema.parse({
     action: options.action,
     expectedVersionId: options.expectedVersion,
@@ -275,7 +286,7 @@ export async function githubResolveMirror(
 
   return parsed(
     okSchema,
-    apiClient(conn.server, home).POST(
+    apiClient(conn.server, runtime).POST(
       "/v1/git-connections/{id}/mirror-resolution",
       { params: connectionParams(options.connectionId), body },
     ),

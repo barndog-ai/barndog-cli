@@ -1,3 +1,5 @@
+import { localPath } from "../../platform.js";
+import type { RuntimeContext } from "../../runtime.js";
 import type { AssetKind } from "../../config/selection.js";
 import { hookMetadata } from "@barndog-ai/api-contract/package";
 import { CliError } from "../../errors.js";
@@ -9,7 +11,6 @@ import {
   loadWorkspace,
 } from "./format.js";
 import { folderSnapshot } from "./snapshot.js";
-import { resolve } from "node:path";
 import type { Settings } from "../../config/settings.js";
 import { openRepoSource } from "./workspace-source.js";
 import { LOCAL_ORIGIN, localOverlay } from "./overlay.js";
@@ -20,14 +21,14 @@ import type { HookManifest, McpDefinition } from "@barndog-ai/api-contract";
 /** The repo-backed source that answers for an origin, if any. */
 export function repoForOrigin(
   settings: Settings,
-  home: string,
+  runtime: RuntimeContext,
   origin: string,
 ) {
-  const overlay = localOverlay(settings, home);
+  const overlay = localOverlay(settings, runtime);
 
   return origin === LOCAL_ORIGIN && overlay
     ? overlay
-    : openRepoSource(settings, home, { refresh: "auto" });
+    : openRepoSource(settings, runtime, { refresh: "auto" });
 }
 
 /** Finds one asset by name and origin, the way cloud commands address assets. */
@@ -94,8 +95,12 @@ export type FolderSummary = {
 /** Checks a workspace folder without installing anything, for use in repo CI. */
 export async function validateFolder(
   directory: string,
+  runtime: RuntimeContext,
 ): Promise<FolderSummary> {
-  const model = await loadWorkspace(await folderSnapshot(resolve(directory)));
+  const model = await loadWorkspace(
+    await folderSnapshot(localPath(directory, runtime), runtime),
+  );
+
   if (model.problems.length) {
     throw new CliError(
       `${model.problems.length} problem${model.problems.length === 1 ? "" : "s"} found:\n${model.problems.map((problem) => `  ${problem.path}: ${problem.reason}`).join("\n")}`,

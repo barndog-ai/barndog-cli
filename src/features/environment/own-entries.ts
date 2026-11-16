@@ -2,14 +2,15 @@
  * What a sync registers for BarnDog itself, apart from the developer's assets:
  * the session-start commands that list shared knowledge and sync the workspace.
  */
-import { join, resolve } from "node:path";
+import type { RuntimeContext } from "../../runtime.js";
 import { fileURLToPath } from "node:url";
 
 import type { Settings } from "../../config/settings.js";
 import { CliError } from "../../errors.js";
 import { adapters, nativeFile } from "../../harnesses/registry.js";
 import type { Harness } from "../../harnesses/types.js";
-import { shellQuote } from "../../shared/shell.js";
+import { environmentValue, pathsFor, unsetCommand } from "../../platform.js";
+import { programLine } from "../native/hook-shell.js";
 import type { NativeEntry } from "../native/configuration.js";
 
 /**
@@ -18,21 +19,29 @@ import type { NativeEntry } from "../native/configuration.js";
  */
 export function assertSupportedConfigHomes(
   harnesses: readonly Harness[],
-  home: string,
+  runtime: RuntimeContext,
 ) {
+  const { home } = runtime;
+
   for (const harness of harnesses) {
     const { configHome } = adapters[harness];
-    const custom = configHome && process.env[configHome.variable];
+    const custom = configHome && environmentValue(runtime, configHome.variable);
     if (!configHome || !custom) {
       continue;
     }
 
-    const isDefault = resolve(custom) === join(home, configHome.directory);
+    const paths = pathsFor(runtime.platform);
+    const isDefault =
+      paths.relative(
+        paths.resolve(runtime.cwd, custom),
+        paths.join(home, configHome.directory),
+      ) === "";
 
     if (!isDefault || !configHome.defaultIsSupported) {
       throw new CliError(
         `BarnDog can't install into a custom ${configHome.variable} yet; it uses ~/${configHome.directory}.`,
-        `unset ${configHome.variable}`,
+        `Stop setting ${configHome.variable}, including in your shell profile, then sync again.`,
+        { command: unsetCommand(configHome.variable, runtime.platform) },
       );
     }
   }
@@ -49,16 +58,23 @@ const entryScript = (name: string) =>
  */
 export function startupEntries(
   settings: Settings,
-  home: string,
+  runtime: RuntimeContext,
   available: { knowledge: boolean },
 ): NativeEntry[] {
+  const { home } = runtime;
+
   const entries: NativeEntry[] = [];
 
   if (available.knowledge && settings.knowledge !== false) {
     const script = entryScript("knowledge-startup");
 
     for (const harness of settings.harnesses) {
-      const command = `${shellQuote(process.execPath)} ${shellQuote(script)} ${harness} ${shellQuote(home)}`;
+      const command = programLine(
+        harness,
+        [process.execPath, script, harness, home],
+        runtime.platform,
+      );
+
       entries.push({
         id: "barndog-knowledge-index",
         kind: "knowledge",
@@ -74,7 +90,12 @@ export function startupEntries(
     const script = entryScript("workspace-startup");
 
     for (const harness of settings.harnesses) {
-      const command = `${shellQuote(process.execPath)} ${shellQuote(script)} ${shellQuote(home)}`;
+      const command = programLine(
+        harness,
+        [process.execPath, script, home],
+        runtime.platform,
+      );
+
       entries.push({
         id: "barndog-workspace-sync",
         kind: "sync",

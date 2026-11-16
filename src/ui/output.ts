@@ -1,8 +1,10 @@
+import { pathsFor } from "../platform.js";
+import type { RuntimeContext } from "../runtime.js";
 import { HTTP_STATUS } from "../shared/constants.js";
 
 import { LoginRequiredError } from "../features/auth/transport.js";
 import { styleText } from "node:util";
-import { basename, relative, sep } from "node:path";
+import { basename } from "node:path";
 import { isInside } from "../shared/files.js";
 import { SetupRequiredError } from "../config/settings.js";
 import type { SyncEvent } from "../features/environment/events.js";
@@ -28,14 +30,17 @@ import { assetKinds } from "../features/asset-kinds/index.js";
  * Abbreviates paths inside the current user's home with ~, preserving platform
  * separators.
  */
-export function displayPath(path: string, home: string): string {
-  if (!isInside(home, path)) {
+export function displayPath(path: string, runtime: RuntimeContext): string {
+  const { home } = runtime;
+
+  const paths = pathsFor(runtime.platform);
+  if (!isInside(home, path, paths)) {
     return path;
   }
 
-  const homeRelative = relative(home, path);
+  const homeRelative = paths.relative(home, path);
 
-  return homeRelative ? `~${sep}${homeRelative}` : "~";
+  return homeRelative ? `~${paths.sep}${homeRelative}` : "~";
 }
 
 type Action =
@@ -243,7 +248,10 @@ export function renderSyncOutput(
   return output;
 }
 
-function describeError(error: unknown): { message: string; fix?: string } {
+/** A failure as people read it: what happened, how to fix it, and the command that does. */
+type ErrorDescription = { message: string; fix?: string; command?: string };
+
+function describeError(error: unknown): ErrorDescription {
   if (error instanceof LoginRequiredError) {
     return { message: "You're not signed in.", fix: "barndog login" };
   }
@@ -256,7 +264,7 @@ function describeError(error: unknown): { message: string; fix?: string } {
   }
 
   if (error instanceof CliError) {
-    return { message: error.message, fix: error.hint };
+    return { message: error.message, fix: error.hint, command: error.command };
   }
 
   if (
@@ -277,19 +285,27 @@ function describeError(error: unknown): { message: string; fix?: string } {
  */
 export function renderError(error: unknown): string {
   const stream = process.stderr;
-  const { message, fix } = describeError(error);
+  const { message, fix, command } = describeError(error);
+  const line = (label: string, text: string, style: "bold" | "reset") =>
+    `\n  ${styleText("dim", label, { stream })} ${styleText(style, text, { stream })}`;
 
-  return `${danger("✖", stream)} ${message}${fix ? `\n  ${styleText("dim", "Fix:", { stream })} ${styleText("bold", fix, { stream })}` : ""}`;
+  // A fix in words reads as plain text; a fix that is itself a command is bold.
+  return [
+    `${danger("✖", stream)} ${message}`,
+    fix ? line("Fix:", fix, command ? "reset" : "bold") : "",
+    command ? line("Command:", command, "bold") : "",
+  ].join("");
 }
 
 /** The same failure for `--json` callers, who parse rather than read. */
 export function renderJsonError(error: unknown): string {
-  const { message, fix } = describeError(error);
+  const { message, fix, command } = describeError(error);
 
   return json({
     error: {
       message,
       ...(fix ? { fix } : {}),
+      ...(command ? { command } : {}),
       ...(error instanceof ApiError ? { status: error.status } : {}),
     },
   });

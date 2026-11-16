@@ -1,3 +1,6 @@
+import { assertPackagePaths } from "../../platform.js";
+import { writePackage, readDirectory } from "../workspace/directory.js";
+import type { RuntimeContext } from "../../runtime.js";
 import { CliError, PackageError } from "../../errors.js";
 import { randomUUID, createHash } from "node:crypto";
 
@@ -8,10 +11,9 @@ import { z } from "zod";
 import { changeUploadSchema } from "@barndog-ai/api-contract";
 import {
   packageFingerprint,
-  writePackage,
   type PackageEntry,
 } from "@barndog-ai/api-contract/package";
-import { readDirectory } from "@barndog-ai/api-contract/collaboration";
+
 import { packageKindList } from "../../config/selection.js";
 import { GIT_OBJECT_ID } from "../../shared/patterns.js";
 import { readIfExists, writeAtomic } from "../../shared/files.js";
@@ -160,8 +162,19 @@ export const decodeFiles = (files: Files): PackageEntry[] =>
     executable: e.executable,
   }));
 
+/**
+ * The files in a working copy. On Windows their executable flags come from
+ * its base, as they were when BarnDog wrote them (see `readDirectory()`).
+ */
+export const readWorkingCopy = (
+  work: { root: string; base: Files },
+  runtime: RuntimeContext,
+) => readDirectory(work.root, runtime, decodeFiles(work.base));
+
 /** A working copy's record, keyed by a hash of its folder's path. */
-function recordPath(root: string, home: string) {
+function recordPath(root: string, runtime: RuntimeContext) {
+  const { home } = runtime;
+
   return join(
     barndogPaths(home).workingCopies,
     createHash("sha256").update(root).digest("hex") + ".json",
@@ -169,12 +182,20 @@ function recordPath(root: string, home: string) {
 }
 
 /** Writes a working-copy record atomically, replacing the previous one. */
-export async function save<T extends StoredRecord>(work: T, home: string) {
-  await writeAtomic(recordPath(work.root, home), JSON.stringify(work));
+export async function save<T extends StoredRecord>(
+  work: T,
+  runtime: RuntimeContext,
+) {
+  await writeAtomic(recordPath(work.root, runtime), JSON.stringify(work));
 }
 
 /** Serializes working-copy changes across processes. */
-export function locked<T>(home: string, run: () => Promise<T>): Promise<T> {
+export function locked<T>(
+  runtime: RuntimeContext,
+  run: () => Promise<T>,
+): Promise<T> {
+  const { home } = runtime;
+
   return withPidLock(
     barndogPaths(home).workingCopiesLock,
     {
@@ -194,8 +215,8 @@ export class NoWorkingCopyError extends CliError {}
  * interrupted write first; throws `NoWorkingCopyError` when no folder above
  * `cwd` is registered, and a fix when the record belongs to a Git workspace.
  */
-export const find = (cwd: string, home: string): Promise<Workspace> =>
-  findRecord(cwd, home, (value) => {
+export const find = (runtime: RuntimeContext): Promise<Workspace> => {
+  return findRecord(runtime, (value) => {
     if (value && typeof value === "object" && "git" in value) {
       throw new CliError(
         "This working copy belongs to a Git repo workspace, but this machine no longer uses one.",
@@ -205,10 +226,11 @@ export const find = (cwd: string, home: string): Promise<Workspace> =>
 
     return workspaceSchema.parse(value);
   });
+};
 
 /** The Git working copy containing `cwd`; `find()` for Git workspaces. */
-export const findGit = (cwd: string, home: string): Promise<GitWorkingCopy> =>
-  findRecord(cwd, home, (value) => {
+export const findGit = (runtime: RuntimeContext): Promise<GitWorkingCopy> => {
+  return findRecord(runtime, (value) => {
     if (!value || typeof value !== "object" || !("git" in value)) {
       throw new CliError(
         "This working copy belongs to a BarnDog Cloud Workspace, but this machine now uses a Git repo.",
@@ -218,15 +240,17 @@ export const findGit = (cwd: string, home: string): Promise<GitWorkingCopy> =>
 
     return gitWorkspaceSchema.parse(value);
   });
+};
 
 async function findRecord<T extends StoredRecord>(
-  cwd: string,
-  home: string,
+  runtime: RuntimeContext,
   parse: (value: unknown) => T,
 ): Promise<T> {
+  const { home, cwd } = runtime;
+
   let path = await realpath(cwd);
   while (true) {
-    const text = await readIfExists(recordPath(path, home));
+    const text = await readIfExists(recordPath(path, runtime));
     if (text !== null) {
       const work = parse(JSON.parse(text));
 
@@ -256,7 +280,7 @@ async function findRecord<T extends StoredRecord>(
           ...decodeFiles(work.pendingWrite),
         ];
 
-        for (const file of await readDirectory(work.root)) {
+        for (const file of await readDirectory(work.root, runtime, allowed)) {
           if (
             !allowed.some(
               (old) =>
@@ -271,10 +295,10 @@ async function findRecord<T extends StoredRecord>(
           }
         }
 
-        await replaceFiles(work.root, decodeFiles(work.pendingWrite));
+        await replaceFiles(work.root, decodeFiles(work.pendingWrite), runtime);
         delete work.pendingWrite;
         delete work.pendingSnapshot;
-        await save(work, home);
+        await save(work, runtime);
       }
 
       return work;
@@ -293,12 +317,18 @@ async function findRecord<T extends StoredRecord>(
   );
 }
 
-async function replaceFiles(root: string, entries: PackageEntry[]) {
+async function replaceFiles(
+  root: string,
+  entries: PackageEntry[],
+  runtime: RuntimeContext,
+) {
+  assertPackagePaths(entries, runtime.platform);
   // Validate paths and directory topology before touching local files.
   const paths = new Set(entries.map((e) => e.path));
   for (const path of paths) {
     if (
       path.startsWith("/") ||
+      path.includes(":") ||
       path
         .split("/")
         .some(
@@ -321,7 +351,7 @@ async function replaceFiles(root: string, entries: PackageEntry[]) {
     }
   }
 
-  const old = await readDirectory(root);
+  const old = await readDirectory(root, runtime);
   for (const entry of old) {
     await rm(join(root, entry.path));
   }
@@ -342,7 +372,7 @@ async function replaceFiles(root: string, entries: PackageEntry[]) {
   }
 
   await empty(root);
-  await writePackage(root, entries);
+  await writePackage(root, entries, runtime);
 }
 
 /**
@@ -353,12 +383,14 @@ async function replaceFiles(root: string, entries: PackageEntry[]) {
 export async function applyFiles<T extends StoredRecord>(
   work: T,
   entries: PackageEntry[],
-  home: string,
+  runtime: RuntimeContext,
   previous: T = work,
 ) {
-  const local = await readDirectory(work.root);
+  const { home } = runtime;
+
+  const local = await readDirectory(work.root, runtime, entries);
   if (packageFingerprint(local) === packageFingerprint(entries)) {
-    await save(work, home);
+    await save(work, runtime);
 
     return;
   }
@@ -379,9 +411,9 @@ export async function applyFiles<T extends StoredRecord>(
 
   work.pendingWrite = encodeFiles(entries);
   work.pendingSnapshot = snapshot;
-  await save(work, home);
-  await replaceFiles(work.root, entries);
+  await save(work, runtime);
+  await replaceFiles(work.root, entries, runtime);
   delete work.pendingWrite;
   delete work.pendingSnapshot;
-  await save(work, home);
+  await save(work, runtime);
 }

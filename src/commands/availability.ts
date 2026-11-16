@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../runtime.js";
 import { readSettings } from "../config/settings.js";
 import { CliError } from "../errors.js";
 import { readCredentials } from "../features/auth/credentials.js";
@@ -44,8 +45,10 @@ export type SetupMode = "local" | "git";
 
 /** The setup this machine runs on, when that setup limits what commands can do. */
 export async function currentSetupMode(
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<SetupMode | undefined> {
+  const { home } = runtime;
+
   const settings = await readSettings(home).catch(() => null);
   if (!settings || settings.connection) {
     return undefined;
@@ -101,11 +104,13 @@ const why: Record<string, string> = {
 export async function assertCommandAvailable(
   path: string[],
   options: Record<string, unknown>,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<void> {
+  const { home } = runtime;
+
   const settings = await readSettings(home).catch(() => null);
   if (path.join(" ") === "logout" && !settings) {
-    if (!(await readCredentials(home)).selectedServer) {
+    if (!(await readCredentials(runtime)).selectedServer) {
       throw new CliError("You aren't signed in.");
     }
 
@@ -128,7 +133,7 @@ export async function assertCommandAvailable(
     : `a folder on this machine (${folder})`;
 
   if (command === "logout") {
-    const { selectedServer } = await readCredentials(home);
+    const { selectedServer } = await readCredentials(runtime);
     if (!selectedServer) {
       throw new CliError(
         `You aren't signed in. This machine keeps its assets in ${where}, so it doesn't need a sign-in.`,

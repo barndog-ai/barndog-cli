@@ -9,6 +9,7 @@
  * holds the asset under the neutral `assetId` (`PackageUpload`, the working-copy
  * record) and reads a result's with `changeAssetId()`.
  */
+import type { RuntimeContext } from "../../runtime.js";
 import { z } from "zod";
 import {
   changeSchema,
@@ -369,7 +370,7 @@ const apis: Record<PackageKind, (client: ApiClient) => PackageApi> = {
 export function packageApi(
   kind: PackageKind,
   conn: Pick<Connection, "server">,
-  home: string,
+  runtime: RuntimeContext,
 ): PackageApi {
-  return apis[kind](apiClient(conn.server, home));
+  return apis[kind](apiClient(conn.server, runtime));
 }

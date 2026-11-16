@@ -3,8 +3,10 @@
  * GitHub is authoritative for. Every call goes to the BarnDog server, never
  * to GitHub itself.
  */
+import { localPath } from "../../platform.js";
+import { readDirectory } from "../workspace/directory.js";
+import type { RuntimeContext } from "../../runtime.js";
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import {
@@ -18,7 +20,7 @@ import {
   gitMergeSchema,
   type GitConnection,
 } from "@barndog-ai/api-contract";
-import { readDirectory } from "@barndog-ai/api-contract/collaboration";
+
 import { connection } from "../server/connection.js";
 import { type RetryKey, parsed } from "../server/client.js";
 import { connectionParams } from "./connections.js";
@@ -86,9 +88,9 @@ export type GithubPullsMergeOptions = PullReference & {
   expectedCommit: string;
 };
 
-const bodyText = async (options: PullText) =>
+const bodyText = async (options: PullText, runtime: RuntimeContext) =>
   options.bodyFile
-    ? await readFile(options.bodyFile, "utf8")
+    ? await readFile(localPath(options.bodyFile, runtime), "utf8")
     : (options.body ?? "");
 
 /** The path parameters of one pull request's routes. */
@@ -100,8 +102,14 @@ const pullParams = (connectionId: string, number: number) => ({
 });
 
 /** Every file of the package, as the server's proposal routes take them. */
-async function packageFiles(directory: string | undefined) {
-  const entries = await readDirectory(resolve(directory ?? process.cwd()));
+async function packageFiles(
+  directory: string | undefined,
+  runtime: RuntimeContext,
+) {
+  const entries = await readDirectory(
+    localPath(directory ?? ".", runtime),
+    runtime,
+  );
 
   return entries.map((entry) => ({
     path: entry.path,
@@ -112,13 +120,13 @@ async function packageFiles(directory: string | undefined) {
 
 export async function githubPullsList(
   connectionId: string,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<GitPull[]> {
-  const conn = await connection(home);
+  const conn = await connection(runtime);
 
   return parsed(
     z.array(gitPullSchema),
-    apiClient(conn.server, home).GET("/v1/git-connections/{id}/pulls", {
+    apiClient(conn.server, runtime).GET("/v1/git-connections/{id}/pulls", {
       params: connectionParams(connectionId),
     }),
   );
@@ -128,13 +136,13 @@ export async function githubPullsList(
 export async function githubPullsShow(
   connectionId: string,
   number: number,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<GitPullDetails> {
-  const conn = await connection(home);
+  const conn = await connection(runtime);
 
   return parsed(
     gitPullDetailsSchema,
-    apiClient(conn.server, home).GET(
+    apiClient(conn.server, runtime).GET(
       "/v1/git-connections/{id}/pulls/{number}",
       {
         params: pullParams(connectionId, number),
@@ -146,13 +154,13 @@ export async function githubPullsShow(
 /** Opens a pull request whose content is the complete package, not a patch. */
 export async function githubPullsCreate(
   options: GithubPullsCreateOptions,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<GitPull> {
-  const conn = await connection(home);
-  const body = await bodyText(options);
+  const conn = await connection(runtime);
+  const body = await bodyText(options, runtime);
   const proposal = gitProposalSchema.parse({
     expectedCommit: options.expectedCommit,
-    files: await packageFiles(options.directory),
+    files: await packageFiles(options.directory, runtime),
     title: options.title,
     body,
     idempotencyKey: options.key ?? randomUUID(),
@@ -160,7 +168,7 @@ export async function githubPullsCreate(
 
   return parsed(
     gitPullSchema,
-    apiClient(conn.server, home).POST("/v1/git-connections/{id}/pulls", {
+    apiClient(conn.server, runtime).POST("/v1/git-connections/{id}/pulls", {
       params: connectionParams(options.connectionId),
       body: proposal,
     }),
@@ -170,13 +178,13 @@ export async function githubPullsCreate(
 /** Replaces an open pull request's content with the complete package. */
 export async function githubPullsRevise(
   options: GithubPullsReviseOptions,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<GitPull> {
-  const conn = await connection(home);
-  const body = await bodyText(options);
+  const conn = await connection(runtime);
+  const body = await bodyText(options, runtime);
   const revision = gitRevisionSchema.parse({
     expectedCommit: options.expectedCommit,
-    files: await packageFiles(options.directory),
+    files: await packageFiles(options.directory, runtime),
     title: options.title,
     body,
     idempotencyKey: options.key ?? randomUUID(),
@@ -184,7 +192,7 @@ export async function githubPullsRevise(
 
   return parsed(
     gitPullSchema,
-    apiClient(conn.server, home).PUT(
+    apiClient(conn.server, runtime).PUT(
       "/v1/git-connections/{id}/pulls/{number}/revisions",
       {
         params: pullParams(options.connectionId, options.number),
@@ -200,14 +208,14 @@ export async function githubPullsRevise(
  */
 export async function githubPullsReview(
   options: GithubPullsReviewOptions,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<GitPullDetails> {
-  const conn = await connection(home);
-  const body = await bodyText(options);
+  const conn = await connection(runtime);
+  const body = await bodyText(options, runtime);
 
   return parsed(
     gitPullDetailsSchema,
-    apiClient(conn.server, home).POST(
+    apiClient(conn.server, runtime).POST(
       "/v1/git-connections/{id}/pulls/{number}/reviews",
       {
         params: pullParams(options.connectionId, options.number),
@@ -224,14 +232,14 @@ export async function githubPullsReview(
 /** A general comment, or an inline one when `path`, `line` and `side` are given. */
 export async function githubPullsComment(
   options: GithubPullsCommentOptions,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<GitPullDetails> {
-  const conn = await connection(home);
-  const body = await bodyText(options);
+  const conn = await connection(runtime);
+  const body = await bodyText(options, runtime);
 
   return parsed(
     gitPullDetailsSchema,
-    apiClient(conn.server, home).POST(
+    apiClient(conn.server, runtime).POST(
       "/v1/git-connections/{id}/pulls/{number}/comments",
       {
         params: pullParams(options.connectionId, options.number),
@@ -250,13 +258,13 @@ export async function githubPullsComment(
 /** Returns the connection, now at the merged commit, rather than the pull request. */
 export async function githubPullsMerge(
   options: GithubPullsMergeOptions,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<GitConnection> {
-  const conn = await connection(home);
+  const conn = await connection(runtime);
 
   return parsed(
     gitConnectionSchema,
-    apiClient(conn.server, home).PUT(
+    apiClient(conn.server, runtime).PUT(
       "/v1/git-connections/{id}/pulls/{number}/merge",
       {
         params: pullParams(options.connectionId, options.number),

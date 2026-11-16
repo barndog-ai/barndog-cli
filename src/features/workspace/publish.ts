@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../../runtime.js";
 import { GIT_MODE } from "./snapshot.js";
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -40,19 +41,21 @@ export async function commitFiles(
     files: NewFile[];
     message: string;
   },
-  options: { allowPrompt?: boolean } = {},
+  options: { runtime: RuntimeContext; allowPrompt?: boolean },
 ) {
+  const { runtime } = options;
   const index = join(repo, `barndog-index-${randomUUID()}`);
   const env = { GIT_INDEX_FILE: index };
   try {
     if (parent) {
-      await git(["read-tree", parent], { repo, env });
+      await git(["read-tree", parent], runtime, { repo, env });
     }
 
     const updates: string[] = [];
     if (parent && change.replace) {
       const listing = await git(
         ["ls-tree", "-r", "-z", "--name-only", parent, "--", change.replace],
+        runtime,
         { repo },
       );
 
@@ -62,7 +65,7 @@ export async function commitFiles(
     }
 
     for (const file of change.files) {
-      const hash = await gitText(["hash-object", "-w", "--stdin"], {
+      const hash = await gitText(["hash-object", "-w", "--stdin"], runtime, {
         repo,
         input: file.data,
       });
@@ -72,13 +75,13 @@ export async function commitFiles(
       );
     }
 
-    await git(["update-index", "-z", "--index-info"], {
+    await git(["update-index", "-z", "--index-info"], runtime, {
       repo,
       env,
       input: updates.join("\0") + "\0",
     });
 
-    const tree = await gitText(["write-tree"], { repo, env });
+    const tree = await gitText(["write-tree"], runtime, { repo, env });
 
     return await gitText(
       [
@@ -88,6 +91,7 @@ export async function commitFiles(
         "-m",
         change.message,
       ],
+      runtime,
       { repo, allowPrompt: options.allowPrompt },
     ).catch(explainIdentity);
   } finally {
@@ -104,13 +108,18 @@ export async function pushCommit(
   repo: string,
   commit: string,
   branch: string,
-  allowPrompt = false,
+  options: { runtime: RuntimeContext; allowPrompt?: boolean },
 ) {
+  const { runtime, allowPrompt = false } = options;
   try {
-    await git(["push", "--quiet", "origin", `${commit}:refs/heads/${branch}`], {
-      repo,
-      allowPrompt,
-    });
+    await git(
+      ["push", "--quiet", "origin", `${commit}:refs/heads/${branch}`],
+      runtime,
+      {
+        repo,
+        allowPrompt,
+      },
+    );
   } catch (error) {
     if (error instanceof GitError) {
       throw new CliError(
@@ -125,9 +134,14 @@ export async function pushCommit(
 }
 
 /** The tip of a branch on the host, or null when it no longer exists. */
-export async function remoteBranch(repo: string, branch: string) {
+export async function remoteBranch(
+  repo: string,
+  branch: string,
+  runtime: RuntimeContext,
+) {
   const output = await gitText(
     ["ls-remote", "origin", `refs/heads/${branch}`],
+    runtime,
     {
       repo,
     },
@@ -173,9 +187,16 @@ function compareUrl(url: string, base: string, branch: string) {
   return null;
 }
 
-const signedIn = async (tool: string, host: string) => {
+const signedIn = async (
+  tool: string,
+  host: string,
+  runtime: RuntimeContext,
+) => {
   try {
     await execute(tool, ["auth", "status", "--hostname", host], {
+      env: { ...runtime.env },
+      cwd: runtime.cwd,
+      windowsHide: true,
       timeout: 15_000,
     });
 
@@ -240,12 +261,15 @@ function pullRequestCommand(
 }
 
 /** Opens the review with gh or glab when signed in, else hands back a link. */
-export async function openPullRequest(request: {
-  url: string;
-  base: string;
-  branch: string;
-  title: string;
-}): Promise<{ url?: string; opened: boolean }> {
+export async function openPullRequest(
+  request: {
+    url: string;
+    base: string;
+    branch: string;
+    title: string;
+  },
+  runtime: RuntimeContext,
+): Promise<{ url?: string; opened: boolean }> {
   const { url, base, branch, title } = request;
   const remote = hostOf(url);
   const fallback = {
@@ -260,12 +284,15 @@ export async function openPullRequest(request: {
   const command = pullRequestCommand(remote, { base, branch, title });
 
   const [program, ...args] = command ?? [];
-  if (!program || !(await signedIn(program, remote.host))) {
+  if (!program || !(await signedIn(program, remote.host, runtime))) {
     return fallback;
   }
 
   try {
     const { stdout } = await execute(program, args, {
+      env: { ...runtime.env },
+      cwd: runtime.cwd,
+      windowsHide: true,
       timeout: 60_000,
     });
 
@@ -276,11 +303,15 @@ export async function openPullRequest(request: {
 }
 
 /** Reports branch protection where the host will say; null means it can't tell. */
-export async function branchProtected(url: string, branch: string) {
+export async function branchProtected(
+  url: string,
+  branch: string,
+  runtime: RuntimeContext,
+) {
   const remote = hostOf(url);
   if (
     !remote?.host.includes("github") ||
-    !(await signedIn("gh", remote.host))
+    !(await signedIn("gh", remote.host, runtime))
   ) {
     return null;
   }
@@ -296,7 +327,12 @@ export async function branchProtected(url: string, branch: string) {
         "--jq",
         ".protected",
       ],
-      { timeout: 15_000 },
+      {
+        timeout: 15_000,
+        env: { ...runtime.env },
+        cwd: runtime.cwd,
+        windowsHide: true,
+      },
     );
 
     return stdout.trim() === "true";

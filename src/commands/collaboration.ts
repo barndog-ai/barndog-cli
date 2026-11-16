@@ -145,7 +145,7 @@ export function registerWorkingCopy(program: Command, context: CommandContext) {
     .option("--title <title>", "Suggested Change title")
     .action(async (options: Omit<PushOptions, "kind">) => {
       print(await context.pushWorkingCopy(options));
-      await warnDivergence(context, nearestHookFolder(process.cwd()));
+      await warnDivergence(context, nearestHookFolder(context.runtime.cwd));
     });
 
   program
@@ -247,7 +247,8 @@ export function registerCollaboration(
         const pulled = context.pullPackage(withKind(target));
         await run(pulled);
         await divergence(
-          (await pulled)?.root ?? resolve(target.directory ?? target.name),
+          (await pulled)?.root ??
+            resolve(context.runtime.cwd, target.directory ?? target.name),
         );
       },
     );
@@ -321,7 +322,7 @@ export function registerCollaboration(
     .option("--title <title>", "Proposal title")
     .action(async (name: string | undefined, options: PushOptions) => {
       await run(context.pushWorkingCopy(withKind({ ...options, name })));
-      await divergence(nearestHookFolder(process.cwd()));
+      await divergence(nearestHookFolder(context.runtime.cwd));
     });
 
   kindCommand

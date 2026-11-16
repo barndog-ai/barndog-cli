@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../../runtime.js";
 import { POSIX_MODE } from "../../shared/constants.js";
 import { readState } from "../../config/state.js";
 import { mkdir, readFile } from "node:fs/promises";
@@ -302,7 +303,11 @@ async function jsonFile(path: string) {
 }
 
 /** Servers each harness has configured, leaving out the ones BarnDog installed. */
-export async function harnessServers(home: string): Promise<HarnessServer[]> {
+export async function harnessServers(
+  runtime: RuntimeContext,
+): Promise<HarnessServer[]> {
+  const { home } = runtime;
+
   const { native } = await readState(home);
   const owned = new Set(
     native
@@ -347,13 +352,18 @@ export async function harnessServers(home: string): Promise<HarnessServer[]> {
 }
 
 /** Native entries BarnDog doesn't own that would block installing this name. */
-export async function conflictingEntries(name: string, home: string) {
+export async function conflictingEntries(
+  name: string,
+  runtime: RuntimeContext,
+) {
+  const { home } = runtime;
+
   const settings = await readSettings(home);
   if (!settings) {
     throw new SetupRequiredError();
   }
 
-  const servers = await harnessServers(home);
+  const servers = await harnessServers(runtime);
   const selected = harnesses.filter((h) => settings.harnesses.includes(h));
 
   return servers
@@ -378,8 +388,10 @@ export async function conflictingEntries(name: string, home: string) {
 export async function addMcpServers(
   servers: ConvertedServer[],
   options: { replace?: boolean },
-  home: string,
+  runtime: RuntimeContext,
 ) {
+  const { home } = runtime;
+
   const invalid = servers.filter(({ name }) => !validAssetName(name));
   if (invalid.length) {
     throw new CliError(
@@ -388,8 +400,8 @@ export async function addMcpServers(
     );
   }
 
-  return locked(home, async () => {
-    const workspace = await ensureLocalWorkspace(home);
+  return locked(runtime, async () => {
+    const workspace = await ensureLocalWorkspace(runtime);
     for (const { name } of servers) {
       const target = join(workspace.path, "org/mcp", `${name}.yaml`);
       if (await fileText(target).catch(() => null)) {
@@ -399,7 +411,7 @@ export async function addMcpServers(
         );
       }
 
-      const conflicts = await conflictingEntries(name, home);
+      const conflicts = await conflictingEntries(name, runtime);
       if (conflicts.length && !options.replace) {
         throw new CliError(
           `${name} is already configured in ${conflicts.map((c) => c.file).join(" and ")}. Replacing it is required for BarnDog to manage it.`,
@@ -410,7 +422,7 @@ export async function addMcpServers(
 
     const backups: string[] = [];
     for (const { name, definition } of servers) {
-      for (const conflict of await conflictingEntries(name, home)) {
+      for (const conflict of await conflictingEntries(name, runtime)) {
         const text = await readFile(conflict.file, "utf8");
         const backup = join(
           barndogPaths(home).migrations,
@@ -447,7 +459,7 @@ export async function addMcpServers(
       );
     }
 
-    const events = await synchronize(undefined, home, undefined, {
+    const events = await synchronize(undefined, runtime, undefined, {
       prompt: false,
     });
 

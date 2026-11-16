@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../../runtime.js";
 import type { Settings } from "../../config/settings.js";
 import { cloudSource } from "./cloud-source.js";
 import type { SourceOptions, WorkspaceSource } from "./source.js";
@@ -14,15 +15,15 @@ import {
  */
 export function openRepoSource(
   settings: Settings,
-  home: string,
+  runtime: RuntimeContext,
   options: SourceOptions = {},
 ): RepoSource | undefined {
   if (settings.gitWorkspace) {
-    return gitRepoSource(settings.gitWorkspace, home, options);
+    return gitRepoSource(settings.gitWorkspace, runtime, options);
   }
 
   if (settings.localWorkspace && !settings.connection) {
-    return localRepoSource(settings.localWorkspace, home);
+    return localRepoSource(settings.localWorkspace, runtime);
   }
 
   return undefined;
@@ -34,14 +35,14 @@ export function openRepoSource(
  */
 export function openWorkspaceSource(
   settings: Settings,
-  home: string,
+  runtime: RuntimeContext,
   options: SourceOptions = {},
 ): WorkspaceSource | undefined {
   const primary = settings.connection
-    ? cloudSource(settings.connection, home)
-    : openRepoSource(settings, home, options);
+    ? cloudSource(settings.connection, runtime)
+    : openRepoSource(settings, runtime, options);
 
-  const overlay = localOverlay(settings, home);
+  const overlay = localOverlay(settings, runtime);
 
   return primary && overlay ? withOverlay(primary, overlay) : primary;
 }

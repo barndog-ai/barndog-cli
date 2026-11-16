@@ -3,10 +3,11 @@
  * server installs under: which invalid assets keep the name they hold, which
  * clashes are renamed, and which newcomers are skipped for this run.
  */
+import type { RuntimeContext } from "../../runtime.js";
 import { basename } from "node:path";
 
 import type { Link, State } from "../../config/state.js";
-import { treeFingerprint } from "../../shared/tree.js";
+import { treeFingerprint } from "../workspace/tree.js";
 import type { SelectionResult } from "../asset-selection/types.js";
 import { originLabel } from "../server/origin.js";
 import type { SyncEvent } from "./events.js";
@@ -37,16 +38,19 @@ export type SettledNames = {
   events: SyncEvent[];
 };
 
-export async function settleNames(input: {
-  assets: SelectionResult["assets"];
-  /** Asset ID → why the workspace's copy can't be installed. */
-  invalid: ReadonlyMap<string, string>;
-  state: State;
-  /** `localNames` from settings. */
-  savedNames: Record<string, string>;
-  /** Asks the developer; without one a newcomer is skipped for this run. */
-  resolver: ClashResolver | undefined;
-}): Promise<SettledNames> {
+export async function settleNames(
+  input: {
+    assets: SelectionResult["assets"];
+    /** Asset ID → why the workspace's copy can't be installed. */
+    invalid: ReadonlyMap<string, string>;
+    state: State;
+    /** `localNames` from settings. */
+    savedNames: Record<string, string>;
+    /** Asks the developer; without one a newcomer is skipped for this run. */
+    resolver: ClashResolver | undefined;
+  },
+  runtime: RuntimeContext,
+): Promise<SettledNames> {
   const { assets, invalid, state, savedNames, resolver } = input;
   const { links, native, installed } = state;
 
@@ -62,7 +66,7 @@ export async function settleNames(input: {
       continue;
     }
 
-    const actual = await treeFingerprint(entry.path);
+    const actual = await treeFingerprint(entry.path, runtime);
     const shared = installed.some(
       (other) => other.id !== entry.id && other.path === entry.path,
     );

@@ -4,6 +4,7 @@
  * fixture can't drift from what the server sends. Every UUID is `ID`, which
  * makes the organization, developer, scopes and assets line up without setup.
  */
+import { testRuntime } from "./runtime.js";
 import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -109,7 +110,7 @@ function catalog() {
 /** What every route answers unless a test replaces it with `respond()`. */
 function defaultRoutes(home: string): Route[] {
   const download = async (kind: keyof typeof packages) =>
-    new Response(await archive(packages[kind], home), {
+    new Response(await archive(packages[kind], testRuntime(home)), {
       headers: { etag: `"${COMMIT}"` },
     });
 
@@ -290,7 +291,7 @@ export async function packageReply(
   commit: string,
   home: string,
 ) {
-  return new Response(await archive(files, home), {
+  return new Response(await archive(files, testRuntime(home)), {
     headers: { etag: `"${commit}"` },
   });
 }
@@ -329,7 +330,7 @@ export async function cloud(
     home,
   );
 
-  await updateCredentials(home, (credentials) => {
+  await updateCredentials(testRuntime(home), (credentials) => {
     credentials.selectedServer = SERVER;
     credentials.servers[SERVER] = {
       token: "t".repeat(43),

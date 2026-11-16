@@ -1,3 +1,11 @@
+import {
+  fixSteps,
+  privatePermissions,
+  protectPrivate,
+  removeCommand,
+} from "../../platform.js";
+import type { RuntimeContext } from "../../runtime.js";
+import { posixQuote } from "../../shared/shell.js";
 import { POSIX_MODE } from "../../shared/constants.js";
 
 import { chmod, lstat, mkdir, readFile, rm } from "node:fs/promises";
@@ -36,20 +44,36 @@ type Credentials = z.infer<typeof credentialsSchema>;
  * Reads saved sessions under the supplied home; rejects insecure POSIX
  * permissions and returns empty state if absent.
  */
-export async function readCredentials(home: string): Promise<Credentials> {
+export async function readCredentials(
+  runtime: RuntimeContext,
+): Promise<Credentials> {
+  const { home } = runtime;
+
   const path = barndogPaths(home).credentials;
   const info = await ifExists(lstat(path));
   if (!info) {
     return { version: 1, servers: {} };
   }
 
-  if (
-    !info.isFile() ||
-    (process.platform !== "win32" && info.mode & POSIX_MODE.groupAndOtherBits)
-  ) {
+  if (!info.isFile()) {
     throw new CliError(
-      `${path} must be a regular file only you can read.`,
-      `chmod 600 ${path}`,
+      `${path} isn't a regular file, so BarnDog can't read your sign-ins.`,
+      "Delete it and sign in again.",
+      {
+        command: fixSteps(
+          [removeCommand(path, runtime.platform), "barndog login"],
+          runtime.platform,
+        ),
+      },
+    );
+  }
+
+  // Always passes on Windows, where the ACL set on every write keeps it private.
+  if (!privatePermissions(info.mode, runtime.platform)) {
+    throw new CliError(
+      `${path} can be read by other users on this machine.`,
+      "Make it readable and writable only by you.",
+      { command: `chmod 600 ${posixQuote(path)}` },
     );
   }
 
@@ -60,7 +84,13 @@ export async function readCredentials(home: string): Promise<Credentials> {
   if (!parsed.success) {
     throw new CliError(
       `${path} is damaged, so BarnDog can't read your sign-ins.`,
-      `rm ${path} && barndog login`,
+      "Delete the file and sign in again.",
+      {
+        command: fixSteps(
+          [removeCommand(path, runtime.platform), "barndog login"],
+          runtime.platform,
+        ),
+      },
     );
   }
 
@@ -81,9 +111,11 @@ function parseJson(text: string): unknown {
  * atomically saves the result.
  */
 export async function updateCredentials(
-  home: string,
+  runtime: RuntimeContext,
   update: (credentials: Credentials) => void,
 ) {
+  const { home } = runtime;
+
   const root = barndogPaths(home).root;
   await mkdir(root, { recursive: true, mode: POSIX_MODE.privateDirectory });
   const info = await lstat(root);
@@ -92,6 +124,7 @@ export async function updateCredentials(
   }
 
   await chmod(root, POSIX_MODE.privateDirectory);
+  await protectPrivate(root, runtime);
   const lock = barndogPaths(home).credentialsLock;
   await mkdir(lock, { mode: POSIX_MODE.privateDirectory }).catch(
     (error: unknown) => {
@@ -106,12 +139,14 @@ export async function updateCredentials(
   );
 
   try {
-    const credentials = await readCredentials(home);
+    const credentials = await readCredentials(runtime);
     update(credentials);
     await writeAtomic(
       barndogPaths(home).credentials,
       JSON.stringify(credentials, null, 2) + "\n",
     );
+
+    await protectPrivate(barndogPaths(home).credentials, runtime);
   } finally {
     await rm(lock, { recursive: true });
   }

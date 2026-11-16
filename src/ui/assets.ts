@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../runtime.js";
 import { adapters } from "../harnesses/registry.js";
 import type { Harness } from "../harnesses/types.js";
 import type {
@@ -94,7 +95,7 @@ const stateLabel: Record<ListedAsset["state"], string> = {
 /** One table of what is selected and installed, with an optional path listing. */
 export function renderInventory(
   items: readonly ListedAsset[],
-  options: { paths?: boolean; heading?: string; home: string },
+  options: { paths?: boolean; heading?: string; runtime: RuntimeContext },
 ): string[] {
   const output: string[] = [];
   if (options.heading) {
@@ -131,7 +132,7 @@ export function renderInventory(
       );
 
       for (const path of item.paths) {
-        output.push(dim(`    ${displayPath(path, options.home)}`));
+        output.push(dim(`    ${displayPath(path, options.runtime)}`));
       }
     }
   }

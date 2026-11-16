@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../../runtime.js";
 import { z } from "zod";
 import { environmentCatalogSchema } from "@barndog-ai/api-contract";
 import { connection } from "./connection.js";
@@ -34,12 +35,12 @@ export type SelectedAsset = {
  * mismatch with an expected saved identity.
  */
 export async function environmentCatalog(
-  home: string,
+  runtime: RuntimeContext,
   expected?: Connection,
 ): Promise<{ connection: Connection; catalog: EnvironmentCatalog }> {
   const conn = expected
-    ? await connectionContext(expected.server, home)
-    : await connection(home);
+    ? await connectionContext(expected.server, runtime)
+    : await connection(runtime);
 
   if (
     expected &&
@@ -56,7 +57,7 @@ export async function environmentCatalog(
     connection: conn,
     catalog: await parsed(
       environmentCatalogSchema,
-      apiClient(conn.server, home).GET("/v1/environment/catalog"),
+      apiClient(conn.server, runtime).GET("/v1/environment/catalog"),
     ),
   };
 }
@@ -65,12 +66,12 @@ export async function getAsset(
   kind: AssetKind,
   id: string,
   conn: Connection,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<PublishedAsset> {
   return assetKinds[kind].schema.parse(
     responseData(
       await assetRoutes[kind](
-        apiClient(conn.server, home),
+        apiClient(conn.server, runtime),
         // Only a UUID may reach the URL.
         z.uuidv4().parse(id),
       ),
@@ -99,9 +100,9 @@ export async function selectAsset(
   kind: AssetKind,
   name: string,
   origin: string,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<SelectedAsset> {
-  const { connection: conn, catalog } = await environmentCatalog(home);
+  const { connection: conn, catalog } = await environmentCatalog(runtime);
   const matches = catalog.assets.filter(
     (a) =>
       a.kind === kind &&
@@ -117,6 +118,6 @@ export async function selectAsset(
   return {
     connection: conn,
     reference,
-    asset: await getAsset(kind, reference.id, conn, home),
+    asset: await getAsset(kind, reference.id, conn, runtime),
   };
 }

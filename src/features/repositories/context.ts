@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../../runtime.js";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { z } from "zod";
@@ -19,11 +20,13 @@ const execute = promisify(execFile);
  * Inspects the Git root and normalized fetch remotes at cwd without contacting
  * hosts; missing Git or repository yields no root.
  */
-export async function localRepository(cwd = process.cwd()) {
+export async function localRepository(runtime: RuntimeContext) {
+  const { cwd } = runtime;
   const git = async (...args: string[]) =>
     (
       await execute("git", ["-C", cwd, ...args], {
         timeout: 5000,
+        env: { ...runtime.env },
         maxBuffer: 65536,
       })
     ).stdout.trim();
@@ -66,13 +69,12 @@ export async function localRepository(cwd = process.cwd()) {
  * policy scopes; multiple matches remain ambiguous.
  */
 export async function repositoryContext(
-  home: string,
-  cwd = process.cwd(),
+  runtime: RuntimeContext,
   expected?: Connection,
 ) {
-  const local = await localRepository(cwd);
-  const conn = expected ?? (await connection(home));
-  const client = apiClient(conn.server, home);
+  const local = await localRepository(runtime);
+  const conn = expected ?? (await connection(runtime));
+  const client = apiClient(conn.server, runtime);
   const repositories = await parsed(
     z.array(repositorySchema),
     client.GET("/v1/repositories"),

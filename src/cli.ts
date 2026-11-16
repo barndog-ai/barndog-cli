@@ -1,11 +1,10 @@
 #!/usr/bin/env node
-import { homedir } from "node:os";
 import { CommanderError, InvalidArgumentError } from "commander";
 import {
   assertCommandAvailable,
   currentSetupMode,
 } from "./commands/availability.js";
-import { createProgram } from "./program.js";
+import { captureRuntime, createProgram } from "./program.js";
 import { renderError, renderJsonError } from "./ui/output.js";
 import { json } from "./ui/format.js";
 import { CliError, NothingToDoError } from "./errors.js";
@@ -16,12 +15,12 @@ const end = words.indexOf("--");
 const asJson = (end < 0 ? words : words.slice(0, end)).includes("--json");
 
 try {
-  const home = homedir();
+  const runtime = captureRuntime();
 
   await createProgram({
-    home,
-    guard: (path, options) => assertCommandAvailable(path, options, home),
-    setupMode: await currentSetupMode(home),
+    runtime,
+    guard: (path, options) => assertCommandAvailable(path, options, runtime),
+    setupMode: await currentSetupMode(runtime),
     ...(asJson ? { writeError: () => undefined } : {}),
   }).parseAsync(process.argv);
 } catch (error) {

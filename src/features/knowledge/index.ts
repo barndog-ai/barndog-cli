@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../../runtime.js";
 import { z } from "zod";
 import {
   knowledgeDocumentSchema,
@@ -31,18 +32,21 @@ export type KnowledgeDocument = {
 };
 
 /** Session start must stay fast, so reading knowledge never contacts the Git host. */
-async function repoKnowledge(home: string) {
+async function repoKnowledge(runtime: RuntimeContext) {
+  const { home } = runtime;
+
   const settings = await readSettings(home);
-  const repo = settings && openRepoSource(settings, home, { refresh: "none" });
+  const repo =
+    settings && openRepoSource(settings, runtime, { refresh: "none" });
 
   return repo ? (await repo.model()).knowledge : undefined;
 }
 
 async function sharedKnowledge(
-  home: string,
+  runtime: RuntimeContext,
   always: boolean,
 ): Promise<KnowledgeSummary[]> {
-  const local = await repoKnowledge(home);
+  const local = await repoKnowledge(runtime);
   if (local) {
     return local
       .filter((doc) => !always || doc.content.accessMode === "always")
@@ -57,12 +61,12 @@ async function sharedKnowledge(
       }));
   }
 
-  const conn = await connection(home);
+  const conn = await connection(runtime);
 
   return allPages(async (cursor) => {
     const page: KnowledgeIndex = await parsed(
       knowledgeIndexSchema,
-      apiClient(conn.server, home).GET("/v1/knowledge", {
+      apiClient(conn.server, runtime).GET("/v1/knowledge", {
         params: {
           query: {
             limit: PAGE_SIZE,
@@ -79,9 +83,9 @@ async function sharedKnowledge(
 
 async function sharedDocument(
   name: string,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<KnowledgeDocument> {
-  const local = await repoKnowledge(home);
+  const local = await repoKnowledge(runtime);
   if (local) {
     const doc = local.find((d) => d.content.name === name);
     if (!doc) {
@@ -94,19 +98,21 @@ async function sharedDocument(
     return { id: doc.id, version: { id: doc.version, content: doc.content } };
   }
 
-  const conn = await connection(home);
+  const conn = await connection(runtime);
 
   return parsed(
     knowledgeDocumentSchema,
-    apiClient(conn.server, home).GET("/v1/knowledge/{selector}", {
+    apiClient(conn.server, runtime).GET("/v1/knowledge/{selector}", {
       params: { path: { selector: name } },
     }),
   );
 }
 
-async function keptLocal(home: string, shared: KnowledgeSummary[]) {
+async function keptLocal(runtime: RuntimeContext, shared: KnowledgeSummary[]) {
+  const { home } = runtime;
+
   const settings = await readSettings(home);
-  const overlay = settings && localOverlay(settings, home);
+  const overlay = settings && localOverlay(settings, runtime);
   if (!overlay) {
     return [];
   }
@@ -121,16 +127,18 @@ async function keptLocal(home: string, shared: KnowledgeSummary[]) {
 
 /** Knowledge files that can't be read, so they don't vanish without a word. */
 export async function knowledgeProblems(
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<InvalidKnowledge[]> {
+  const { home } = runtime;
+
   const settings = await readSettings(home);
   if (!settings) {
     return [];
   }
 
   const sources = [
-    openRepoSource(settings, home, { refresh: "none" }),
-    localOverlay(settings, home),
+    openRepoSource(settings, runtime, { refresh: "none" }),
+    localOverlay(settings, runtime),
   ].flatMap((source) => (source ? [source] : []));
 
   const models = await Promise.all(sources.map((source) => source.model()));
@@ -148,12 +156,14 @@ export async function knowledgeProblems(
  */
 export async function knowledgeList(
   always = false,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<KnowledgeListing[]> {
+  const { home } = runtime;
+
   const settings = await readSettings(home);
   const listing = settings?.knowledge !== false;
-  const shared = await sharedKnowledge(home, always);
-  const local = (await keptLocal(home, shared))
+  const shared = await sharedKnowledge(runtime, always);
+  const local = (await keptLocal(runtime, shared))
     .filter((doc) => !always || doc.content.accessMode === "always")
     .map((doc) => ({
       id: doc.id,
@@ -177,12 +187,12 @@ export async function knowledgeList(
  */
 export async function knowledgeGet(
   name: string,
-  home: string,
+  runtime: RuntimeContext,
 ): Promise<KnowledgeDocument> {
   try {
-    return await sharedDocument(name, home);
+    return await sharedDocument(name, runtime);
   } catch (error) {
-    const doc = (await keptLocal(home, [])).find(
+    const doc = (await keptLocal(runtime, [])).find(
       (d) => d.content.name === name,
     );
 

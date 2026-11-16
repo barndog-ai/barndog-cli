@@ -8,7 +8,7 @@ import {
   rm,
   writeFile,
 } from "node:fs/promises";
-import { dirname, isAbsolute, relative, sep } from "node:path";
+import { dirname, relative, isAbsolute, sep, type posix } from "node:path";
 import type { z } from "zod";
 
 import { errorCode } from "./values.js";
@@ -95,11 +95,21 @@ export async function fileText(path: string): Promise<string | null> {
 }
 
 /** Whether `child` is `parent` or somewhere below it; compares paths, not links. */
-export function isInside(parent: string, child: string): boolean {
-  const path = relative(parent, child);
+export function isInside(
+  parent: string,
+  child: string,
+  paths: Pick<typeof posix, "relative" | "isAbsolute" | "sep"> = {
+    relative,
+    isAbsolute,
+    sep,
+  },
+): boolean {
+  const path = paths.relative(parent, child);
 
   return (
     !path ||
-    (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path))
+    (path !== ".." &&
+      !path.startsWith(`..${paths.sep}`) &&
+      !paths.isAbsolute(path))
   );
 }
