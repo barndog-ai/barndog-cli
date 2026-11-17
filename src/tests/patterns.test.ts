@@ -31,6 +31,7 @@ import {
   variableName,
 } from "../features/mcps/import.js";
 import { parseLocation } from "../features/imports/remote.js";
+import { bracedReferences } from "../harnesses/opencode.js";
 import { hookSettingsOwner } from "../harnesses/registry.js";
 import {
   CONSTANT_CASE,
@@ -42,6 +43,7 @@ import {
   splitFrontMatter,
   splitOrigin,
   UUID_V4,
+  VARIABLE_NAME,
 } from "../shared/patterns.js";
 import { createProgram } from "../program.js";
 import { WINDOWS_DEVICE_NAME } from "../platform.js";
@@ -109,6 +111,18 @@ describe("shared identifier patterns", () => {
     ["1API", false],
   ])("CONSTANT_CASE %j → %s", (value, expected) => {
     expect(CONSTANT_CASE.test(value)).toBe(expected);
+  });
+
+  test.each([
+    ["API_KEY", true],
+    ["api_key", true],
+    ["_TOKEN2", true],
+    ["a", true],
+    ["2TOKEN", false],
+    ["API-KEY", false],
+    ["", false],
+  ])("VARIABLE_NAME %j → %s", (value, expected) => {
+    expect(new RegExp(`^${VARIABLE_NAME.source}$`).test(value)).toBe(expected);
   });
 
   test.each([
@@ -479,6 +493,19 @@ describe("MCP import", () => {
     ["Bearer $TOKEN", undefined],
   ])("embeddedVariable %j → %s", (value, expected) => {
     expect(embeddedVariable(value)).toBe(expected);
+  });
+
+  test.each([
+    ["{env:TOKEN}", "${TOKEN}"],
+    ["Bearer {env:TOKEN}", "Bearer ${TOKEN}"],
+    ["{env:A}-{env:B_2}", "${A}-${B_2}"],
+    ["literal", "literal"],
+    ["${TOKEN}", "${TOKEN}"],
+    ["{env:2BAD}", "{env:2BAD}"],
+    ["{ENV:TOKEN}", "{ENV:TOKEN}"],
+    ["{env:}", "{env:}"],
+  ])("bracedReferences %j → %s", (value, expected) => {
+    expect(bracedReferences(value)).toBe(expected);
   });
 
   test.each([

@@ -341,8 +341,17 @@ export function privatePermissions(mode: number, platform: NodeJS.Platform) {
   return isWindows(platform) || !(mode & POSIX_MODE.groupAndOtherBits);
 }
 
-/** A desktop app as each platform installs it; `name` is the `.app` bundle name without `.app`. */
-export type DesktopApp = { name: string };
+/**
+ * A desktop app as each platform installs it: `name` is the `.app` bundle
+ * name without `.app` and the Windows program `<name>.exe`.
+ */
+export type DesktopApp = {
+  name: string;
+  /** The Windows install folder when it isn't `name`. */
+  windowsFolder?: string;
+  /** The Linux `.desktop` entry's file name without `.desktop`, when it isn't `name` in lowercase. */
+  linuxEntry?: string;
+};
 
 /**
  * Where a desktop app would be installed, as `[path to check, evidence to report]`:
@@ -366,14 +375,15 @@ function applicationCandidates(
     const local = environmentValue(runtime, OS_VARIABLES.localAppData);
     const programFiles = environmentValue(runtime, OS_VARIABLES.programFiles);
     const executable = `${app.name}.exe`;
+    const folder = app.windowsFolder ?? app.name;
     const paths = [
       ...(local
         ? [
-            path.join(local, "Programs", app.name, executable),
-            path.join(local, app.name, executable),
+            path.join(local, "Programs", folder, executable),
+            path.join(local, folder, executable),
           ]
         : []),
-      ...(programFiles ? [path.join(programFiles, app.name, executable)] : []),
+      ...(programFiles ? [path.join(programFiles, folder, executable)] : []),
     ];
 
     return paths.map((candidate) => [candidate, candidate]);
@@ -391,7 +401,7 @@ function applicationCandidates(
     const entry = path.join(
       root,
       "applications",
-      `${app.name.toLowerCase()}.desktop`,
+      `${app.linuxEntry ?? app.name.toLowerCase()}.desktop`,
     );
 
     return [entry, entry];

@@ -15,6 +15,7 @@ import {
   protectPrivate,
   stopProcessTree,
 } from "../platform.js";
+import { adapters } from "../harnesses/registry.js";
 import { isInside } from "../shared/files.js";
 import { posixQuote, powershellQuote } from "../shared/shell.js";
 import { displayPath } from "../ui/output.js";
@@ -274,6 +275,39 @@ test("desktop detection has installation evidence for every supported OS", async
   ).toBe("C:\\Users\\Alice\\AppData\\Local\\Programs\\Cursor\\Cursor.exe");
 
   expect(await installedApplication(app, { ...windows, env: {} })).toBe(null);
+});
+
+test("OpenCode Desktop is found where its installers put it", async () => {
+  const app = adapters.opencode.desktopApp;
+  const installed = (path: string) =>
+    fakes.stat.mockImplementation(async (probe: string) => {
+      if (probe === path) {
+        return {};
+      }
+
+      throw Object.assign(new Error("missing"), { code: "ENOENT" });
+    });
+
+  installed("/Applications/OpenCode.app/Contents/MacOS");
+  expect(
+    await installedApplication(app, { ...linux, platform: "darwin" }),
+  ).toBe("/Applications/OpenCode.app");
+
+  installed("/usr/share/applications/ai.opencode.desktop.desktop");
+  expect(await installedApplication(app, linux)).toBe(
+    "/usr/share/applications/ai.opencode.desktop.desktop",
+  );
+
+  const exe =
+    "C:\\Users\\Alice\\AppData\\Local\\Programs\\@opencode-aidesktop\\OpenCode.exe";
+
+  installed(exe);
+  expect(
+    await installedApplication(app, {
+      ...windows,
+      env: { LOCALAPPDATA: "C:\\Users\\Alice\\AppData\\Local" },
+    }),
+  ).toBe(exe);
 });
 
 test("Windows path conversion refuses hidden drive cwd and case aliases before writing", () => {

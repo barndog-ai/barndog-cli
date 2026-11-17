@@ -14,6 +14,7 @@ import { fixSteps, removeCommand } from "../../platform.js";
 import { treeFingerprint } from "../workspace/tree.js";
 import { assetKinds } from "../asset-kinds/index.js";
 import { patchNative, type NativeEntry } from "../native/configuration.js";
+import { inPluginModule, pluginModule } from "../native/plugin-module.js";
 import type { SyncEvent } from "./events.js";
 import { linkTarget, type Write } from "./transaction.js";
 
@@ -197,9 +198,10 @@ export async function nativeWrites(
     trees: readonly InstalledTree[];
     updated: ReadonlySet<string>;
     nameOf: (entry: NativeEntry) => string;
+    platform: NodeJS.Platform;
   },
 ): Promise<{ writes: Write[]; events: SyncEvent[] }> {
-  const { trees, updated, nameOf } = context;
+  const { trees, updated, nameOf, platform } = context;
   const writes: Write[] = [];
   const events: SyncEvent[] = [];
 
@@ -215,7 +217,9 @@ export async function nativeWrites(
       kind: "file",
       path: file,
       before: text,
-      after: patchNative(text, old, next),
+      after: inPluginModule([...old, ...next])
+        ? pluginModule(text, { before: old, after: next }, platform)
+        : patchNative(text, old, next),
     });
 
     for (const entry of next) {

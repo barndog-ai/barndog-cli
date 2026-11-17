@@ -4,9 +4,9 @@ import { basename } from "node:path";
 import { CliError } from "../errors.js";
 import {
   adapters,
-  harnesses,
-  type Harness,
-  isHarness,
+  hookHarnesses,
+  type HookHarness,
+  isHookHarness,
 } from "../harnesses/registry.js";
 import {
   buildHookPackage,
@@ -47,11 +47,11 @@ async function pickHookPlan(
   const chosen = (
     await prompts.chooseMany(
       "Which coding tools should this Hook support?",
-      harnesses.map((h) => ({ name: adapters[h].name, value: h })),
+      hookHarnesses.map((h) => ({ name: adapters[h].name, value: h })),
     )
-  ).filter(isHarness);
+  ).filter(isHookHarness);
 
-  const plan: Partial<Record<Harness, DraftEvent[]>> = {};
+  const plan: Partial<Record<HookHarness, DraftEvent[]>> = {};
   for (const harness of chosen) {
     const known = adapters[harness].hooks.events;
     const events = await prompts.chooseMany(
@@ -271,11 +271,11 @@ export async function addHook(
         modes.get(script) === GIT_MODE.executable;
 
       // Settings the author shipped answer every question, and no other tool is offered.
-      const written = harnesses.filter(
+      const written = hookHarnesses.filter(
         (h) => candidate.implementations[h]?.length,
       );
 
-      let plan: Partial<Record<Harness, DraftEvent[]>>;
+      let plan: Partial<Record<HookHarness, DraftEvent[]>>;
       if (written.length) {
         const chosen =
           context.interactive && written.length > 1
@@ -289,7 +289,7 @@ export async function addHook(
                     checked: true,
                   })),
                 )
-              ).filter(isHarness)
+              ).filter(isHookHarness)
             : written;
 
         const { implementations } = candidate;
@@ -363,7 +363,7 @@ export async function addHook(
       );
 
       context.write(`${ok("✔")} Added ${bold(name)}`);
-      for (const harness of harnesses) {
+      for (const harness of hookHarnesses) {
         const { trustNote } = adapters[harness].hooks;
         if (trustNote && plan[harness]?.length) {
           context.write(dim(trustNote));

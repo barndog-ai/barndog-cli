@@ -1,9 +1,9 @@
 import { jsonMcpServer } from "./formats.js";
-import type { HarnessAdapter } from "./types.js";
+import type { HookAdapter } from "./types.js";
 
 const toolMatcher = "Tool type, such as Shell, Read or Write";
 
-export const cursor: HarnessAdapter = {
+export const cursor: HookAdapter = {
   id: "cursor",
   name: "Cursor",
   skillRoot: ".cursor/skills",
@@ -57,6 +57,8 @@ export const cursor: HarnessAdapter = {
   },
   mcp: {
     file: ".cursor/mcp.json",
+    files: [".cursor/mcp.json"],
+    path: ["mcpServers"],
     server: (definition) =>
       jsonMcpServer(definition, {
         reference: (variable) => `\${env:${variable}}`,

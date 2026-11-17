@@ -9,6 +9,7 @@ Currently supported harnesses:
 - Claude Code
 - Codex
 - Cursor
+- OpenCode (Skills, MCP servers and knowledge; it has no command hooks, so Hooks don't apply)
 
 ## Why
 

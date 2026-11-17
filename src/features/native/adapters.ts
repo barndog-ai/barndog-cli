@@ -8,7 +8,7 @@ import {
 } from "../../platform.js";
 import type { HookManifest, McpDefinition } from "@barndog-ai/api-contract";
 import { adapters, nativeFile } from "../../harnesses/registry.js";
-import type { Harness } from "../../harnesses/types.js";
+import type { Harness, HookHarness } from "../../harnesses/types.js";
 import { type NativeEntry } from "./configuration.js";
 import { hookCommand } from "./hook-shell.js";
 
@@ -69,6 +69,23 @@ export async function runtimeRequirements(
 }
 
 /**
+ * Why a Hook can't be installed for a tool: no implementation for it, or
+ * something its implementation needs is missing here. Null when it can.
+ */
+export async function hookIssue(
+  harness: HookHarness,
+  manifest: HookManifest,
+  runtime: RuntimeContext,
+): Promise<string | null> {
+  const implementation = manifest.implementations[harness];
+  if (!implementation) {
+    return "No implementation for this harness";
+  }
+
+  return runtimeRequirements(harness, implementation.requirements, runtime);
+}
+
+/**
  * Builds a harness-specific MCP configuration entry with secret references;
  * does not write native settings.
  */
@@ -98,7 +115,7 @@ export function mcpEntry(
  * missing implementations yield no entries.
  */
 export function hookEntries(
-  harness: Harness,
+  harness: HookHarness,
   { id, root, manifest }: { id: string; root: string; manifest: HookManifest },
   runtime: RuntimeContext,
 ): NativeEntry[] {

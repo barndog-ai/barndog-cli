@@ -12,7 +12,7 @@ import {
 } from "../../platform.js";
 import type { RuntimeContext } from "../../runtime.js";
 import { adapters } from "../../harnesses/registry.js";
-import type { Harness } from "../../harnesses/types.js";
+import type { HookHarness } from "../../harnesses/types.js";
 import { posixQuote, posixWord, powershellQuote } from "../../shared/shell.js";
 
 /** One command line, written for each shell a tool may run it in. */
@@ -23,7 +23,7 @@ const bashPath = (path: string, platform: NodeJS.Platform) =>
   isWindows(platform) ? path.replaceAll("\\", "/") : path;
 
 function lineFor(
-  harness: Harness,
+  harness: HookHarness,
   line: ShellLine,
   platform: NodeJS.Platform,
 ): string {
@@ -41,7 +41,7 @@ function lineFor(
 
 /** Starts a program (BarnDog's own entry scripts) from the tool's hook shell. */
 export function programLine(
-  harness: Harness,
+  harness: HookHarness,
   args: readonly string[],
   platform: NodeJS.Platform,
 ): string {
@@ -63,7 +63,7 @@ export function programLine(
 function hookLine(
   root: string,
   command: string,
-  harness: Harness,
+  harness: HookHarness,
   platform: NodeJS.Platform,
 ): ShellLine {
   const variables = [
@@ -82,7 +82,7 @@ function hookLine(
 export const hookCommand = (
   root: string,
   command: string,
-  harness: Harness,
+  harness: HookHarness,
   platform: NodeJS.Platform,
 ) => lineFor(harness, hookLine(root, command, harness, platform), platform);
 
@@ -90,7 +90,7 @@ export const hookCommand = (
 export async function hookInvocation(
   root: string,
   command: string,
-  harness: Harness,
+  harness: HookHarness,
   runtime: RuntimeContext,
 ): Promise<Invocation> {
   const line = hookLine(root, command, harness, runtime.platform);

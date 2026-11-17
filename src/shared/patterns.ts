@@ -103,6 +103,14 @@ export const POSITIVE_INTEGER = /^[1-9]\d*$/;
  */
 export const CONSTANT_CASE = /^[A-Z][\dA-Z_]*$/;
 
+/**
+ * The name inside a tool's environment variable reference (`${API_KEY}`,
+ * `{env:api_key}`, `$_TOKEN2`): a letter or underscore (a word character
+ * that isn't a digit), then word characters. Unanchored and without flags, for
+ * building those reference patterns from its `source`.
+ */
+export const VARIABLE_NAME = /[^\W\d]\w*/;
+
 /** An origin selector's scope type (`org`, `team`, `repo`, `dev`) and the slug or ID after it. */
 export type OriginSelector = { type: string; value?: string };
 

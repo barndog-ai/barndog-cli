@@ -30,7 +30,9 @@ try {
 
   const harness = process.argv[2];
   if (text && isHarness(harness)) {
-    console.log(JSON.stringify(adapters[harness].hooks.sessionContext(text)));
+    // A plugin (OpenCode's) adds the plain text itself; a hook prints the tool's JSON.
+    const { hooks } = adapters[harness];
+    console.log(hooks ? JSON.stringify(hooks.sessionContext(text)) : text);
   }
 } catch {
   console.error(

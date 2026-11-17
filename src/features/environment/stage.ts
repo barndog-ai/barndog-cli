@@ -7,22 +7,25 @@ import type { RuntimeContext } from "../../runtime.js";
 import { readFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { parse } from "yaml";
-import { hookManifestSchema } from "@barndog-ai/api-contract";
+import {
+  hookManifestSchema,
+  type HookManifest,
+} from "@barndog-ai/api-contract";
 import { packageFingerprint } from "@barndog-ai/api-contract/package";
 
 import type { PackageKind } from "../../config/selection.js";
 import type { Link, State } from "../../config/state.js";
 import { CliError } from "../../errors.js";
-import { skillDirectory } from "../../harnesses/registry.js";
+import {
+  adapters,
+  isHookHarness,
+  skillDirectory,
+} from "../../harnesses/registry.js";
 import type { Harness } from "../../harnesses/types.js";
 import { isInside } from "../../shared/files.js";
 import { defined } from "../../shared/lookup.js";
 import type { SelectionResult } from "../asset-selection/types.js";
-import {
-  hookEntries,
-  mcpEntry,
-  runtimeRequirements,
-} from "../native/adapters.js";
+import { hookEntries, hookIssue, mcpEntry } from "../native/adapters.js";
 import type { NativeEntry } from "../native/configuration.js";
 import { desiredEntries, installedPath } from "../workspace/installed.js";
 import type { WorkspaceSource } from "../workspace/source.js";
@@ -241,34 +244,57 @@ export async function stageAssets(input: {
         versionId: ref.publishedVersion,
       });
 
-      for (const harness of harnesses) {
-        const implementation = manifest.implementations[harness];
-        const reason = !implementation
-          ? "No implementation for this harness"
-          : await runtimeRequirements(
-              harness,
-              implementation.requirements,
-              input.runtime,
-            );
+      const registered = await hookRegistrations(
+        harnesses,
+        { id: ref.id, name: ref.name, root, manifest },
+        runtime,
+      );
 
-        if (reason) {
-          events.push({
-            type: "unsupported",
-            kind: "hook",
-            harness,
-            name: ref.name,
-            reason,
-          });
-
-          continue;
-        }
-
-        native.push(
-          ...hookEntries(harness, { id: ref.id, root, manifest }, runtime),
-        );
-      }
+      native.push(...registered.native);
+      events.push(...registered.events);
     }
   }
 
   return { links: desired, native, trees, events };
+}
+
+/**
+ * A Hook's registrations for each selected tool, and an `unsupported` event
+ * for each tool it can't run in.
+ */
+async function hookRegistrations(
+  harnesses: readonly Harness[],
+  hook: { id: string; name: string; root: string; manifest: HookManifest },
+  runtime: RuntimeContext,
+): Promise<{ native: NativeEntry[]; events: SyncEvent[] }> {
+  const native: NativeEntry[] = [];
+  const events: SyncEvent[] = [];
+
+  const unsupported = (harness: Harness, reason: string) =>
+    events.push({
+      type: "unsupported",
+      kind: "hook",
+      harness,
+      name: hook.name,
+      reason,
+    });
+
+  for (const harness of harnesses) {
+    if (!isHookHarness(harness)) {
+      unsupported(harness, `${adapters[harness].name} has no command hooks`);
+
+      continue;
+    }
+
+    const reason = await hookIssue(harness, hook.manifest, runtime);
+    if (reason !== null) {
+      unsupported(harness, reason);
+
+      continue;
+    }
+
+    native.push(...hookEntries(harness, hook, runtime));
+  }
+
+  return { native, events };
 }

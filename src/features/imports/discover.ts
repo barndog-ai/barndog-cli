@@ -16,10 +16,10 @@ import { stringify } from "yaml";
 import { CliError, friendlyMessage } from "../../errors.js";
 import {
   adapters,
-  harnesses,
+  hookHarnesses,
   hookSettingsOwner,
 } from "../../harnesses/registry.js";
-import type { Harness } from "../../harnesses/types.js";
+import type { HookHarness } from "../../harnesses/types.js";
 import type { RemoteRepo } from "./remote.js";
 import { defined } from "../../shared/lookup.js";
 import { asRecord, isRecord } from "../../shared/values.js";
@@ -140,7 +140,7 @@ export type HookCandidate =
       type: "draft";
       name: string;
       scripts: string[];
-      implementations: Partial<Record<Harness, DraftEvent[]>>;
+      implementations: Partial<Record<HookHarness, DraftEvent[]>>;
       skipped: Skipped[];
     };
 
@@ -325,7 +325,7 @@ export function discoverHooks(remote: RemoteRepo, fallbackName: string) {
   );
 
   const blobPaths = blobEntries.map((e) => e.path);
-  const implementations: Partial<Record<Harness, DraftEvent[]>> = {};
+  const implementations: Partial<Record<HookHarness, DraftEvent[]>> = {};
   for (const entry of blobEntries) {
     const harness = hookSettingsOwner(entry.path);
     if (!harness) {
@@ -407,7 +407,7 @@ export function buildHookPackage(
   input: {
     name: string;
     description: string;
-    implementations: Partial<Record<Harness, DraftEvent[]>>;
+    implementations: Partial<Record<HookHarness, DraftEvent[]>>;
   },
 ) {
   const used = Object.values(input.implementations).flat();
@@ -435,7 +435,7 @@ export function buildHookPackage(
     }));
 
   const implementations: HookManifest["implementations"] = {};
-  for (const harness of harnesses) {
+  for (const harness of hookHarnesses) {
     const events = input.implementations[harness] ?? [];
     if (!events.length) {
       continue;

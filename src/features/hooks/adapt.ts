@@ -11,8 +11,12 @@ import { hookMetadata } from "@barndog-ai/api-contract/package";
 
 import { readSettings, SetupRequiredError } from "../../config/settings.js";
 import { CliError } from "../../errors.js";
-import { adapters, harnesses } from "../../harnesses/registry.js";
-import type { Harness } from "../../harnesses/types.js";
+import {
+  adapters,
+  hookHarnesses,
+  isHookHarness,
+} from "../../harnesses/registry.js";
+import type { Harness, HookHarness } from "../../harnesses/types.js";
 import { selectAsset } from "../server/catalog.js";
 import { repoForOrigin, selectRepoAsset } from "../workspace/assets.js";
 import { LOCAL_ORIGIN } from "../workspace/overlay.js";
@@ -28,7 +32,7 @@ type AdaptPlace =
 type AdaptInput = {
   name: string;
   implementations: Implementations;
-  targets: readonly Harness[];
+  targets: readonly HookHarness[];
   place: AdaptPlace;
   /** The repository it was added from, when it still follows it. */
   source?: { url: string; folder: string };
@@ -50,8 +54,8 @@ function adaptPrompt(input: AdaptInput) {
     // Object.fromEntries types its keys as string; the map covers every harness.
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
     tools: Object.fromEntries(
-      harnesses.map((harness) => [harness, adapters[harness].name]),
-    ) as Record<Harness, string>,
+      hookHarnesses.map((harness) => [harness, adapters[harness].name]),
+    ) as Record<HookHarness, string>,
     place:
       input.place.type === "folder"
         ? { ...input.place, origin: LOCAL_ORIGIN }
@@ -88,7 +92,7 @@ async function resolveHook(
     return {
       name: asset.name,
       implementations,
-      machine: settings.harnesses,
+      machine: settings.harnesses.filter(isHookHarness),
       place: {
         type: "workspace",
         origin,
@@ -104,7 +108,7 @@ async function resolveHook(
   return {
     name: asset.name,
     implementations,
-    machine: settings.harnesses,
+    machine: settings.harnesses.filter(isHookHarness),
     place: inFolder
       ? ({
           type: "folder",
@@ -126,9 +130,9 @@ async function resolveHook(
 export type Adaptation = {
   name: string;
   /** Tools the Hook has settings for. */
-  written: Harness[];
+  written: HookHarness[];
   /** Tools to adapt it for; empty when nothing is missing. */
-  targets: Harness[];
+  targets: HookHarness[];
   /** Null when there is nothing to adapt. */
   prompt: string | null;
 };
@@ -140,11 +144,11 @@ export type Adaptation = {
 export async function adaptHook(
   name: string,
   origin: string,
-  targets: readonly Harness[] | undefined,
+  targets: readonly HookHarness[] | undefined,
   runtime: RuntimeContext,
 ): Promise<Adaptation> {
   const hook = await resolveHook(name, origin, runtime);
-  const written = harnesses.filter((h) => hook.implementations[h]);
+  const written = hookHarnesses.filter((h) => hook.implementations[h]);
   const covered = targets?.filter((h) => written.includes(h)) ?? [];
   if (covered.length) {
     throw new CliError(
@@ -152,7 +156,7 @@ export async function adaptHook(
     );
   }
 
-  const missing = harnesses.filter(
+  const missing = hookHarnesses.filter(
     (h) => (targets ?? hook.machine).includes(h) && !written.includes(h),
   );
 

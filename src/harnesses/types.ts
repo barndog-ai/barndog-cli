@@ -2,7 +2,16 @@ import type { McpDefinition } from "@barndog-ai/api-contract";
 
 import type { DesktopApp } from "../platform.js";
 
-export type Harness = "claude" | "codex" | "cursor";
+/**
+ * Tools that run command hooks from a settings file. The contract's Hook
+ * manifests have an implementation for each of these and no other.
+ */
+export type HookHarness = "claude" | "codex" | "cursor";
+
+/** Tools without command hooks, where BarnDog's own startup work runs from a plugin module. */
+type PluginHarness = "opencode";
+
+export type Harness = HookHarness | PluginHarness;
 
 type WindowsHookShell = "bash" | "powershell";
 
@@ -55,6 +64,25 @@ type HookProfile = {
   trustNote?: string;
 };
 
+/**
+ * The BarnDog-owned plugin module a tool without command hooks loads by
+ * itself. BarnDog's session-start work (the workspace sync and the knowledge
+ * index) runs from there.
+ */
+type PluginProfile = {
+  /** Where the tool discovers it, relative to the home directory. */
+  file: string;
+  /** The BarnDog entry script it imports, under `src/entry/` without `.ts`. */
+  entryScript: string;
+  /**
+   * The module's whole text: it imports `barndog` from BarnDog's plugin entry
+   * at `entry` (a file URL) and hands it `options`. Sync compares a file on
+   * disk with this text to notice hand edits, so a change here makes every
+   * installed copy look edited by hand.
+   */
+  module: (entry: string, options: Record<string, unknown>) => string;
+};
+
 /** How a user signs in to an MCP server that uses the tool's own OAuth. */
 type McpLogin =
   /** A command to run, followed by the server's name: `claude mcp login <name>`. */
@@ -65,6 +93,18 @@ type McpLogin =
 type McpProfile = {
   /** The user-level MCP configuration file, relative to the home directory. */
   file: string;
+  /** The keys that lead to the table of servers inside `file`, such as `["mcp", "servers"]`. */
+  path: readonly string[];
+  /**
+   * Every user-level file the tool reads servers from, relative to the home
+   * directory, `file` among them. `mcp add --from` looks in each.
+   */
+  files: readonly string[];
+  /**
+   * One of the tool's own entries in the shape `mcp add --from` converts
+   * (Claude Code's), for a tool whose entries are spelled differently.
+   */
+  imported?: (entry: Record<string, unknown>) => Record<string, unknown>;
   /**
    * One server entry in the tool's own format. Secrets stay references to
    * local environment variables. `launcher` is BarnDog's script that starts a
@@ -98,17 +138,34 @@ type ConfigHome = {
  * tools from here instead of comparing harness IDs. skillRoot is relative to
  * the user home.
  */
-export type HarnessAdapter = {
-  id: Harness;
+type AdapterBase = {
   name: string;
   skillRoot: string;
   commands: readonly string[];
   /** The desktop app whose installation counts as evidence (see `installedApplication()`). */
   desktopApp: DesktopApp;
-  hooks: HookProfile;
   mcp: McpProfile;
   /** Absent when the tool has no such variable. */
   configHome?: ConfigHome;
+};
+
+export type HookAdapter = AdapterBase & {
+  id: HookHarness;
+  hooks: HookProfile;
+  plugin?: undefined;
+};
+
+export type PluginAdapter = AdapterBase & {
+  id: PluginHarness;
+  hooks?: undefined;
+  plugin: PluginProfile;
+};
+
+export type HarnessAdapter = HookAdapter | PluginAdapter;
+
+/** The adapter of each tool, typed by whether it runs command hooks. */
+export type Adapters = {
+  [H in Harness]: H extends HookHarness ? HookAdapter : PluginAdapter;
 };
 
 export type DetectedHarness = {

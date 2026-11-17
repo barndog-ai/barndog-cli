@@ -1,6 +1,6 @@
 import { hookEntries } from "../features/native/adapters.js";
 import { hookManifestSchema } from "@barndog-ai/api-contract";
-import type { Harness } from "../harnesses/types.js";
+import type { HookHarness } from "../harnesses/types.js";
 import type { RuntimeContext } from "../runtime.js";
 
 /** Registered commands with Windows path separators made `/`, so tests match one form. */
@@ -13,7 +13,7 @@ export function registeredHook(
   root: string,
   command: string,
   runtime: RuntimeContext,
-  harness: Harness = "claude",
+  harness: HookHarness = "claude",
 ) {
   const manifest = hookManifestSchema.parse({
     name: "check",

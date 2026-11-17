@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { parse } from "yaml";
 import { hookManifestSchema, hookSchema } from "@barndog-ai/api-contract";
-import type { Harness } from "../../harnesses/types.js";
+import type { HookHarness } from "../../harnesses/types.js";
 import { selectAsset } from "../server/catalog.js";
 import { cachedPackage } from "../workspace/packages.js";
 import { runtimeRequirements } from "../native/adapters.js";
@@ -47,7 +47,7 @@ async function hookPackage(
 }
 
 export type HookTestOptions = {
-  harness: Harness;
+  harness: HookHarness;
   /** The native JSON input, as text. */
   input: string;
   event?: string;
@@ -58,7 +58,7 @@ export type HookTestOptions = {
 
 /** How a Hook's script ran on the supplied input. */
 export type HookTestResult = {
-  harness: Harness;
+  harness: HookHarness;
   event: string;
   exitCode: number;
   timedOut: boolean;

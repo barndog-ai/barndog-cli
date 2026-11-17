@@ -3,12 +3,12 @@
  * the session-start commands that list shared knowledge and sync the workspace.
  */
 import type { RuntimeContext } from "../../runtime.js";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import type { Settings } from "../../config/settings.js";
 import { CliError } from "../../errors.js";
 import { adapters, nativeFile } from "../../harnesses/registry.js";
-import type { Harness } from "../../harnesses/types.js";
+import type { Harness, HarnessAdapter } from "../../harnesses/types.js";
 import { environmentValue, pathsFor, unsetCommand } from "../../platform.js";
 import { programLine } from "../native/hook-shell.js";
 import type { NativeEntry } from "../native/configuration.js";
@@ -47,9 +47,55 @@ export function assertSupportedConfigHomes(
   }
 }
 
-/** The built entry script a coding tool runs at session start. */
+/** A built entry script a coding tool runs. */
 const entryScript = (name: string) =>
   fileURLToPath(new URL(`../../entry/${name}.js`, import.meta.url));
+
+/**
+ * One session-start registration that runs `program` (an entry script and its
+ * arguments, run by Node): a command hook in the tool's hook settings, or for
+ * a tool without command hooks, a line of options in BarnDog's plugin module,
+ * keyed by `kind`.
+ */
+function startupEntry(
+  harness: Harness,
+  registration: {
+    id: string;
+    kind: "knowledge" | "sync";
+    program: string[];
+  },
+  runtime: RuntimeContext,
+): NativeEntry {
+  const { id, kind, program } = registration;
+  const adapter: HarnessAdapter = adapters[harness];
+  const file = nativeFile(harness, kind, runtime.home);
+  const command = [process.execPath, ...program];
+
+  if (!adapter.hooks) {
+    return {
+      id,
+      kind,
+      harness,
+      file,
+      key: kind,
+      value: {
+        entry: pathToFileURL(entryScript(adapter.plugin.entryScript)).href,
+        command,
+      },
+    };
+  }
+
+  return {
+    id,
+    kind,
+    harness,
+    file,
+    key: adapter.hooks.sessionStart,
+    value: adapter.hooks.entry(
+      programLine(adapter.id, command, runtime.platform),
+    ),
+  };
+}
 
 /**
  * BarnDog's own session-start registrations for every selected coding tool.
@@ -69,20 +115,17 @@ export function startupEntries(
     const script = entryScript("knowledge-startup");
 
     for (const harness of settings.harnesses) {
-      const command = programLine(
-        harness,
-        [process.execPath, script, harness, home],
-        runtime.platform,
+      entries.push(
+        startupEntry(
+          harness,
+          {
+            id: "barndog-knowledge-index",
+            kind: "knowledge",
+            program: [script, harness, home],
+          },
+          runtime,
+        ),
       );
-
-      entries.push({
-        id: "barndog-knowledge-index",
-        kind: "knowledge",
-        harness,
-        file: nativeFile(harness, "knowledge", home),
-        key: adapters[harness].hooks.sessionStart,
-        value: adapters[harness].hooks.entry(command),
-      });
     }
   }
 
@@ -90,20 +133,17 @@ export function startupEntries(
     const script = entryScript("workspace-startup");
 
     for (const harness of settings.harnesses) {
-      const command = programLine(
-        harness,
-        [process.execPath, script, home],
-        runtime.platform,
+      entries.push(
+        startupEntry(
+          harness,
+          {
+            id: "barndog-workspace-sync",
+            kind: "sync",
+            program: [script, home],
+          },
+          runtime,
+        ),
       );
-
-      entries.push({
-        id: "barndog-workspace-sync",
-        kind: "sync",
-        harness,
-        file: nativeFile(harness, "sync", home),
-        key: adapters[harness].hooks.sessionStart,
-        value: adapters[harness].hooks.entry(command),
-      });
     }
   }
 

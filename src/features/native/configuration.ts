@@ -150,7 +150,7 @@ export function patchNative(
   const version =
     sample.kind === "mcp"
       ? undefined
-      : adapters[sample.harness].hooks.fileVersion;
+      : adapters[sample.harness].hooks?.fileVersion;
 
   let output =
     text ??
@@ -216,6 +216,15 @@ export function patchNative(
   const table = (key: string) =>
     data[key] === undefined ? {} : object(data[key], sample.file);
 
+  /** Where the tool keeps its MCP servers, such as `mcpServers` or `mcp.servers`. */
+  const serversPath = adapters[sample.harness].mcp.path;
+  const servers = () =>
+    serversPath.reduce<Record<string, unknown>>(
+      (parent, key) =>
+        parent[key] === undefined ? {} : object(parent[key], sample.file),
+      data,
+    );
+
   /** The handlers registered for one hook event. */
   const list = (event: string): unknown[] => {
     const handlers = table("hooks")[event];
@@ -225,8 +234,7 @@ export function patchNative(
 
   for (const old of before) {
     if (old.kind === "mcp") {
-      const parent = toml ? "mcp_servers" : "mcpServers";
-      if (!same(table(parent)[old.key], old.value)) {
+      if (!same(servers()[old.key], old.value)) {
         throw new CliError(
           `The MCP server ${old.key} that BarnDog installed in ${sample.file} was changed by hand. Undo that edit or remove the entry, then sync again.`,
           "barndog sync",
@@ -249,9 +257,8 @@ export function patchNative(
   // Detect collisions before removing anything, including semantically identical unmanaged registrations.
   for (const next of after) {
     if (next.kind === "mcp") {
-      const parent = toml ? "mcp_servers" : "mcpServers";
       if (
-        Object.hasOwn(table(parent), next.key) &&
+        Object.hasOwn(servers(), next.key) &&
         !before.some((old) => old.kind === "mcp" && old.key === next.key)
       ) {
         throw new CliError(
@@ -319,7 +326,7 @@ export function patchNative(
         output = tomlEdit(output, old.key, undefined);
         data = object(parseToml(output), sample.file);
       } else {
-        change(["mcpServers", old.key], undefined);
+        change([...serversPath, old.key], undefined);
       }
     } else {
       const index = list(old.key).findIndex((v) => same(v, old.value));
@@ -348,7 +355,7 @@ export function patchNative(
         output = tomlEdit(output, next.key, next.value);
         data = object(parseToml(output), sample.file);
       } else {
-        change(["mcpServers", next.key], next.value);
+        change([...serversPath, next.key], next.value);
       }
     } else {
       const handlers = table("hooks")[next.key];

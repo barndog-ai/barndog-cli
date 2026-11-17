@@ -25,7 +25,7 @@ import { fileText, writeAtomic } from "../../shared/files.js";
 import { synchronize } from "../environment/sync.js";
 import { patchNative } from "../native/configuration.js";
 import { NAME_RULE } from "../workspace/format.js";
-import { validAssetName } from "../../shared/patterns.js";
+import { validAssetName, VARIABLE_NAME } from "../../shared/patterns.js";
 import { LOCAL_ORIGIN } from "../workspace/overlay.js";
 import { ensureLocalWorkspace } from "../imports/local.js";
 import { asRecord, asStrings, isRecord } from "../../shared/values.js";
@@ -90,11 +90,13 @@ export function parseMcpText(text: string, name?: string): ImportedServer[] {
 }
 
 /** A braced variable reference, `${API_KEY}` (Claude Code) or `${env:API_KEY}` (Cursor). */
-const BRACED_VARIABLE = /\$\{(?:env:)?([A-Z_a-z]\w*)\}/;
+const BRACED_VARIABLE = new RegExp(
+  String.raw`\$\{(?:env:)?(${VARIABLE_NAME.source})\}`,
+);
 
 /** A whole value that is one variable reference, braced or bare (`$API_KEY`). */
 const WHOLE_VARIABLE = new RegExp(
-  String.raw`^(?:${BRACED_VARIABLE.source}|\$([A-Z_a-z]\w*))$`,
+  String.raw`^(?:${BRACED_VARIABLE.source}|\$(${VARIABLE_NAME.source}))$`,
 );
 
 /**
@@ -300,6 +302,10 @@ export function convertServer(
 export type HarnessServer = ImportedServer & {
   harness: Harness;
   label: string;
+  /** The settings file it's configured in. */
+  file: string;
+  /** The entry as the tool's file spells it; `server` is in Claude Code's shape. */
+  native: RawServer;
 };
 
 /** How an imported HTTP server authenticates. */
@@ -330,40 +336,76 @@ export async function harnessServers(
   const owned = new Set(
     native
       .filter((entry) => entry.kind === "mcp")
-      .map((entry) => `${entry.harness}:${entry.key}`),
+      .map((entry) => `${entry.file}:${entry.key}`),
   );
 
   const found: HarnessServer[] = [];
-  const add = (harness: Harness, label: string, servers: unknown) => {
-    for (const [name, server] of Object.entries(asRecord(servers))) {
-      if (isServer(server) && !owned.has(`${harness}:${name}`)) {
-        found.push({ harness, label, name, server });
+  const add = (
+    harness: Harness,
+    source: { label: string; file: string },
+    servers: unknown,
+  ) => {
+    const { imported } = adapters[harness].mcp;
+
+    for (const [name, entry] of Object.entries(asRecord(servers))) {
+      if (!isRecord(entry) || owned.has(`${source.file}:${name}`)) {
+        continue;
+      }
+
+      const server = imported ? imported(entry) : entry;
+      if (isServer(server)) {
+        found.push({ harness, ...source, name, server, native: entry });
       }
     }
   };
 
-  const claude = await jsonFile(nativeFile("claude", "mcp", home));
-  add("claude", adapters.claude.name, claude.mcpServers);
+  const claudeFile = nativeFile("claude", "mcp", home);
+  const claude = await jsonFile(claudeFile);
+  add(
+    "claude",
+    { label: adapters.claude.name, file: claudeFile },
+    claude.mcpServers,
+  );
+
   for (const [project, value] of Object.entries(asRecord(claude.projects))) {
     add(
       "claude",
-      `${adapters.claude.name}, ${basename(project)} project`,
+      {
+        label: `${adapters.claude.name}, ${basename(project)} project`,
+        file: claudeFile,
+      },
       asRecord(value).mcpServers,
     );
   }
 
+  const cursorFile = nativeFile("cursor", "mcp", home);
   add(
     "cursor",
-    adapters.cursor.name,
-    (await jsonFile(nativeFile("cursor", "mcp", home))).mcpServers,
+    { label: adapters.cursor.name, file: cursorFile },
+    (await jsonFile(cursorFile)).mcpServers,
   );
 
-  const codex = await fileText(nativeFile("codex", "mcp", home)).catch(
-    () => null,
-  );
-
+  const codexFile = nativeFile("codex", "mcp", home);
+  const codex = await fileText(codexFile).catch(() => null);
   if (codex) {
-    add("codex", adapters.codex.name, parseToml(codex).mcp_servers);
+    add(
+      "codex",
+      { label: adapters.codex.name, file: codexFile },
+      parseToml(codex).mcp_servers,
+    );
+  }
+
+  const { mcp } = adapters.opencode;
+  for (const relative of mcp.files) {
+    const file = join(home, relative);
+    add(
+      "opencode",
+      { label: `${adapters.opencode.name}, ${basename(file)}`, file },
+      mcp.path.reduce<unknown>(
+        (value, key) => asRecord(value)[key],
+        await jsonFile(file),
+      ),
+    );
   }
 
   return found;
@@ -393,8 +435,8 @@ export async function conflictingEntries(
     )
     .map((entry) => ({
       harness: entry.harness,
-      file: nativeFile(entry.harness, "mcp", home),
-      server: entry.server,
+      file: entry.file,
+      server: entry.native,
     }));
 }
 

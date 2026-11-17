@@ -95,7 +95,7 @@ const settingsSchema = z.looseObject({
 });
 
 const invalidSettings =
-  "harnesses must list each of claude, codex and cursor at most once";
+  "harnesses must list each of claude, codex, cursor and opencode at most once";
 
 type SettingsField = keyof z.infer<typeof settingsSchema>;
 

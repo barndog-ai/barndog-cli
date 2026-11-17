@@ -226,6 +226,7 @@ export async function synchronize(
       trees,
       updated: installedFolders.updated,
       nameOf: nativeName,
+      platform: runtime.platform,
     });
 
     events.push(...links.events, ...settingsFiles.events);

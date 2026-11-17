@@ -3,12 +3,12 @@ import {
   jsonMcpServer,
   nestedHookEntry,
 } from "./formats.js";
-import type { HarnessAdapter } from "./types.js";
+import type { HookAdapter } from "./types.js";
 
 const toolMatcher =
   "Tool name, such as Bash or Edit|Write. Leave empty for all";
 
-export const claude: HarnessAdapter = {
+export const claude: HookAdapter = {
   id: "claude",
   name: "Claude Code",
   skillRoot: ".claude/skills",
@@ -71,6 +71,8 @@ export const claude: HarnessAdapter = {
   },
   mcp: {
     file: ".claude.json",
+    files: [".claude.json"],
+    path: ["mcpServers"],
     server: (definition) =>
       jsonMcpServer(definition, {
         reference: (variable) => `\${${variable}}`,

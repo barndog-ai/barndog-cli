@@ -1,6 +1,6 @@
 import type { McpDefinition } from "@barndog-ai/api-contract";
 import { hookSpecificContext, nestedHookEntry, secretRefs } from "./formats.js";
-import type { HarnessAdapter } from "./types.js";
+import type { HookAdapter } from "./types.js";
 
 /**
  * Codex forwards variables by name (`env_vars`, `env_http_headers`) instead of
@@ -52,7 +52,7 @@ function mcpServer(
 const toolMatcher =
   "Tool name, such as Bash or Edit|Write. Leave empty for all";
 
-export const codex: HarnessAdapter = {
+export const codex: HookAdapter = {
   id: "codex",
   name: "Codex",
   skillRoot: ".agents/skills",
@@ -106,6 +106,8 @@ export const codex: HarnessAdapter = {
   },
   mcp: {
     file: ".codex/config.toml",
+    files: [".codex/config.toml"],
+    path: ["mcp_servers"],
     server: mcpServer,
     login: { command: ["codex", "mcp", "login"] },
   },

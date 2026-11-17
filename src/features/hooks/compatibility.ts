@@ -4,7 +4,7 @@ import { readSettings } from "../../config/settings.js";
 import { selectAsset } from "../server/catalog.js";
 import { repoForOrigin, selectRepoAsset } from "../workspace/assets.js";
 import { runtimeRequirements } from "../native/adapters.js";
-import { harnesses } from "../../harnesses/registry.js";
+import { hookHarnesses } from "../../harnesses/registry.js";
 import { hookMetadata } from "@barndog-ai/api-contract/package";
 import type { RepoAsset } from "../workspace/format.js";
 import type { HookCompatibility } from "./types.js";
@@ -59,7 +59,7 @@ async function repoHookCompatibility(
   return {
     version: asset.publishedVersion,
     compatibility: await Promise.all(
-      harnesses.map(async (harness) => {
+      hookHarnesses.map(async (harness) => {
         const implementation = manifest.implementations[harness] ?? null;
 
         return {

@@ -9,7 +9,7 @@ import {
 } from "@barndog-ai/api-contract";
 import { parse } from "yaml";
 
-import { adapters, harnesses } from "../../harnesses/registry.js";
+import { adapters, hookHarnesses } from "../../harnesses/registry.js";
 
 /**
  * A caution for Hooks whose coding tools run different scripts: changing one
@@ -21,7 +21,7 @@ function divergenceWarning(implementations: HookManifest["implementations"]) {
     return null;
   }
 
-  const names = harnesses
+  const names = hookHarnesses
     .filter((harness) => divergent.includes(harness))
     .map((harness) => adapters[harness].name);
 

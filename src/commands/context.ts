@@ -53,7 +53,7 @@ import type {
   PublishedAsset,
 } from "../features/asset-kinds/index.js";
 import type { AssetKind } from "../config/selection.js";
-import type { Harness } from "../harnesses/types.js";
+import type { Harness, HookHarness } from "../harnesses/types.js";
 import type { Check } from "../features/doctor/index.js";
 import type { RepositoryStatus } from "../features/inspection/index.js";
 import type {
@@ -219,7 +219,7 @@ type FeatureFunctions = {
   adaptHook: (
     name: string,
     origin: string,
-    targets?: readonly Harness[],
+    targets?: readonly HookHarness[],
   ) => Promise<Adaptation>;
 
   knowledgeList: (always?: boolean) => Promise<KnowledgeListing[]>;

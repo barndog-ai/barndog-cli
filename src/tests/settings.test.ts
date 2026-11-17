@@ -30,11 +30,11 @@ describe("readSettings", () => {
   test.each([
     [
       { harnesses: ["claude", "claude"] },
-      "each of claude, codex and cursor at most once",
+      "each of claude, codex, cursor and opencode at most once",
     ],
     [
       { harnesses: ["unknown"] },
-      "each of claude, codex and cursor at most once",
+      "each of claude, codex, cursor and opencode at most once",
     ],
     [{ connection: { server: "ftp://x" } }, "server connection is invalid"],
     [

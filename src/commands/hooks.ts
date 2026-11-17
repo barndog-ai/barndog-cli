@@ -2,8 +2,8 @@ import { bad, dim, json, ok, ORIGIN_HELP } from "../ui/format.js";
 import { Option, type Command } from "commander";
 import { type CommandContext } from "./context.js";
 import { renderHookCompatibility } from "../ui/hook-compatibility.js";
-import { harnesses } from "../harnesses/registry.js";
-import { type Harness } from "../harnesses/types.js";
+import { hookHarnesses } from "../harnesses/registry.js";
+import { type HookHarness } from "../harnesses/types.js";
 import { defined } from "../shared/lookup.js";
 import { positiveInteger } from "../ui/options.js";
 import { commandHelpers } from "./helpers.js";
@@ -37,7 +37,7 @@ export function registerHooks(program: Command, context: CommandContext) {
     .option("--origin <origin>", ORIGIN_HELP)
     .addOption(
       new Option("--harness <harness>", "Chosen implementation")
-        .choices(harnesses)
+        .choices(hookHarnesses)
         .makeOptionMandatory(),
     )
     .requiredOption("--input <file>", "Native JSON test input")
@@ -50,7 +50,7 @@ export function registerHooks(program: Command, context: CommandContext) {
         name: string | undefined,
         options: {
           origin?: string;
-          harness: Harness;
+          harness: HookHarness;
           input: string;
           event?: string;
           handler?: number;
@@ -128,7 +128,7 @@ export function registerHooks(program: Command, context: CommandContext) {
       new Option(
         "--for <tools...>",
         "Coding tools to adapt it for (default: the ones this machine uses that it doesn't cover)",
-      ).choices(harnesses),
+      ).choices(hookHarnesses),
     )
     .description(
       "Print a prompt for an AI agent to adapt a Hook to coding tools it wasn't written for",
@@ -136,7 +136,7 @@ export function registerHooks(program: Command, context: CommandContext) {
     .action(
       async (
         name: string | undefined,
-        options: { origin?: string; for?: Harness[] },
+        options: { origin?: string; for?: HookHarness[] },
       ) => {
         const located = await locate(
           "hook",
