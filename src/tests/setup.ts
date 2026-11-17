@@ -20,9 +20,14 @@ process.env.HOME = defaultHome;
 process.env.USERPROFILE = defaultHome;
 
 // Sync refuses a relocated coding-tool config; the developer's own setting
-// must not decide whether a test passes.
+// must not decide whether a test passes. GitHub's runners set XDG_CONFIG_HOME.
 delete process.env.CLAUDE_CONFIG_DIR;
 delete process.env.CODEX_HOME;
+delete process.env.XDG_CONFIG_HOME;
+
+// CI turns every prompt off, so tests that pin `interactive: true` would fail
+// only on a CI runner. A test of noninteractive behavior sets it itself.
+delete process.env.CI;
 
 afterAll(() => {
   const written = existsSync(defaultHome) ? readdirSync(defaultHome) : [];
