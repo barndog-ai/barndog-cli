@@ -25,6 +25,7 @@ import { ApiError } from "@barndog-ai/api-contract";
 
 import { CliError, friendlyHint, friendlyMessage } from "../errors.js";
 import { assetKinds } from "../features/asset-kinds/index.js";
+import { DecisionRequiredError } from "./decision-error.js";
 
 /**
  * Abbreviates paths inside the current user's home with ~, preserving platform
@@ -307,6 +308,9 @@ export function renderJsonError(error: unknown): string {
       ...(fix ? { fix } : {}),
       ...(command ? { command } : {}),
       ...(error instanceof ApiError ? { status: error.status } : {}),
+      ...(error instanceof DecisionRequiredError
+        ? { decisions: error.decisions }
+        : {}),
     },
   });
 }

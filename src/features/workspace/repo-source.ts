@@ -238,7 +238,7 @@ const age = (fetchedAt: string | undefined) => {
   const hours = Math.round(minutes / MINUTES_PER_HOUR);
 
   return hours < AGE_IN_DAYS_THRESHOLD_HOURS
-    ? `${hours} hours`
+    ? `${hours} hour${hours === 1 ? "" : "s"}`
     : `${Math.round(hours / HOURS_PER_DAY)} days`;
 };
 

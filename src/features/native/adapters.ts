@@ -53,8 +53,12 @@ export async function runtimeRequirements(
       });
 
       const version = coerce(stdout);
-      if (!version || !satisfies(version, requirements.harnessVersion)) {
-        return `${harness} does not meet ${requirements.harnessVersion}`;
+      if (!version) {
+        return `Cannot verify ${harness} version: ${command} --version printed no version`;
+      }
+
+      if (!satisfies(version, requirements.harnessVersion)) {
+        return `${harness} ${version.version} does not meet ${requirements.harnessVersion}`;
       }
     } catch {
       return `Cannot verify ${harness} version`;

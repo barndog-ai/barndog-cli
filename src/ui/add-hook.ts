@@ -1,4 +1,4 @@
-/** `barndog hooks add`: brings one Hook from a repository into the local workspace. */
+/** `barndog hooks add`: brings Hooks from a repository into the local workspace. */
 import { GIT_MODE } from "../features/workspace/snapshot.js";
 import { basename } from "node:path";
 import { CliError } from "../errors.js";
@@ -25,9 +25,11 @@ import { bold, dim, ok, warn } from "./format.js";
 import { setYamlName, slugify } from "../shared/patterns.js";
 import { only } from "../shared/lookup.js";
 import {
+  assertDistinctNames,
   finish,
   folderLabel,
   notFound,
+  onlyChosen,
   type AddContext,
   type AddOptions,
   updateMode,
@@ -94,6 +96,51 @@ async function pickHookPlan(
   }
 
   return plan;
+}
+
+type HookPackage = Extract<HookCandidate, { type: "package" }>;
+
+/** The packaged Hooks to add: named by `--only`, all of them, or ticked in a picker. */
+async function choosePackages(
+  packages: HookPackage[],
+  url: string,
+  options: AddOptions,
+  context: AddContext,
+): Promise<HookPackage[]> {
+  let chosen = packages;
+  if (options.only?.length) {
+    chosen = onlyChosen(packages, options.only, { url, kind: "hook" });
+  } else if (packages.length > 1 && !options.all) {
+    if (!context.interactive) {
+      throw new CliError(
+        `${url} has ${packages.length} Hooks: ${packages.map((p) => p.name).join(", ")}.`,
+        `barndog hooks add ${url} --only <name>`,
+      );
+    }
+
+    const picked = await context.prompts.chooseMany(
+      "Which Hooks do you want?",
+      packages.map((p) => ({
+        name: `${p.name}  ${dim(folderLabel(p.root))}`,
+        value: p.root,
+        short: p.name,
+        description: `Description: ${p.description}`,
+      })),
+    );
+
+    chosen = packages.filter((p) => picked.includes(p.root));
+  }
+
+  if (!chosen.length) {
+    throw new CliError("No Hooks were chosen, so nothing was added.");
+  }
+
+  assertDistinctNames(chosen, { url, kind: "hook" });
+  if (options.as && chosen.length !== 1) {
+    throw new CliError("--as renames one Hook, so choose exactly one.");
+  }
+
+  return chosen;
 }
 
 /** Says which of this machine's coding tools a new Hook leaves out, with one prompt for all. */
@@ -166,63 +213,55 @@ export async function addHook(
         context.write(`${warn("!")} ${skip.path}: ${skip.reason}`);
       }
 
-      let [candidate] = candidates;
+      const packages = candidates.flatMap((c) =>
+        c.type === "package" ? [c] : [],
+      );
+
+      if (packages.length) {
+        const chosen = await choosePackages(packages, url, options, context);
+        const mode = await updateMode(options, context);
+        for (const candidate of chosen) {
+          const name = options.as ?? candidate.name;
+          const entries = candidate.entries.map((entry) =>
+            entry.path === "hook.yaml" && name !== candidate.name
+              ? {
+                  ...entry,
+                  data: Buffer.from(
+                    setYamlName(entry.data.toString("utf8"), name),
+                  ),
+                }
+              : entry,
+          );
+
+          const saved = await saveImported(
+            { kind: "hook", name, entries, mode, remote, root: candidate.root },
+            context.runtime,
+          );
+
+          context.write(`${ok("✔")} Added ${bold(name)}`);
+          await reportCoverage(name, saved.path, context);
+        }
+
+        return;
+      }
+
+      const [candidate] = candidates.flatMap((c) =>
+        c.type === "draft" ? [c] : [],
+      );
+
       if (!candidate) {
         throw notFound(remote, url, "Hook");
       }
 
-      const wanted = only(options.only ?? []);
-      if (candidates.length > 1) {
-        if (wanted) {
-          candidate = candidates.find((c) => c.name === wanted) ?? candidate;
-        } else if (!context.interactive) {
-          throw new CliError(
-            `${url} has several Hooks: ${candidates.map((c) => c.name).join(", ")}.`,
-            "barndog hooks add <url> --only <name>",
-          );
-        } else {
-          const picked = await context.prompts.chooseOne(
-            "Which Hook do you want?",
-            candidates.map((c, index) => ({
-              name:
-                c.type === "package"
-                  ? `${c.name}  ${dim(folderLabel(c.root))}`
-                  : c.name,
-              value: String(index),
-              ...(c.type === "package"
-                ? { description: `Description: ${c.description}` }
-                : {}),
-            })),
-          );
-
-          candidate = candidates[Number(picked)] ?? candidate;
-        }
+      // A draft is built from loose scripts and settings, so it has no name to choose by.
+      if (options.only?.length) {
+        throw new CliError(
+          `${url} has no packaged Hooks to choose from, only scripts and settings to build one from.`,
+          `barndog hooks add ${url}`,
+        );
       }
 
       const mode = await updateMode(options, context);
-      if (candidate.type === "package") {
-        const name = options.as ?? candidate.name;
-        const entries = candidate.entries.map((entry) =>
-          entry.path === "hook.yaml" && name !== candidate.name
-            ? {
-                ...entry,
-                data: Buffer.from(
-                  setYamlName(entry.data.toString("utf8"), name),
-                ),
-              }
-            : entry,
-        );
-
-        const saved = await saveImported(
-          { kind: "hook", name, entries, mode, remote, root: candidate.root },
-          context.runtime,
-        );
-
-        context.write(`${ok("✔")} Added ${bold(name)}`);
-        await reportCoverage(name, saved.path, context);
-
-        return;
-      }
 
       const modes = new Map(
         remote.snapshot.entries.map((e) => [e.path, e.mode]),

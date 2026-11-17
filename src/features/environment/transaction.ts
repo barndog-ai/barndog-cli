@@ -134,7 +134,7 @@ function validateWrites(writes: Write[], runtime: RuntimeContext) {
         (write.after !== null) !== (write.source !== null) ||
         (write.rename !== null && !NAME.test(write.rename))
       ) {
-        throw new Error("Invalid sync journal destination; refusing recovery");
+        throw new Error("A sync planned an invalid destination");
       }
 
       continue;
@@ -148,7 +148,7 @@ function validateWrites(writes: Write[], runtime: RuntimeContext) {
           ) ||
           [write.before, write.after].some((v) => v !== null && !isAbsolute(v))
     ) {
-      throw new Error("Invalid sync journal destination; refusing recovery");
+      throw new Error("A sync planned an invalid destination");
     }
   }
 }
@@ -287,6 +287,26 @@ async function apply(
 }
 
 /**
+ * The journal an interrupted sync left. One that doesn't parse or names a
+ * destination BarnDog never writes was changed by hand or damaged, so it is
+ * kept and nothing is applied.
+ */
+function readJournal(text: string, runtime: RuntimeContext) {
+  try {
+    const journal = journalSchema.parse(JSON.parse(text));
+    validateWrites(journal.writes, runtime);
+
+    return journal;
+  } catch (error) {
+    throw new CliError(
+      `${barndogPaths(runtime.home).pendingSync} is damaged, so BarnDog can't safely finish the interrupted sync.`,
+      "Move that file aside (keep it), check the files it lists, then run barndog sync",
+      { cause: error },
+    );
+  }
+}
+
+/**
  * Rolls forward an interrupted sync from ~/.barndog/pending-sync.json.
  * Rejects a cloud journal when its authenticated organization or developer
  * has changed.
@@ -301,7 +321,7 @@ async function recover(runtime: RuntimeContext) {
     return;
   }
 
-  const journal = journalSchema.parse(JSON.parse(text));
+  const journal = readJournal(text, runtime);
   if (journal.connection) {
     const actual = await connectionContext(journal.connection.server, runtime);
     if (
@@ -351,7 +371,10 @@ export async function transact(
     if (previous === null) {
       await writeAtomic(backup, config.before);
     } else if (previous !== config.before) {
-      throw new Error("Configuration migration backup was changed");
+      throw new CliError(
+        `${backup} was changed after BarnDog saved it, so ${barndogPaths(home).settings} was left as it is.`,
+        "Move that backup aside (keep it), then run the command again",
+      );
     }
   }
 

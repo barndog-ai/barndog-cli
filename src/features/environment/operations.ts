@@ -40,7 +40,7 @@ import {
   mergeLocalCatalog,
   withOverlay,
 } from "../workspace/overlay.js";
-import { CliError } from "../../errors.js";
+import { CliError, friendlyMessage } from "../../errors.js";
 import { originLabel } from "../server/origin.js";
 import { assetKinds } from "../asset-kinds/index.js";
 import { only } from "../../shared/lookup.js";
@@ -130,6 +130,43 @@ export type SetPreview = {
   selectedAssetIds: string[];
 };
 
+const decisionsSchema = z.array(
+  z
+    .object({
+      assetId: z.uuidv4(),
+      choice: z.enum(["preserve", "clear"]),
+    })
+    .strict(),
+);
+
+/** A `--decisions` file: `[{"assetId":"<uuid>","choice":"preserve"}]`. */
+async function readDecisions(file: string, runtime: RuntimeContext) {
+  const text = await readFile(localPath(file, runtime), "utf8");
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch (error) {
+    throw new CliError(`${file} isn't valid JSON.`, DECISIONS_FORMAT, {
+      cause: error,
+    });
+  }
+
+  const result = decisionsSchema.safeParse(value);
+  if (!result.success) {
+    throw new CliError(
+      `${file} isn't a decisions file: ${friendlyMessage(result.error)}.`,
+      DECISIONS_FORMAT,
+      { cause: result.error },
+    );
+  }
+
+  return result.data;
+}
+
+/** What a `--decisions` file holds, as the fix for one that doesn't. */
+const DECISIONS_FORMAT =
+  'Write a list such as [{"assetId": "<uuid>", "choice": "preserve"}], with "preserve" or "clear" for each asset';
+
 async function overrideResolution(
   options: Overrides,
   runtime: RuntimeContext,
@@ -137,20 +174,7 @@ async function overrideResolution(
   if (options.decisions) {
     return {
       type: "per-asset",
-      decisions: z
-        .array(
-          z
-            .object({
-              assetId: z.uuidv4(),
-              choice: z.enum(["preserve", "clear"]),
-            })
-            .strict(),
-        )
-        .parse(
-          JSON.parse(
-            await readFile(localPath(options.decisions, runtime), "utf8"),
-          ),
-        ),
+      decisions: await readDecisions(options.decisions, runtime),
     };
   }
 
@@ -400,10 +424,19 @@ export function changeAssets(
 }
 
 /** `reset`, or `as` set to the published name, drops the local name. */
-export function renameAsset(
+export async function renameAsset(
   target: AssetRename,
   runtime: RuntimeContext,
 ): Promise<Applied> {
+  if (!target.reset && target.as === undefined) {
+    const { command } = assetKinds[target.kind];
+
+    throw new CliError(
+      `Say what to rename ${target.name} to.`,
+      `barndog ${command} rename ${target.name} --as <new-name>, or --reset for its published name`,
+    );
+  }
+
   return withLockedWorkspace(runtime, async (workspace) => {
     const { settings, catalog, current } = workspace;
     const id = assetId(workspace, target, "rename");
@@ -553,12 +586,20 @@ export function installSetAssets(
     const scope = await findScope(workspace, options.origin);
     const available = scopeAssets(workspace, scope);
     const ids = z.array(z.uuidv4()).parse(options.assetIds);
-    if (
-      new Set(ids).size !== ids.length ||
-      ids.some((id) => !available.some((asset) => asset.id === id))
-    ) {
+    const repeated = ids.filter((id, index) => ids.indexOf(id) !== index);
+    if (repeated.length) {
       throw new CliError(
-        `Some chosen assets are listed twice or aren't in ${options.origin}.`,
+        `Each asset can be chosen once, but ${[...new Set(repeated)].join(", ")} is listed more than once.`,
+      );
+    }
+
+    const outside = ids.filter(
+      (id) => !available.some((asset) => asset.id === id),
+    );
+
+    if (outside.length) {
+      throw new CliError(
+        `${outside.join(", ")} isn't one of ${options.origin}'s assets.`,
         `barndog sets show ${options.origin}`,
       );
     }

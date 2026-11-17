@@ -1,3 +1,4 @@
+import { basename } from "node:path";
 import type { RuntimeContext } from "../../runtime.js";
 import {
   mcpSchema,
@@ -11,6 +12,7 @@ import {
   saveSettings,
   SetupRequiredError,
   type Connection,
+  type Settings,
 } from "../../config/settings.js";
 import { CliError } from "../../errors.js";
 import type { AssetReference } from "../asset-selection/types.js";
@@ -37,7 +39,7 @@ import type {
   WorkspaceModel,
 } from "../workspace/format.js";
 import { localOverlay } from "../workspace/overlay.js";
-import { PAGE_SIZE } from "../server/pages.js";
+import { allPages, PAGE_SIZE } from "../server/pages.js";
 import { defined } from "../../shared/lookup.js";
 
 /**
@@ -132,14 +134,18 @@ export const publishKnowledge = (
   );
 };
 
-/** Carries each choice over by scope and name, because cloud assigns new IDs. */
-function translateSelection(
-  state: SelectionState,
-  scopes: { local: RepoScope; cloud: ApiScope }[],
+/** Git scopes matched to the Cloud scopes with the same type and slug. */
+type ScopePairs = { local: RepoScope; cloud: ApiScope }[];
+
+/** The ID Cloud gave a Git workspace asset, matched by kind, name and scope. */
+type CloudId = (gitId: string) => string | undefined;
+
+function cloudIds(
+  scopes: ScopePairs,
   assets: readonly RepoAsset[],
   target: readonly AssetReference[],
-): SelectionState {
-  const assetId = (id: string) => {
+): CloudId {
+  return (id) => {
     const asset = assets.find((a) => a.id === id);
     const pair = asset && scopes.find((s) => s.local.id === asset.origin.id);
 
@@ -151,7 +157,73 @@ function translateSelection(
         t.origin.id === pair.cloud.id,
     )?.id;
   };
+}
 
+/**
+ * Moves local renames into `next`: each follows its asset to its Cloud ID, and
+ * a kept local folder's assets keep theirs. A rename whose asset is in neither
+ * is dropped, since nothing would carry that name.
+ */
+function carryNames(
+  next: Settings,
+  names: Readonly<Record<string, string>> = {},
+  cloudId: CloudId,
+  kept: WorkspaceModel | undefined,
+) {
+  const carried: Record<string, string> = Object.fromEntries(
+    Object.entries(names).flatMap(([id, name]) => {
+      if (kept?.assets.some((asset) => asset.id === id)) {
+        return [[id, name]];
+      }
+
+      const translated = cloudId(id);
+
+      return translated ? [[translated, name]] : [];
+    }),
+  );
+
+  delete next.localNames;
+  if (Object.keys(carried).length) {
+    next.localNames = carried;
+  }
+}
+
+/**
+ * Knowledge is organization-wide. A broken document blocks the move like a
+ * broken asset, so nothing is left behind.
+ */
+function planKnowledge(
+  model: WorkspaceModel,
+  existing: readonly { name: string }[],
+): { rows: MigrationRow[]; publish: RepoKnowledge[] } {
+  const rows: MigrationRow[] = model.invalidKnowledge.map((broken) => ({
+    kind: "knowledge",
+    name: basename(broken.path, ".md"),
+    origin: "org",
+    action: "invalid",
+    detail: `${broken.path}: ${broken.reason}`,
+  }));
+
+  const publish: RepoKnowledge[] = [];
+  for (const doc of model.knowledge) {
+    const base = { kind: "knowledge", name: doc.content.name, origin: "org" };
+    if (existing.some((d) => d.name === doc.content.name)) {
+      rows.push({ ...base, action: "exists" });
+    } else {
+      rows.push({ ...base, action: "publish" });
+      publish.push(doc);
+    }
+  }
+
+  return { rows, publish };
+}
+
+/** Carries each choice over by scope and name, because cloud assigns new IDs. */
+function translateSelection(
+  state: SelectionState,
+  scopes: ScopePairs,
+  assetId: CloudId,
+): SelectionState {
   const ids = (values: readonly string[]) =>
     values.flatMap((id) => assetId(id) ?? []);
 
@@ -265,14 +337,16 @@ export async function migrate(
     const cloudScopes = await scopes(conn, runtime);
 
     const { catalog: existing } = await environmentCatalog(runtime, conn);
-    const existingDocs = (
-      await parsed(
+    const existingDocs = await allPages(async (cursor) => {
+      const page = await parsed(
         knowledgeIndexSchema,
         apiClient(conn.server, runtime).GET("/v1/knowledge", {
-          params: { query: { limit: PAGE_SIZE } },
+          params: { query: { limit: PAGE_SIZE, cursor } },
         }),
-      )
-    ).documents;
+      );
+
+      return { items: page.documents, nextCursor: page.nextCursor };
+    });
 
     const pairs = model.scopes.flatMap((local) => {
       const cloud = cloudScopes.find((scope) => sameScope(scope, local));
@@ -323,14 +397,10 @@ export async function migrate(
       }
     }
 
-    for (const doc of model.knowledge) {
-      const base = { kind: "knowledge", name: doc.content.name, origin: "org" };
-      if (existingDocs.some((d) => d.name === doc.content.name)) {
-        rows.push({ ...base, action: "exists" });
-      } else {
-        rows.push({ ...base, action: "publish" });
-        pending.push(() => publishKnowledge(doc, conn, runtime));
-      }
+    const knowledge = planKnowledge(model, existingDocs);
+    rows.push(...knowledge.rows);
+    for (const doc of knowledge.publish) {
+      pending.push(() => publishKnowledge(doc, conn, runtime));
     }
 
     if (options.dryRun) {
@@ -353,6 +423,7 @@ export async function migrate(
     }
 
     const { catalog } = await environmentCatalog(runtime, conn);
+    const cloudId = cloudIds(pairs, model.assets, catalog.assets);
     const next = withSelection(
       {
         ...settings,
@@ -360,21 +431,19 @@ export async function migrate(
         gitWorkspace: undefined,
       },
       keepLocalChoices(
-        translateSelection(
-          selectionState(settings),
-          pairs,
-          model.assets,
-          catalog.assets,
-        ),
+        translateSelection(selectionState(settings), pairs, cloudId),
         selectionState(settings),
         kept,
       ),
     );
 
     delete next.gitWorkspace;
-    delete next.localNames;
+    carryNames(next, settings.localNames, cloudId, kept);
+
     await saveSettings(next, home);
-    await synchronize(undefined, runtime, next, { catalog });
+    // Not the Cloud catalog fetched above: a kept local folder's assets are
+    // selected too, and only the full source (Cloud plus that folder) has them.
+    await synchronize(undefined, runtime, next);
 
     return { server, dryRun: false, rows, migrated: true };
   });

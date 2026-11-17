@@ -13,13 +13,12 @@ export default defineConfig({
       exclude: ["src/tests/**"],
       reporter: ["text-summary", "text", "html"],
       // Just below the measured numbers so coverage can't drop. Raise them as
-      // gaps are filled. Code run only by the built CLI in child processes
-      // (such as src/cli.ts) isn't counted.
+      // gaps are filled. Code run only in child processes isn't counted.
       thresholds: {
-        statements: 82,
-        branches: 72,
-        functions: 85,
-        lines: 82,
+        statements: 94.1,
+        branches: 90,
+        functions: 94.7,
+        lines: 94.3,
       },
     },
   },

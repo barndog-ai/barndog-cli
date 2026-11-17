@@ -104,6 +104,7 @@ export async function validateFolder(
   if (model.problems.length) {
     throw new CliError(
       `${model.problems.length} problem${model.problems.length === 1 ? "" : "s"} found:\n${model.problems.map((problem) => `  ${problem.path}: ${problem.reason}`).join("\n")}`,
+      "Fix the files listed, then validate again",
     );
   }
 

@@ -1,5 +1,6 @@
 import type { RuntimeContext } from "../runtime.js";
 import { CliError } from "../errors.js";
+import { assetKinds } from "../features/asset-kinds/index.js";
 import { scopeExists } from "../features/imports/discover.js";
 import { type UpdateMode } from "../features/imports/local.js";
 import { type RemoteRepo } from "../features/imports/remote.js";
@@ -118,4 +119,60 @@ export function notFound(
   }
 
   return new CliError(`No valid ${kind} found in ${url}. ${expects}`);
+}
+
+/** What `--only` can name: an asset found in the source, by name or folder. */
+type Choosable = { name: string; root: string };
+
+/**
+ * The candidates `--only` names, by name or folder. A name that matches none
+ * stops the import with the names the source has, so a typo never adds the
+ * wrong asset or nothing.
+ */
+export function onlyChosen<T extends Choosable>(
+  candidates: readonly T[],
+  only: readonly string[],
+  source: { url: string; kind: "skill" | "hook" },
+): T[] {
+  const named = (candidate: T, wanted: string) =>
+    candidate.name === wanted || candidate.root === wanted;
+
+  const missing = only.filter(
+    (wanted) => !candidates.some((candidate) => named(candidate, wanted)),
+  );
+
+  if (missing.length) {
+    const { one, command } = assetKinds[source.kind];
+    const available = [...new Set(candidates.map((c) => c.name))];
+
+    throw new CliError(
+      `${source.url} has no ${one} named ${missing.join(", ")}. It has ${available.join(", ")}.`,
+      `barndog ${command} add ${source.url} --only <name>`,
+    );
+  }
+
+  return candidates.filter((candidate) =>
+    only.some((wanted) => named(candidate, wanted)),
+  );
+}
+
+/** Two chosen assets with one name would land in the same workspace folder. */
+export function assertDistinctNames(
+  chosen: readonly Choosable[],
+  source: { url: string; kind: "skill" | "hook" },
+) {
+  const clash = chosen.find(
+    (candidate, index) =>
+      chosen.findIndex((c) => c.name === candidate.name) !== index,
+  );
+
+  if (!clash) {
+    return;
+  }
+
+  const copies = chosen.filter((c) => c.name === clash.name);
+  throw new CliError(
+    `${clash.name} is in more than one folder: ${copies.map((c) => folderLabel(c.root)).join(", ")}. Choose one.`,
+    `barndog ${assetKinds[source.kind].command} add ${source.url} --only ${copies.find((c) => c.root)?.root ?? clash.name}`,
+  );
 }

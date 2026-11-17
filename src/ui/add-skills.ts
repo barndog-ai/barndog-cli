@@ -23,29 +23,15 @@ import { defined } from "../shared/lookup.js";
 import {
   finish,
   folderLabel,
+  assertDistinctNames,
   notFound,
+  onlyChosen,
   type AddContext,
   type AddOptions,
   updateMode,
 } from "./add-asset.js";
 
 /** Stops two copies of a Skill from claiming the same name, saying which folders hold them. */
-function assertDistinctNames(chosen: SkillCandidate[], url: string) {
-  const clash = chosen.find(
-    (skill, index) => chosen.findIndex((s) => s.name === skill.name) !== index,
-  );
-
-  if (!clash) {
-    return;
-  }
-
-  const copies = chosen.filter((s) => s.name === clash.name);
-  throw new CliError(
-    `${clash.name} is in more than one folder: ${copies.map((s) => folderLabel(s.root)).join(", ")}. Choose one.`,
-    `barndog skills add ${url} --only ${copies.find((s) => s.root)?.root ?? clash.name}`,
-  );
-}
-
 /** A plain folder is read in place; everything else is fetched with Git. */
 async function withSkillSource(
   source: string,
@@ -144,9 +130,7 @@ export async function addSkills(
     let chosen = skills;
     const { only } = options;
     if (only?.length) {
-      chosen = skills.filter(
-        (s) => only.includes(s.name) || only.includes(s.root),
-      );
+      chosen = onlyChosen(skills, only, { url, kind: "skill" });
     } else if (skills.length > 1 && !options.all) {
       if (!context.interactive) {
         throw new CliError(
@@ -172,7 +156,7 @@ export async function addSkills(
       throw new CliError("No Skills were chosen, so nothing was added.");
     }
 
-    assertDistinctNames(chosen, url);
+    assertDistinctNames(chosen, { url, kind: "skill" });
     if (options.as && chosen.length !== 1) {
       throw new CliError("--as renames one Skill, so choose exactly one.");
     }

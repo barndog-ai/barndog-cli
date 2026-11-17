@@ -1,11 +1,11 @@
-import { assertPackagePaths } from "../../platform.js";
+import { assertPackagePaths, removeCommand } from "../../platform.js";
 import { writePackage, readDirectory } from "../workspace/directory.js";
 import type { RuntimeContext } from "../../runtime.js";
 import { CliError, PackageError } from "../../errors.js";
 import { randomUUID, createHash } from "node:crypto";
 
 import { join, dirname, isAbsolute } from "node:path";
-import { readFile, readdir, realpath, rm, lstat } from "node:fs/promises";
+import { readdir, realpath, rm, lstat } from "node:fs/promises";
 import { z } from "zod";
 
 import { changeUploadSchema } from "@barndog-ai/api-contract";
@@ -172,6 +172,44 @@ export const readWorkingCopy = (
 ) => readDirectory(work.root, runtime, decodeFiles(work.base));
 
 /** A working copy's record, keyed by a hash of its folder's path. */
+/**
+ * The files a working copy held before an interrupted update. Without them
+ * BarnDog can't tell its own writes from the person's edits, so it touches
+ * nothing and says how to start over.
+ */
+async function recoverySnapshot(work: StoredRecord, runtime: RuntimeContext) {
+  const damaged = (reason: string, cause?: unknown) =>
+    new CliError(
+      `An update of ${work.root} was interrupted, and ${reason}, so BarnDog left the folder as it is.`,
+      "Save any edits in the folder elsewhere, then remove its working-copy record and pull it again",
+      {
+        cause,
+        command: removeCommand(
+          recordPath(work.root, runtime),
+          runtime.platform,
+        ),
+      },
+    );
+
+  const path = work.pendingSnapshot;
+  if (
+    !path?.startsWith(barndogPaths(runtime.home).workingCopySnapshots + "/")
+  ) {
+    throw damaged("its record doesn't point at a recovery snapshot");
+  }
+
+  const text = await readIfExists(path);
+  if (text === null) {
+    throw damaged(`its recovery snapshot ${path} is gone`);
+  }
+
+  try {
+    return z.object({ files: filesSchema }).parse(JSON.parse(text));
+  } catch (error) {
+    throw damaged(`its recovery snapshot ${path} is damaged`, error);
+  }
+}
+
 function recordPath(root: string, runtime: RuntimeContext) {
   const { home } = runtime;
 
@@ -246,9 +284,7 @@ async function findRecord<T extends StoredRecord>(
   runtime: RuntimeContext,
   parse: (value: unknown) => T,
 ): Promise<T> {
-  const { home, cwd } = runtime;
-
-  let path = await realpath(cwd);
+  let path = await realpath(runtime.cwd);
   while (true) {
     const text = await readIfExists(recordPath(path, runtime));
     if (text !== null) {
@@ -261,19 +297,7 @@ async function findRecord<T extends StoredRecord>(
       }
 
       if (work.pendingWrite) {
-        if (
-          !work.pendingSnapshot?.startsWith(
-            barndogPaths(home).workingCopySnapshots + "/",
-          )
-        ) {
-          throw new Error(
-            "An interrupted working-copy update has no recovery snapshot",
-          );
-        }
-
-        const snapshot = z
-          .object({ files: filesSchema })
-          .parse(JSON.parse(await readFile(work.pendingSnapshot, "utf8")));
+        const snapshot = await recoverySnapshot(work, runtime);
 
         const allowed = [
           ...decodeFiles(snapshot.files),

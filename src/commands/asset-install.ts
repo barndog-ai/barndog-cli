@@ -17,12 +17,14 @@ function localCandidates(
   items: readonly InventoryItem[],
   kind: AssetKind,
   action: AssetAction | "rename",
+  origin?: string,
 ) {
   return items.filter(
     (item) =>
       item.kind === kind &&
       !item.via.includes("config") &&
       item.origin !== "—" &&
+      (!origin || item.origin === origin.replace(":", "/")) &&
       (action !== "enable" || item.state === "disabled") &&
       (action !== "disable" || item.state !== "disabled"),
   );
@@ -167,6 +169,7 @@ export function registerToggles(
             (await context.inventory()).items,
             kind,
             action,
+            options.origin,
           );
 
           const chosen = await pickMany(
@@ -229,6 +232,7 @@ export function registerRename(
               (await context.inventory()).items,
               kind,
               "rename",
+              options.origin,
             ).map(localChoice),
             { empty: `No ${labels.many} to rename on this machine.` },
           );
@@ -265,7 +269,8 @@ export function registerRename(
           (entry) =>
             entry.kind === kind &&
             [entry.id, entry.name, entry.installedName].includes(renamed) &&
-            (!options.origin || entry.origin === options.origin),
+            (!options.origin ||
+              entry.origin === options.origin.replace(":", "/")),
         );
 
         if (item && !context.mode.json) {

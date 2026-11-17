@@ -233,7 +233,7 @@ for (const state of ["missing", "expired", "valid", "revoked"] as const) {
           { origin: "org", assetIds: [randomUUID()] },
           testRuntime(home),
         ),
-      ).rejects.toThrow(/listed twice or aren't in/);
+      ).rejects.toThrow(/ isn't one of org's assets\.$/);
 
       expect(await readFile(barndogPaths(home).settings, "utf8")).toBe(
         original,

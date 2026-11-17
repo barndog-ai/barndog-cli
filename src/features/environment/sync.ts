@@ -7,7 +7,7 @@ import {
   SetupRequiredError,
   type Settings,
 } from "../../config/settings.js";
-import { CliError } from "../../errors.js";
+import { CliError, friendlyMessage } from "../../errors.js";
 import { type ClashResolver } from "./names.js";
 import { selectionState, withSelection } from "../../config/environment.js";
 import type { SyncEvent } from "./events.js";
@@ -34,7 +34,7 @@ import {
 } from "./writes.js";
 import { fileText } from "../../shared/files.js";
 import type { AssetCatalog } from "../asset-selection/types.js";
-import { barndogPaths } from "../../config/paths.js";
+import { barndogPaths, localWorkspaceFiles } from "../../config/paths.js";
 
 /** Looks up installed names from state, for checks made outside a sync. */
 export async function installedNames(runtime: RuntimeContext) {
@@ -97,13 +97,16 @@ export async function synchronize(
     const { native: oldNative, installed: installedState } = before;
 
     let selection = selectionState(settings);
+    const local = settings.localWorkspace;
     const followNotices =
-      settings.localWorkspace && !options.dryRun
+      local && !options.dryRun
         ? await followImports(
-            settings.localWorkspace.path,
+            local.path,
             options.refresh ?? "always",
             runtime,
-          ).catch(() => [])
+          ).catch((error: unknown) => [
+            `Imported assets weren't checked for updates, because ${localWorkspaceFiles(local.path).sources} couldn't be read: ${friendlyMessage(error)}`,
+          ])
         : [];
 
     const source =

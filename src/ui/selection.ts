@@ -1,6 +1,6 @@
 import select from "@inquirer/select";
 import confirm from "@inquirer/confirm";
-import { CliError } from "../errors.js";
+import { DecisionRequiredError } from "./decision-error.js";
 import type { SelectionOutcome } from "../features/environment/operations.js";
 import type { OverrideResolution } from "../features/asset-selection/types.js";
 import { json } from "./format.js";
@@ -36,10 +36,7 @@ export async function runSelection(
     }
 
     if (context.mode?.json || !process.stdin.isTTY || !process.stdout.isTTY) {
-      throw new CliError(
-        "Existing exclusions or disable overrides need a decision.",
-        "add --overrides preserve, --overrides clear or --decisions <file>",
-      );
+      throw new DecisionRequiredError(result.conflicts);
     }
 
     const type = await select({

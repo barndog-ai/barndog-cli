@@ -46,11 +46,13 @@ export async function withPidLock<T>(
     try {
       process.kill(pid, 0);
     } catch (failure) {
+      // EPERM: the owner is alive but belongs to another user, so it still holds the lock.
       if (errorCode(failure) !== "ESRCH") {
-        throw failure;
+        throw new CliError(messages.running, undefined, { cause: failure });
       }
 
-      await rm(path, { recursive: true });
+      // Another process may have cleared the same stale lock first.
+      await rm(path, { recursive: true, force: true });
 
       return withPidLock(path, messages, run);
     }

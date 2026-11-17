@@ -74,6 +74,13 @@ export function parseMcpText(text: string, name?: string): ImportedServer[] {
     );
   }
 
+  if (name && servers.length > 1 && !servers.some(({ key }) => key === name)) {
+    throw new CliError(
+      `No MCP server named ${name} in that JSON. It has ${servers.map(({ key }) => key).join(", ")}.`,
+      "Run it again with one of those names",
+    );
+  }
+
   return servers
     .filter(({ key }) => !name || servers.length === 1 || key === name)
     .map(({ key, server }) => ({
@@ -173,6 +180,18 @@ function reference(
  * arguments and URLs are preserved, so the result is not guaranteed to be free
  * of secrets.
  */
+/** An HTTP server's address, as `url` or Gemini's `httpUrl`; a stdio server has none. */
+function serverUrl(name: string, server: RawServer): string | undefined {
+  const address = server.url ?? server.httpUrl;
+  if (address !== undefined && typeof address !== "string") {
+    throw new CliError(
+      `${name} can't be added: its url must be text, such as "https://example.com/mcp".`,
+    );
+  }
+
+  return address;
+}
+
 export function convertServer(
   { name, server }: ImportedServer,
   description?: string,
@@ -186,8 +205,7 @@ export function convertServer(
     );
   }
 
-  const address = server.url ?? server.httpUrl;
-  const url = typeof address === "string" ? address : undefined;
+  const url = serverUrl(name, server);
   const common = {
     description:
       description ??

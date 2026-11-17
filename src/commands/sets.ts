@@ -24,6 +24,39 @@ const setDescriptions = {
   disable: "Pause a subscription without removing it",
 };
 
+type Subscription = SetsList["subscriptions"][number];
+
+/** What the picker offers when a `sets` command is run without a scope. */
+const setPickers: Record<
+  keyof typeof setDescriptions,
+  {
+    message: string;
+    offers: (subscription: Subscription | undefined) => boolean;
+    empty: string;
+  }
+> = {
+  install: {
+    message: "Choose a scope to subscribe to",
+    offers: (subscription) => !subscription,
+    empty: "You're already subscribed to every scope.",
+  },
+  remove: {
+    message: "Choose a subscription to remove",
+    offers: (subscription) => Boolean(subscription),
+    empty: "You have no subscriptions yet.",
+  },
+  enable: {
+    message: "Choose a paused subscription to turn back on",
+    offers: (subscription) => subscription?.enabled === false,
+    empty: "None of your subscriptions are paused.",
+  },
+  disable: {
+    message: "Choose a subscription to pause",
+    offers: (subscription) => subscription?.enabled === true,
+    empty: "None of your subscriptions are active.",
+  },
+};
+
 /** Options of the `sets` subcommands, as Commander parses them. */
 type SetOptions = {
   origin?: string;
@@ -128,7 +161,7 @@ export function registerSets(program: Command, context: CommandContext) {
     message: string,
     filter: (
       scope: SetsList["available"][number],
-      subscribed: boolean,
+      subscription: SetsList["subscriptions"][number] | undefined,
     ) => boolean,
     empty: string,
   ) => {
@@ -140,7 +173,7 @@ export function registerSets(program: Command, context: CommandContext) {
         .filter((scope) =>
           filter(
             scope,
-            result.subscriptions.some(
+            result.subscriptions.find(
               (s) => s.scope.id === scope.id && s.scope.type === scope.type,
             ),
           ),
@@ -185,15 +218,8 @@ export function registerSets(program: Command, context: CommandContext) {
       let origin = scope ?? options.origin;
       if (!origin) {
         requireArguments(context, `barndog sets ${action} <scope>`);
-        origin = await chooseScope(
-          action === "install"
-            ? "Choose a scope to subscribe to"
-            : `Choose a subscription to ${action}`,
-          (_, subscribed) => (action === "install" ? !subscribed : subscribed),
-          action === "install"
-            ? "You're already subscribed to every scope."
-            : "You have no subscriptions yet.",
-        );
+        const { message, offers, empty } = setPickers[action];
+        origin = await chooseScope(message, (_, s) => offers(s), empty);
       }
 
       return action === "install"
@@ -236,8 +262,8 @@ export function registerSets(program: Command, context: CommandContext) {
 
           origin = await chooseScope(
             "Switch to",
-            (candidate, subscribed) =>
-              !subscribed &&
+            (candidate, subscription) =>
+              !subscription &&
               (candidate.type === "team" || candidate.type === "repo"),
             "There is no other team or repository to switch to.",
           );

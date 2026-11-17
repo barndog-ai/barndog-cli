@@ -40,7 +40,7 @@ import { cleanUpIfInterrupted } from "../features/environment/transaction.js";
 import { renderSyncOutput } from "./output.js";
 import checkbox from "@inquirer/checkbox";
 import confirm from "@inquirer/confirm";
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, readdirSync, rmSync } from "node:fs";
 import { basename } from "node:path";
 import { styleText } from "node:util";
 import type { DetectedHarness, Harness } from "../harnesses/registry.js";
@@ -129,6 +129,35 @@ async function chooseSource(
  * Runs setup prompts and connection preparation, saves settings and applies the
  * chosen environment when confirmed.
  */
+/** The bare clones `~/.barndog/git` holds, so setup can tell which one it made. */
+function gitClones(home: string) {
+  const folder = barndogPaths(home).git;
+
+  return new Set(existsSync(folder) ? readdirSync(folder) : []);
+}
+
+/**
+ * A clone made for this run shouldn't outlive a setup that didn't finish; one
+ * that was already there belongs to an earlier setup and stays.
+ */
+function cloneCleanup(
+  home: string,
+  before: ReadonlySet<string>,
+  workspaceId: string,
+): { discard?: () => void; keep: () => void } {
+  const paths = barndogPaths(home);
+  if (before.has(basename(paths.bareClone(workspaceId)))) {
+    return { keep: () => {} };
+  }
+
+  const discard = () => {
+    rmSync(paths.bareClone(workspaceId), { recursive: true, force: true });
+    rmSync(paths.fetchState(workspaceId), { force: true });
+  };
+
+  return { discard, keep: cleanUpIfInterrupted(discard) };
+}
+
 export async function runSetup(options: {
   restart?: boolean;
   server?: string;
@@ -227,6 +256,7 @@ export async function runSetup(options: {
   }
 
   if (choice.kind === "git") {
+    const clonesBefore = gitClones(home);
     const url = checkRepositoryUrl(
       await cloneOrigin(choice.url, options.runtime),
     );
@@ -280,18 +310,22 @@ export async function runSetup(options: {
       }
     }
 
-    workspace = {
-      kind: "git",
-      git:
-        cloned ??
-        (head
-          ? await connectGitWorkspace(url, head.branch, options.runtime)
-          : await createGitWorkspace(
-              url,
-              basename(url).replace(/\.git$/, "") || "Workspace",
-              options.runtime,
-            )),
-    };
+    const git =
+      cloned ??
+      (head
+        ? await connectGitWorkspace(url, head.branch, options.runtime)
+        : await createGitWorkspace(
+            url,
+            basename(url).replace(/\.git$/, "") || "Workspace",
+            options.runtime,
+          ));
+
+    workspace = { kind: "git", git };
+    ({ discard: discardWorkspace, keep: keepWorkspace } = cloneCleanup(
+      home,
+      clonesBefore,
+      git.workspaceId,
+    ));
 
     write(`${dim("Git repo")}  ${url}`);
     write(

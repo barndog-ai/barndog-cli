@@ -42,7 +42,8 @@ try {
       );
     }
   } else if (error instanceof Error && error.name === "ExitPromptError") {
-    console.log("Cancelled. Nothing was changed.");
+    const message = "Cancelled. Nothing was changed.";
+    console.log(asJson ? json({ message }) : message);
     process.exitCode = 130;
   } else if (error instanceof NothingToDoError) {
     console.log(asJson ? json({ message: error.message }) : error.message);

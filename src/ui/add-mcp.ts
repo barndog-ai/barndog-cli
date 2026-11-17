@@ -35,10 +35,13 @@ async function serversToAdd(
     );
 
     const matching = name ? all.filter((s) => s.name === name) : all;
+    const listed = (servers: typeof all) =>
+      servers.map((s) => `${s.name} (${s.label})`).join(", ");
+
     if (!matching.length) {
       throw new CliError(
-        name
-          ? `No MCP server named ${name} in your coding tools.`
+        name && all.length
+          ? `No MCP server named ${name} in your coding tools. They have ${listed(all)}.`
           : "No MCP servers found in your coding tools that BarnDog doesn't already manage.",
       );
     }
@@ -49,7 +52,9 @@ async function serversToAdd(
 
     if (!context.interactive) {
       throw new CliError(
-        `Several servers match: ${matching.map((s) => `${s.name} (${s.label})`).join(", ")}.`,
+        matching.length === 1
+          ? `Name the MCP server to add: ${listed(matching)}.`
+          : `Several servers match: ${listed(matching)}.`,
         "barndog mcp add <name> --from <harness>",
       );
     }

@@ -93,9 +93,8 @@ function registerGeneral(program: Command, context: CommandContext) {
     )
     .action(async () => {
       const result = await context.repoStatus();
-      const sets = result.repository
-        ? await context.listSets().catch(() => undefined)
-        : undefined;
+      // A failed lookup is reported, never shown as "Subscribed: no".
+      const sets = result.repository ? await context.listSets() : undefined;
 
       if (context.mode.json) {
         return context.write(json(result));

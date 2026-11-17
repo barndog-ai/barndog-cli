@@ -75,11 +75,12 @@ export function registerAdd(program: Command, context: CommandContext) {
   group("hooks")
     .command("add <url>")
     .description(
-      "Add a Hook from a repository, for the coding tools it was written for",
+      "Add Hooks from a repository, for the coding tools they were written for",
     )
     .addOption(updates())
-    .option("--as <name>", "Add it under a different name")
-    .option("--only <names...>", "Choose a Hook by name")
+    .option("--as <name>", "Add one Hook under a different name")
+    .option("--only <names...>", "Choose Hooks by name or folder")
+    .option("--all", "Add every Hook in the repository")
     .option("--description <text>", "What the Hook does")
     .action((url: string, options: AddOptions) =>
       reporting((context) => addHook(url, options, context)),
