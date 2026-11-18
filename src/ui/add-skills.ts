@@ -34,18 +34,18 @@ import {
 /** Stops two copies of a Skill from claiming the same name, saying which folders hold them. */
 /** A plain folder is read in place; everything else is fetched with Git. */
 async function withSkillSource(
-  source: string,
-  folder: string | null,
+  source: { location: string; folder: string | null; interactive: boolean },
   runtime: RuntimeContext,
   use: (remote: RemoteRepo) => Promise<void>,
 ) {
-  if (folder) {
-    return use(await readFolder(folder, runtime));
+  if (source.folder) {
+    return use(await readFolder(source.folder, runtime));
   }
 
+  // Git may ask for credentials only when someone is there to answer.
   return fetchRemote(
-    parseLocation(source),
-    { allowPrompt: true },
+    parseLocation(source.location),
+    { allowPrompt: source.interactive },
     use,
     runtime,
   );
@@ -111,7 +111,8 @@ export async function addSkills(
   assertSourceExists(url, context.runtime);
   const folder = await plainFolder(url, context.runtime);
   assertFolderOptions(options, folder);
-  await withSkillSource(url, folder, context.runtime, async (remote) => {
+  const source = { location: url, folder, interactive: context.interactive };
+  await withSkillSource(source, context.runtime, async (remote) => {
     const { skills, skipped } = discoverSkills(remote);
     for (const skip of skipped) {
       context.write(`${warn("!")} ${skip.path}: ${skip.reason}`);

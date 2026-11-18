@@ -8,6 +8,8 @@ import {
   unsetCommand,
   removeCommand,
   fixSteps,
+  gitAccessCommand,
+  shellWord,
 } from "../platform.js";
 import { testRuntime } from "./runtime.js";
 
@@ -68,6 +70,14 @@ test("Windows runtime falls back to Git Bash and preserves unexpected probe fail
     await bashShell({ ...runtime, env: { PATH: "C:\\bin" } }),
   ).toMatchObject({ command: expect.stringContaining("bash.com") });
 
+  // System32's bash.exe starts WSL, not a Bash hooks can run in.
+  await expect(
+    bashShell({
+      ...runtime,
+      env: { PATH: "C:\\Windows\\System32", SystemRoot: "C:\\WINDOWS" },
+    }),
+  ).rejects.toThrow(/isn't installed/);
+
   const failure = Object.assign(new Error("disk"), { code: "EIO" });
   vi.mocked(stat).mockRejectedValue(failure);
   await expect(runtimeExecutable("bash", runtime)).rejects.toBe(failure);
@@ -83,5 +93,16 @@ test("Windows runtime falls back to Git Bash and preserves unexpected probe fail
 
   expect(unsetCommand("TOKEN", "win32")).toContain("Remove-Item Env:TOKEN");
   expect(removeCommand("C:\\file", "win32")).toContain("Remove-Item");
-  expect(fixSteps(["one", "two"], "win32")).toBe("one; two");
+  expect(fixSteps(["one", "two"], "win32")).toBe("one; if ($?) { two }");
+  expect(fixSteps(["one", "two", "three"], "win32")).toBe(
+    "one; if ($?) { two; if ($?) { three } }",
+  );
+
+  expect(fixSteps(["one", "two"], "darwin")).toBe("one && two");
+  expect(shellWord("plain-word", "darwin")).toBe("plain-word");
+  expect(shellWord("it's here", "darwin")).toBe("'it'\\''s here'");
+  expect(shellWord("it's here", "win32")).toBe("'it''s here'");
+  expect(gitAccessCommand("https://host/a b.git", "linux")).toBe(
+    "git ls-remote 'https://host/a b.git'",
+  );
 });

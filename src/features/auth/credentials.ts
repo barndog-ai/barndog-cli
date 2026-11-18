@@ -8,13 +8,13 @@ import type { RuntimeContext } from "../../runtime.js";
 import { posixQuote } from "../../shared/shell.js";
 import { POSIX_MODE } from "../../shared/constants.js";
 
-import { chmod, lstat, mkdir, readFile, rm } from "node:fs/promises";
+import { chmod, lstat, mkdir, readFile } from "node:fs/promises";
 import { contextSchema } from "@barndog-ai/api-contract";
 import { z } from "zod";
-import { errorCode } from "../../shared/values.js";
 import { ifExists, writeAtomic } from "../../shared/files.js";
 import { CliError } from "../../errors.js";
 import { barndogPaths } from "../../config/paths.js";
+import { withPidLock } from "../../shared/lock.js";
 
 /**
  * A BarnDog session token: 32 random bytes in unpadded base64url, 43 characters.
@@ -125,29 +125,23 @@ export async function updateCredentials(
 
   await chmod(root, POSIX_MODE.privateDirectory);
   await protectPrivate(root, runtime);
-  const lock = barndogPaths(home).credentialsLock;
-  await mkdir(lock, { mode: POSIX_MODE.privateDirectory }).catch(
-    (error: unknown) => {
-      if (errorCode(error) === "EEXIST") {
-        throw new CliError(
-          "Another sign-in or sign-out is running. Wait for it to finish, then try again.",
-        );
-      }
+  await withPidLock(
+    barndogPaths(home).credentialsLock,
+    {
+      starting:
+        "Another sign-in or sign-out is starting. Wait for it to finish, then try again.",
+      running:
+        "Another sign-in or sign-out is running. Wait for it to finish, then try again.",
+    },
+    async () => {
+      const credentials = await readCredentials(runtime);
+      update(credentials);
+      await writeAtomic(
+        barndogPaths(home).credentials,
+        JSON.stringify(credentials, null, 2) + "\n",
+      );
 
-      throw error;
+      await protectPrivate(barndogPaths(home).credentials, runtime);
     },
   );
-
-  try {
-    const credentials = await readCredentials(runtime);
-    update(credentials);
-    await writeAtomic(
-      barndogPaths(home).credentials,
-      JSON.stringify(credentials, null, 2) + "\n",
-    );
-
-    await protectPrivate(barndogPaths(home).credentials, runtime);
-  } finally {
-    await rm(lock, { recursive: true });
-  }
 }

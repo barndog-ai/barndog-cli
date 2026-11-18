@@ -12,6 +12,7 @@ import type {
 import { runSelection, type SelectionContext } from "./selection.js";
 import { checkboxTheme, promptTheme } from "./theme.js";
 import type { ListAsset } from "./asset-list.js";
+import { interactiveTerminal } from "./pick.js";
 
 type InstallMode = "recommended" | "all" | "custom";
 
@@ -48,7 +49,9 @@ export async function runSetInstall(
   }
 
   if (!(
-    prompts.interactive ?? Boolean(process.stdin.isTTY && process.stdout.isTTY)
+    prompts.interactive ??
+    context.mode?.interactive ??
+    interactiveTerminal()
   )) {
     throw new CliError(
       "Choose which assets to include with --mode, or run this in a terminal to pick.",

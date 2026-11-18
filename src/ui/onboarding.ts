@@ -27,10 +27,11 @@ import {
   inspectRepository,
   localWorkspace,
 } from "../features/workspace/setup.js";
-import { CliError } from "../errors.js";
+import { CliError, friendlyMessage } from "../errors.js";
 import { selectionState } from "../config/environment.js";
 import { LoginRequiredError } from "../features/auth/transport.js";
 import { runLogin } from "./auth.js";
+import { interactiveTerminal } from "./pick.js";
 import type {
   ChooseEnvironment,
   EnvironmentChoices,
@@ -55,7 +56,15 @@ import {
   type HarnessChoice,
 } from "../features/onboarding/setup.js";
 import { checkboxTheme, promptTheme, selected } from "./theme.js";
-import { bold, dim, fields, heading, originLabel, table } from "./format.js";
+import {
+  bold,
+  dim,
+  fields,
+  heading,
+  originLabel,
+  table,
+  warn,
+} from "./format.js";
 import { barndogPaths } from "../config/paths.js";
 
 /** Asks which coding tools to manage; tests pass their own answer. */
@@ -183,6 +192,16 @@ export async function runSetup(options: {
   const { runtime } = options;
   const { home } = runtime;
   const write = options.write ?? console.log;
+  // Checked first, so a wrong command line fails before any question.
+  if (
+    [options.local, options.server, options.repo].filter(Boolean).length > 1
+  ) {
+    throw new CliError(
+      "--local, --repo and --server can't be combined. Choose one.",
+      "barndog init --help",
+    );
+  }
+
   const previous = await readSettings(home);
   if (previous) {
     write(`Configuration already exists at ${barndogPaths(home).settings}.`);
@@ -194,8 +213,7 @@ export async function runSetup(options: {
     }
   }
 
-  const interactive =
-    options.interactive ?? Boolean(process.stdin.isTTY && process.stdout.isTTY);
+  const interactive = options.interactive ?? interactiveTerminal();
 
   if (!interactive) {
     throw new CliError(
@@ -224,14 +242,6 @@ export async function runSetup(options: {
   }
 
   write(`\n${heading("setup")}\n`);
-  if (
-    [options.local, options.server, options.repo].filter(Boolean).length > 1
-  ) {
-    throw new CliError(
-      "--local, --repo and --server can't be combined. Choose one.",
-      "barndog init --help",
-    );
-  }
 
   const choice: SetupChoice =
     flagChoice(options) ??
@@ -354,7 +364,13 @@ export async function runSetup(options: {
       }
 
       await runLogin(
-        { server, browser: options.browser !== false, runtime, force: true },
+        {
+          server,
+          browser: options.browser !== false,
+          runtime,
+          force: true,
+          interactive,
+        },
         write,
       );
 
@@ -373,7 +389,14 @@ export async function runSetup(options: {
     ? await localRepoSource(keptFolder, options.runtime)
         .model()
         .then((model) => model.assets.length + model.knowledge.length)
-        .catch(() => 0)
+        .catch((error: unknown) => {
+          // Setup goes on and leaves the folder as it is, but says why it didn't ask.
+          write(
+            `${warn("!")} Couldn't read the local workspace at ${keptFolder.path}, so it stays as it is: ${friendlyMessage(error)}`,
+          );
+
+          return 0;
+        })
     : 0;
 
   const localChoice: LocalAssetChoice = localCount

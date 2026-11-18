@@ -13,7 +13,11 @@ import {
   updateCredentials,
 } from "../features/auth/credentials.js";
 import { login, logout, authStatus } from "../features/auth/session.js";
-import { normalizeServer, serverFetch } from "../features/auth/transport.js";
+import {
+  LoginRequiredError,
+  normalizeServer,
+  serverFetch,
+} from "../features/auth/transport.js";
 import { saveSettings } from "../config/settings.js";
 import { createProgram } from "../program.js";
 
@@ -187,6 +191,23 @@ test("browser verification, pending polling, private credential storage, status 
   );
 });
 
+test("a saved server that isn't an address says so instead of asking to sign in", async (t) => {
+  const f = await fixture(t);
+  await updateCredentials(testRuntime(f.home), (value) => {
+    value.selectedServer = "not a server";
+  });
+
+  const failure = await authStatus(testRuntime(f.home)).catch(
+    (error: unknown) => error,
+  );
+
+  expect(failure).not.toBeInstanceOf(LoginRequiredError);
+  expect(failure).toMatchObject({
+    message:
+      "not a server isn't a server address. Use one like https://barndog.dev.",
+  });
+});
+
 test("API selections prevent account switches without changing saved credentials", async (t) => {
   const f = await fixture(t);
   await updateCredentials(testRuntime(f.home), (value) => {
@@ -233,6 +254,14 @@ test("authenticated transport rejects insecure origins, redirects, cross-server 
   expect(() => normalizeServer("http://example.com")).toThrow(/must use https/);
   expect(() => normalizeServer("https://example.com/path")).toThrow(
     /isn't a server address/,
+  );
+
+  // Not a URL at all: the same CliError, not Node's bare "Invalid URL".
+  expect(() => normalizeServer("foo")).toThrow(
+    expect.objectContaining({
+      name: "CliError",
+      message: expect.stringMatching(/foo isn't a server address/),
+    }),
   );
 
   for (const origin of [

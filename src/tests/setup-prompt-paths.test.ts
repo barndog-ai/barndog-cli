@@ -617,3 +617,22 @@ for (const choice of ["keep", "move", "leave"] as const) {
     }
   });
 }
+
+test("conflicting source flags fail before setup asks anything", async (t) => {
+  const server = await cloud(t);
+  const confirmRestart = vi.fn(async () => true);
+
+  await expect(
+    runSetup({
+      runtime: testRuntime(server.home),
+      restart: true,
+      interactive: true,
+      local: true,
+      server: "https://barndog.example",
+      confirmRestart,
+      write: vi.fn(),
+    }),
+  ).rejects.toThrow("--local, --repo and --server can't be combined");
+
+  expect(confirmRestart).not.toHaveBeenCalled();
+});

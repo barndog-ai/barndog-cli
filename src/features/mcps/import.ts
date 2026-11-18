@@ -1,7 +1,8 @@
 import type { RuntimeContext } from "../../runtime.js";
 import { POSIX_MODE } from "../../shared/constants.js";
 import { readState } from "../../config/state.js";
-import { mkdir, readFile } from "node:fs/promises";
+import { lstat, mkdir, readFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { basename, join } from "node:path";
 
 import {
@@ -21,7 +22,7 @@ import {
   nativeFile,
 } from "../../harnesses/registry.js";
 import { locked } from "../environment/transaction.js";
-import { fileText, writeAtomic } from "../../shared/files.js";
+import { fileText, ifExists, writeAtomic } from "../../shared/files.js";
 import { synchronize } from "../environment/sync.js";
 import { patchNative } from "../native/configuration.js";
 import { NAME_RULE } from "../workspace/format.js";
@@ -30,6 +31,9 @@ import { LOCAL_ORIGIN } from "../workspace/overlay.js";
 import { ensureLocalWorkspace } from "../imports/local.js";
 import { asRecord, asStrings, isRecord } from "../../shared/values.js";
 import { barndogPaths } from "../../config/paths.js";
+
+/** Random characters that keep two backups of one file taken in the same millisecond apart. */
+const BACKUP_SUFFIX_LENGTH = 8;
 
 /**
  * An MCP server entry as a harness or pasted JSON spells it, before conversion.
@@ -388,10 +392,21 @@ export async function harnessServers(
   const codexFile = nativeFile("codex", "mcp", home);
   const codex = await fileText(codexFile).catch(() => null);
   if (codex) {
+    let settings;
+    try {
+      settings = parseToml(codex);
+    } catch (error) {
+      throw new CliError(
+        `${codexFile} isn't valid TOML, so BarnDog can't read the MCP servers in it.`,
+        `Fix ${codexFile}, then try again`,
+        { cause: error },
+      );
+    }
+
     add(
       "codex",
       { label: adapters.codex.name, file: codexFile },
-      parseToml(codex).mcp_servers,
+      settings.mcp_servers,
     );
   }
 
@@ -464,7 +479,7 @@ export async function addMcpServers(
     const workspace = await ensureLocalWorkspace(runtime);
     for (const { name } of servers) {
       const target = join(workspace.path, "org/mcp", `${name}.yaml`);
-      if (await fileText(target).catch(() => null)) {
+      if ((await ifExists(lstat(target))) !== null) {
         throw new CliError(
           `A local MCP server named ${name} already exists.`,
           `barndog mcp add ${name}-2 --file <path>`,
@@ -480,17 +495,24 @@ export async function addMcpServers(
       }
     }
 
+    // One backup per settings file, taken before its first change, so a file
+    // that holds several of the servers is backed up as the user left it.
+    const backedUp = new Set<string>();
     const backups: string[] = [];
     for (const { name, definition } of servers) {
       for (const conflict of await conflictingEntries(name, runtime)) {
         const text = await readFile(conflict.file, "utf8");
-        const backup = join(
-          barndogPaths(home).migrations,
-          `${basename(conflict.file)}-${Date.now()}.bak`,
-        );
+        if (!backedUp.has(conflict.file)) {
+          const backup = join(
+            barndogPaths(home).migrations,
+            `${basename(conflict.file)}-${Date.now()}-${randomUUID().slice(0, BACKUP_SUFFIX_LENGTH)}.bak`,
+          );
 
-        await writeAtomic(backup, text);
-        backups.push(backup);
+          await writeAtomic(backup, text);
+          backedUp.add(conflict.file);
+          backups.push(backup);
+        }
+
         await writeAtomic(
           conflict.file,
           patchNative(

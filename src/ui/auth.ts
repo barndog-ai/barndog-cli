@@ -11,6 +11,7 @@ import { readCredentials } from "../features/auth/credentials.js";
 import { LoginRequiredError } from "../features/auth/transport.js";
 import { CliError } from "../errors.js";
 import { promptServer } from "./connection.js";
+import { interactiveTerminal } from "./pick.js";
 import {
   bad,
   bold,
@@ -51,13 +52,15 @@ export async function runLogin(
     browser: boolean;
     runtime: RuntimeContext;
     force?: boolean;
+    /** Whether a missing server may be asked for; false under `--no-interactive` or `CI`. */
+    interactive?: boolean;
   },
   write: (message: string) => void,
 ) {
   const server =
     options.server ??
     (await configuredServer(options.runtime)) ??
-    (process.stdin.isTTY && process.stdout.isTTY
+    ((options.interactive ?? interactiveTerminal())
       ? await promptServer()
       : undefined);
 

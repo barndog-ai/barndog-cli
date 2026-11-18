@@ -49,7 +49,9 @@ test("Windows: Cursor gets a PowerShell line", () => {
 
   expect(
     programLine("cursor", ["C:\\Program Files\\node.exe", "x.js"], "win32"),
-  ).toBe("& 'C:\\Program Files\\node.exe' 'x.js'; exit $LASTEXITCODE");
+  ).toBe(
+    "& 'C:\\Program Files\\node.exe' 'x.js'; if ($null -eq $LASTEXITCODE) { exit 1 }; exit $LASTEXITCODE",
+  );
 });
 
 test("Windows: Codex gets a readable PowerShell line, like Cursor", () => {

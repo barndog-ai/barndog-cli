@@ -120,12 +120,20 @@ function renderConfig(config: Pick<WorkspaceConfig, "workspaceId" | "name">) {
   });
 }
 
-/**
- * Parses barndog.yaml and reports schema-invalid fields in a CliError.
- * Malformed YAML can throw a parser error before schema validation.
- */
+/** Parses barndog.yaml; malformed YAML and invalid fields are a CliError. */
 export function parseConfig(text: string): WorkspaceConfig {
-  const parsed = configSchema.safeParse(parse(text));
+  let value: unknown;
+  try {
+    value = parse(text);
+  } catch (error) {
+    throw new CliError(
+      `${CONFIG_FILE} isn't valid YAML: ${friendlyMessage(error)}`,
+      `Fix the YAML in ${CONFIG_FILE}, then try again`,
+      { cause: error },
+    );
+  }
+
+  const parsed = configSchema.safeParse(value);
   if (!parsed.success) {
     throw new CliError(
       `${CONFIG_FILE} is invalid: ${parsed.error.issues.map((issue) => `${issue.path.join(".") || "file"}: ${issue.message}`).join("; ")}`,

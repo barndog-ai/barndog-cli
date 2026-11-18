@@ -94,6 +94,34 @@ for (const harness of ["claude", "codex"] as const) {
     );
   });
 
+  test(`${harness} sign-in after a rename names the server as installed, not as published`, async (t) => {
+    const server = await oauthWorkspace(t, harness);
+    await server.run(["mcp", "install", "release-notes", "--origin", "org"]);
+    await server.run([
+      "mcp",
+      "rename",
+      "release-notes",
+      "--origin",
+      "org",
+      "--as",
+      "notes",
+    ]);
+
+    loginProcess((child) => child.emit("exit", 0));
+
+    await authenticateMcp(
+      "release-notes",
+      "org",
+      harness,
+      testRuntime(server.home),
+    );
+
+    expect(vi.mocked(crossSpawn).mock.calls[0]?.[1]).toEqual([
+      ...command.slice(1),
+      "notes",
+    ]);
+  });
+
   test(`${harness} login that exits with code 2 tells the user to rerun it`, async (t) => {
     const server = await oauthWorkspace(t, harness);
     await server.run(["mcp", "install", "release-notes", "--origin", "org"]);

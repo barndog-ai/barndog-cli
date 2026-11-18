@@ -17,11 +17,14 @@ export type Check = {
   status: "ok" | "warn" | "fail";
   detail: string;
   fix?: string;
+  /** A command that deletes or changes something; `fix` says it in words. */
+  command?: string;
 };
 
 const failure = (error: unknown) => ({
   detail: error instanceof Error ? error.message : String(error),
   fix: error instanceof CliError ? error.hint : undefined,
+  command: error instanceof CliError ? error.command : undefined,
 });
 
 async function gitChecks(workspace: GitWorkspace, runtime: RuntimeContext) {
@@ -35,10 +38,9 @@ async function gitChecks(workspace: GitWorkspace, runtime: RuntimeContext) {
     });
   } catch (error) {
     checks.push({ name: "Git access", status: "fail", ...failure(error) });
-
-    return checks;
   }
 
+  // Read locally, so it still helps when the remote can't be reached.
   const state = await readFetchState(workspace.workspaceId, runtime);
   checks.push({
     name: "Last fetch",
@@ -48,6 +50,10 @@ async function gitChecks(workspace: GitWorkspace, runtime: RuntimeContext) {
       : "Never fetched.",
     fix: state.fetchedAt ? undefined : "barndog sync",
   });
+
+  if (checks.some((check) => check.status === "fail")) {
+    return checks;
+  }
 
   const protectedBranch = await branchProtected(
     workspace.url,
@@ -69,7 +75,10 @@ async function gitChecks(workspace: GitWorkspace, runtime: RuntimeContext) {
   return checks;
 }
 
-/** Every check runs; one failure never hides the others. */
+/**
+ * Runs every check that can run: a failure hides only the checks that need
+ * what failed (a readable configuration, a session).
+ */
 export async function doctor(runtime: RuntimeContext): Promise<Check[]> {
   const { home } = runtime;
 

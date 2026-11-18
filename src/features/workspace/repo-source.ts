@@ -1,3 +1,4 @@
+import { gitAccessCommand } from "../../platform.js";
 import type { RuntimeContext } from "../../runtime.js";
 import {
   POSIX_MODE,
@@ -286,7 +287,7 @@ export function gitRepoSource(
       if (!state.accepted) {
         throw new CliError(
           `Can't fetch ${workspace.url}: ${gitReason(error.stderr)}. Make sure you can clone it on this machine; BarnDog manages it from there.`,
-          `git clone ${workspace.url}`,
+          gitAccessCommand(workspace.url, runtime.platform),
           { cause: error },
         );
       }

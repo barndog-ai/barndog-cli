@@ -34,7 +34,7 @@ test("asset browsing bounds output, sorts before paging, and combines origin and
   const rendered = renderCatalog(
     rows,
     options,
-    "barndog skills search",
+    { command: "barndog skills search", platform: "linux" },
     new Set(),
   ).join("\n");
 
@@ -64,7 +64,12 @@ test("a truncated cell keeps its styling", () => {
 test("the version column only appears when something has a version number", () => {
   const options = { page: 1, limit: 20 };
   const render = (list: CatalogAsset[]) =>
-    renderCatalog(list, options, "barndog skills search", new Set()).join("\n");
+    renderCatalog(
+      list,
+      options,
+      { command: "barndog skills search", platform: "linux" },
+      new Set(),
+    ).join("\n");
 
   const hashed = {
     ...rows[0]!,
@@ -84,7 +89,7 @@ test("list output escapes terminal control sequences and reports empty pages cle
   const text = renderCatalog(
     [{ ...rows[0]!, name: "evil\u001b[31m" }],
     { page: 1, limit: 20 },
-    "barndog skills search",
+    { command: "barndog skills search", platform: "linux" },
     new Set(),
   ).join("\n");
 
@@ -93,7 +98,7 @@ test("list output escapes terminal control sequences and reports empty pages cle
     renderCatalog(
       rows,
       { page: 9, limit: 20 },
-      "barndog skills search",
+      { command: "barndog skills search", platform: "linux" },
       new Set(),
     )[0]!,
   ).toMatch(/Page 9 is empty/);
@@ -208,6 +213,9 @@ test("list shows installed, then disabled, then available, and filters each", as
   expect(partial.text).toMatch(/Couldn't load available Skills: server down/);
   expect(partial.text).toMatch(/on .*installed/);
   await expect(run(["--available"], failing)).rejects.toThrow(/server down/);
+  // JSON can't say the list is partial, so it fails rather than drop the catalog.
+  await expect(run(["--json"], failing)).rejects.toThrow(/server down/);
+  expect((await run(["--json", "--installed"], failing)).text).toMatch(/"on"/);
 });
 
 test("search flags parse for every asset type and invalid pages fail before loading", async () => {

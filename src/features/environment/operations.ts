@@ -1,6 +1,5 @@
 import { localPath } from "../../platform.js";
 import type { RuntimeContext } from "../../runtime.js";
-import { readFile } from "node:fs/promises";
 import { z } from "zod";
 import {
   readSettings,
@@ -41,6 +40,7 @@ import {
   withOverlay,
 } from "../workspace/overlay.js";
 import { CliError, friendlyMessage } from "../../errors.js";
+import { inputFile } from "../../shared/files.js";
 import { originLabel } from "../server/origin.js";
 import { assetKinds } from "../asset-kinds/index.js";
 import { only } from "../../shared/lookup.js";
@@ -141,7 +141,7 @@ const decisionsSchema = z.array(
 
 /** A `--decisions` file: `[{"assetId":"<uuid>","choice":"preserve"}]`. */
 async function readDecisions(file: string, runtime: RuntimeContext) {
-  const text = await readFile(localPath(file, runtime), "utf8");
+  const text = (await inputFile(localPath(file, runtime))).toString("utf8");
   let value: unknown;
   try {
     value = JSON.parse(text);
@@ -244,7 +244,7 @@ async function workspaceAccess(settings: Settings, runtime: RuntimeContext) {
   };
 }
 
-async function readRequiredSettings(runtime: RuntimeContext) {
+export async function readRequiredSettings(runtime: RuntimeContext) {
   const { home } = runtime;
 
   const settings = await readSettings(home);
@@ -357,7 +357,7 @@ function assetId(
   if (!id && first && matches.length > 1) {
     throw new CliError(
       `${target.name} exists in several scopes: ${matches.map((a) => originLabel(a.origin)).join(", ")}. Choose one with --origin.`,
-      `${command} ${target.name} --origin ${originLabel(first.origin)}`,
+      `${command} ${target.name} --origin ${originLabel(first.origin)}${change === "rename" ? " --as <new-name>" : ""}`,
     );
   }
 

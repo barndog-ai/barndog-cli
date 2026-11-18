@@ -210,6 +210,47 @@ test("replacement requires consent and reports its backup", async (t) => {
   expect(await readFile(backup, "utf8")).toBe(original);
 });
 
+test("two servers replaced in one settings file share one backup of the file as it was", async (t) => {
+  const { home, context } = await fixture(t);
+  await writeFile(
+    join(home, ".claude.json"),
+    JSON.stringify({
+      mcpServers: { one: { command: "node" }, two: { command: "node" } },
+    }),
+  );
+
+  const original = await readFile(join(home, ".claude.json"), "utf8");
+  vi.mocked(context.prompts.chooseMany).mockResolvedValueOnce(["0", "1"]);
+
+  await addMcp(undefined, { from: "claude" }, context);
+
+  const backups = vi
+    .mocked(context.write)
+    .mock.calls.map(([line]) => line)
+    .filter((line) => line.startsWith("Backup: "))
+    .map((line) => line.slice("Backup: ".length));
+
+  expect(context.write).toHaveBeenCalledWith(
+    expect.stringMatching(/Added two/),
+  );
+
+  expect(backups).toHaveLength(1);
+  expect(await readFile(backups[0]!, "utf8")).toBe(original);
+});
+
+test("invalid Codex TOML names the file instead of a bare parser error", async (t) => {
+  const { home, context } = await fixture(t);
+  await mkdir(join(home, ".codex"), { recursive: true });
+  await writeFile(join(home, ".codex", "config.toml"), "[mcp_servers\n");
+
+  await expect(
+    addMcp(undefined, { from: "claude" }, context),
+  ).rejects.toMatchObject({
+    name: "CliError",
+    message: expect.stringMatching(/config\.toml isn't valid TOML/),
+  });
+});
+
 test("a server name pasted as the argument is caught as configuration", async (t) => {
   const { context } = await fixture(t);
 

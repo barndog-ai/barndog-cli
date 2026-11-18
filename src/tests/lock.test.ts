@@ -5,6 +5,7 @@ import {
   access,
   rm,
   readFile,
+  utimes,
 } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
@@ -132,4 +133,43 @@ test("a lock path under a file fails with the filesystem error, before the opera
   );
 
   expect(run).not.toHaveBeenCalled();
+});
+
+test("a lock that never got a PID is taken over once it is old enough to be left by a crash", async (t) => {
+  const { path } = await lockPath(t);
+  await mkdir(path);
+  const minuteAgo = new Date(Date.now() - 60_000);
+  await utimes(path, minuteAgo, minuteAgo);
+
+  const result = await withPidLock(path, messages, async () =>
+    readFile(join(path, "pid"), "utf8"),
+  );
+
+  expect(result).toBe(String(process.pid));
+  await expect(access(path)).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+test("two callers that find the same dead lock never hold it at once", async (t) => {
+  const { path } = await lockPath(t);
+  await mkdir(path);
+  await writeFile(join(path, "pid"), String(deadPid()));
+  let holders = 0;
+  let most = 0;
+  const run = async () => {
+    holders++;
+    most = Math.max(most, holders);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    holders--;
+  };
+
+  const results = await Promise.allSettled([
+    withPidLock(path, messages, run),
+    withPidLock(path, messages, run),
+  ]);
+
+  expect(most).toBe(1);
+  expect(results.filter((r) => r.status === "fulfilled").length).toBe(1);
+  expect(results.find((r) => r.status === "rejected")).toMatchObject({
+    reason: { message: "running" },
+  });
 });

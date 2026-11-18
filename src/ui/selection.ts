@@ -6,11 +6,13 @@ import type { OverrideResolution } from "../features/asset-selection/types.js";
 import { json } from "./format.js";
 import { renderSyncOutput } from "./output.js";
 import { promptTheme } from "./theme.js";
+import { interactiveTerminal } from "./pick.js";
 
 /** What selection prompts need from the command running them. */
 export type SelectionContext = {
   write: (message: string) => void;
-  mode?: { json: boolean };
+  /** Absent in callers outside a command; prompts then follow the terminal. */
+  mode?: { json: boolean; interactive: boolean };
 };
 
 /** A change that would undo exclusions or disabled assets runs again with the answer. */
@@ -35,7 +37,10 @@ export async function runSelection(
       return;
     }
 
-    if (context.mode?.json || !process.stdin.isTTY || !process.stdout.isTTY) {
+    if (
+      context.mode?.json ||
+      !(context.mode?.interactive ?? interactiveTerminal())
+    ) {
       throw new DecisionRequiredError(result.conflicts);
     }
 

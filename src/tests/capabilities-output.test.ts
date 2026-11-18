@@ -1,3 +1,4 @@
+import { stripVTControlCharacters } from "node:util";
 import { afterEach, expect, test, vi } from "vitest";
 import open from "open";
 import { createProgram } from "../program.js";
@@ -137,8 +138,8 @@ test("outside a Git repository, repo status says so and how to get into one", as
   const lines = await repoOutput(status({ root: null }));
 
   expect(lines[0]).toBe("Not inside a Git repository.");
-  expect(lines.join("\n")).toContain(
-    "cd <your-repository> && barndog repo status",
+  expect(stripVTControlCharacters(lines.join("\n"))).toContain(
+    "run barndog repo status from inside your repository",
   );
 });
 

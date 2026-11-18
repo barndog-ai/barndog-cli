@@ -2,7 +2,7 @@ import { localPath } from "../../platform.js";
 import type { RuntimeContext } from "../../runtime.js";
 import { POSIX_MODE } from "../../shared/constants.js";
 import { readState } from "../../config/state.js";
-import { readFile, mkdir } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import crossSpawn from "cross-spawn";
 import { z } from "zod";
@@ -28,9 +28,9 @@ import type { PackageVersion } from "../collaboration/results.js";
 import { adapters } from "../../harnesses/registry.js";
 import type { Harness } from "../../harnesses/types.js";
 import { patchNative, type NativeEntry } from "../native/configuration.js";
-import { fileText } from "../../shared/files.js";
+import { fileText, inputJson } from "../../shared/files.js";
 import { defined } from "../../shared/lookup.js";
-import { CliError } from "../../errors.js";
+import { CliError, friendlyMessage } from "../../errors.js";
 import { barndogPaths } from "../../config/paths.js";
 import { apiClient } from "../auth/transport.js";
 
@@ -58,9 +58,19 @@ export type McpUpdateInput = McpWriteInput & {
 };
 
 async function readDefinition(file: string, runtime: RuntimeContext) {
-  return mcpDefinitionSchema.parse(
-    JSON.parse(await readFile(localPath(file, runtime), "utf8")),
+  const result = mcpDefinitionSchema.safeParse(
+    await inputJson(localPath(file, runtime)),
   );
+
+  if (!result.success) {
+    throw new CliError(
+      `${file} isn't an MCP definition: ${friendlyMessage(result.error)}.`,
+      "Check the fields against the MCP definition format at barndog.dev/docs",
+      { cause: result.error },
+    );
+  }
+
+  return result.data;
 }
 
 /** Publishes a new MCP configuration in a scope. */
@@ -230,7 +240,7 @@ export async function authenticateMcp(
   const { name: tool, mcp } = adapters[harness];
   if ("settings" in mcp.login) {
     return {
-      message: `Open ${tool} → ${mcp.login.settings} and authenticate ${asset.name}. ${tool} manages this login locally.`,
+      message: `Open ${tool} → ${mcp.login.settings} and authenticate ${installed.key}. ${tool} manages this login locally.`,
     };
   }
 
@@ -243,7 +253,8 @@ export async function authenticateMcp(
   const cwd = barndogPaths(home).nativeAuth;
   await mkdir(cwd, { recursive: true, mode: POSIX_MODE.privateDirectory });
   // cross-spawn also starts Windows .cmd shims, such as an npm-installed claude.
-  const child = crossSpawn(command, [...loginArguments, asset.name], {
+  // The installed key differs from the asset's name after a clash rename.
+  const child = crossSpawn(command, [...loginArguments, installed.key], {
     cwd,
     stdio: "inherit",
     env: { ...runtime.env },
@@ -257,7 +268,7 @@ export async function authenticateMcp(
   if (code) {
     throw new CliError(
       `${login} exited with code ${code}, so sign-in didn't finish.`,
-      `${login} ${asset.name}`,
+      `${login} ${installed.key}`,
     );
   }
 

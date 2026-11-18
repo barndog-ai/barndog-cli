@@ -1,3 +1,4 @@
+import { shellWord } from "../platform.js";
 import type { RuntimeContext } from "../runtime.js";
 import { adapters } from "../harnesses/registry.js";
 import type { Harness } from "../harnesses/types.js";
@@ -172,6 +173,9 @@ export function inventoryHints(items: readonly InventoryItem[]): string[] {
   return output;
 }
 
+/** The command a next-page hint repeats, and the shell it is typed into. */
+export type NextPage = { command: string; platform: NodeJS.Platform };
+
 /**
  * Returns a filtered catalog table and paging hints, marking selected IDs; does
  * not write output.
@@ -179,7 +183,7 @@ export function inventoryHints(items: readonly InventoryItem[]): string[] {
 export function renderCatalog(
   rows: CatalogAsset[],
   options: ListOptions,
-  command: string,
+  next: NextPage,
   installedIds: ReadonlySet<string>,
 ): string[] {
   const page = assetPage(rows, options);
@@ -222,9 +226,10 @@ export function renderCatalog(
   );
 
   if (options.page < page.pages) {
-    const filters = `${options.search ? ` ${JSON.stringify(options.search)}` : ""}${options.origin ? ` --origin ${options.origin}` : ""}`;
+    const word = (value: string) => shellWord(value, next.platform);
+    const filters = `${options.search ? ` ${word(options.search)}` : ""}${options.origin ? ` --origin ${word(options.origin)}` : ""}`;
     output.push(
-      hint(`${command}${filters} --page ${options.page + 1}`, "Next"),
+      hint(`${next.command}${filters} --page ${options.page + 1}`, "Next"),
     );
   }
 

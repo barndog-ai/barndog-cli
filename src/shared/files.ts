@@ -60,6 +60,43 @@ export async function ifExists<T>(operation: Promise<T>): Promise<T | null> {
   }
 }
 
+/** Why a file named on the command line can't be read, by Node error code. */
+const inputProblems: Partial<Record<string, string>> = {
+  ENOENT: "doesn't exist",
+  EISDIR: "is a folder, not a file",
+  EACCES: "can't be read: permission denied",
+  EPERM: "can't be read: permission denied",
+};
+
+/**
+ * A file the person running the CLI named, such as `--file` or `--input`. A
+ * missing or unreadable one is a mistake they can fix, so it says which file.
+ */
+export async function inputFile(path: string): Promise<Buffer> {
+  try {
+    return await readFile(path);
+  } catch (error) {
+    const problem = inputProblems[errorCode(error) ?? ""];
+    if (problem) {
+      throw new CliError(`${path} ${problem}.`, undefined, { cause: error });
+    }
+
+    throw error;
+  }
+}
+
+/** `inputFile()` parsed as JSON; invalid JSON says which file. */
+export async function inputJson(path: string): Promise<unknown> {
+  const text = (await inputFile(path)).toString("utf8");
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    throw new CliError(`${path} isn't valid JSON.`, undefined, {
+      cause: error,
+    });
+  }
+}
+
 /** A file's text, or null when it doesn't exist. */
 export function readIfExists(path: string): Promise<string | null> {
   return ifExists(readFile(path, "utf8"));

@@ -117,3 +117,22 @@ for (const text of [
     expect(JSON.stringify(parse(removed))).not.toContain("other");
   });
 }
+
+test("a Cursor hooks.json written without a version gets the one Cursor needs", () => {
+  const cursorHook: NativeEntry = {
+    ...hook,
+    harness: "cursor",
+    file: "hooks.json",
+  };
+
+  const output = patchNative('{ "hooks": {} }', [], [cursorHook]);
+
+  expect(JSON.parse(output)).toMatchObject({
+    version: 1,
+    hooks: { SessionStart: [cursorHook.value] },
+  });
+
+  expect(() => patchNative('{ "version": 2 }', [], [cursorHook])).toThrow(
+    "a version BarnDog doesn't support",
+  );
+});

@@ -279,7 +279,7 @@ describe("override decisions without a terminal", () => {
   test("--json prints an applied change without prompting", async () => {
     const write = vi.fn();
     await runSelection(
-      { write, mode: { json: true } },
+      { write, mode: { json: true, interactive: false } },
       vi.fn().mockResolvedValue(applied),
     );
 
@@ -289,7 +289,7 @@ describe("override decisions without a terminal", () => {
 
   test("--json names every asset awaiting a decision and the flags that answer it", async () => {
     const failure = await runSelection(
-      { write: vi.fn(), mode: { json: true } },
+      { write: vi.fn(), mode: { json: true, interactive: false } },
       unresolved(),
     ).catch((error: unknown) => error);
 
@@ -307,9 +307,19 @@ describe("override decisions without a terminal", () => {
     expect(select).not.toHaveBeenCalled();
   });
 
+  test("--no-interactive in a terminal asks nothing and names the flags instead", async () => {
+    const failure = await runSelection(
+      { write: vi.fn(), mode: { json: false, interactive: false } },
+      unresolved(),
+    ).catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(DecisionRequiredError);
+    expect(select).not.toHaveBeenCalled();
+  });
+
   test("the JSON error lists the decisions to make", async () => {
     const failure = await runSelection(
-      { write: vi.fn(), mode: { json: true } },
+      { write: vi.fn(), mode: { json: true, interactive: false } },
       unresolved(),
     ).catch((error: unknown) => error);
 

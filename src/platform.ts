@@ -8,8 +8,8 @@ import { promisify } from "node:util";
 import type { RuntimeContext } from "./runtime.js";
 import { CliError } from "./errors.js";
 import { POSIX_MODE } from "./shared/constants.js";
-import { ifExists } from "./shared/files.js";
-import { posixQuote, powershellQuote } from "./shared/shell.js";
+import { ifExists, isInside } from "./shared/files.js";
+import { PLAIN_WORD, posixQuote, powershellQuote } from "./shared/shell.js";
 import { errorCode } from "./shared/values.js";
 
 const execute = promisify(execFile);
@@ -25,6 +25,8 @@ const OS_VARIABLES = {
   /** Windows: `C:\Program Files` and its 32-bit twin. */
   programFiles: "ProgramFiles",
   programFilesX86: "ProgramFiles(x86)",
+  /** Windows: `C:\Windows`, which holds WSL's `bash.exe` launcher. */
+  systemRoot: "SystemRoot",
   /** Windows: `C:\Users\<you>\AppData\Local`, where per-user apps install. */
   localAppData: "LOCALAPPDATA",
   /** Linux: XDG Base Directory specification. */
@@ -133,16 +135,35 @@ const shellQuote = (value: string, platform: NodeJS.Platform) =>
 
 /**
  * Fix hints name commands for the shell people type into: Bash or zsh on
- * macOS and Linux, PowerShell on Windows (Windows PowerShell 5 has no `&&`).
+ * macOS and Linux, PowerShell on Windows. Each step runs only when the one
+ * before it succeeded; Windows PowerShell 5 has no `&&`, so there each later
+ * step goes inside `if ($?) { … }`.
  */
 export function fixSteps(steps: string[], platform: NodeJS.Platform): string {
-  return steps.join(isWindows(platform) ? "; " : " && ");
+  if (!isWindows(platform)) {
+    return steps.join(" && ");
+  }
+
+  return steps.reduceRight(
+    (rest, step) => (rest ? `${step}; if ($?) { ${rest} }` : step),
+    "",
+  );
 }
 
 export function removeCommand(path: string, platform: NodeJS.Platform) {
   return isWindows(platform)
     ? `Remove-Item -Recurse -Force ${shellQuote(path, platform)}`
     : `rm -rf ${shellQuote(path, platform)}`;
+}
+
+/** One word for the platform's shell, quoted only when it needs to be. */
+export function shellWord(value: string, platform: NodeJS.Platform) {
+  return PLAIN_WORD.test(value) ? value : shellQuote(value, platform);
+}
+
+/** Checks that the user's Git credentials can read `url`; clones nothing. */
+export function gitAccessCommand(url: string, platform: NodeJS.Platform) {
+  return `git ls-remote ${shellQuote(url, platform)}`;
 }
 
 export function unsetCommand(variable: string, platform: NodeJS.Platform) {
@@ -173,9 +194,13 @@ export function encodedPowerShell(script: string): Invocation {
   };
 }
 
-/** A program run from a PowerShell line, keeping its exit code. */
+/**
+ * A program run from a PowerShell line, keeping its exit code. A program that
+ * can't be found sets no `$LASTEXITCODE`, and `exit $null` would report
+ * success, so that case exits 1.
+ */
 export const powershellCall = (args: readonly string[]) =>
-  `& ${args.map(powershellQuote).join(" ")}; exit $LASTEXITCODE`;
+  `& ${args.map(powershellQuote).join(" ")}; if ($null -eq $LASTEXITCODE) { exit 1 }; exit $LASTEXITCODE`;
 
 /**
  * A program's stdout. Starts through cross-spawn, which also runs Windows
@@ -197,7 +222,9 @@ export function programOutput(
       windowsHide: true,
     });
 
-    let stdout = "";
+    // Decoded once at the end, so a character split across chunks survives.
+    const chunks: Buffer[] = [];
+    let length = 0;
     const fail = (reason: string) => {
       child.kill();
       reject(new Error(`${command} ${reason}`));
@@ -205,9 +232,11 @@ export function programOutput(
 
     const timer = setTimeout(() => fail("timed out"), limits.timeoutMs);
     child.stdout?.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString("utf8");
-      if (stdout.length > limits.maxBytes) {
+      length += chunk.length;
+      if (length > limits.maxBytes) {
         fail("printed too much");
+      } else {
+        chunks.push(chunk);
       }
     });
 
@@ -219,7 +248,7 @@ export function programOutput(
     child.once("close", (code) => {
       clearTimeout(timer);
       if (code === 0) {
-        resolve(stdout);
+        resolve(Buffer.concat(chunks).toString("utf8"));
       } else {
         reject(new Error(`${command} exited with code ${code}`));
       }
@@ -248,8 +277,14 @@ export async function bashShell(runtime: RuntimeContext): Promise<Invocation> {
     }
   }
 
+  // `C:\Windows\System32\bash.exe` starts WSL's Linux, not the Bash tools run
+  // hooks in, so a Bash found there doesn't count.
   const bash = await findExecutable("bash", runtime);
-  if (bash) {
+  const system = environmentValue(runtime, OS_VARIABLES.systemRoot);
+  if (
+    bash &&
+    !(system && isInside(system.toLowerCase(), bash.toLowerCase(), paths))
+  ) {
     return { command: bash, args: ["-c"] };
   }
 

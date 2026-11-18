@@ -110,6 +110,10 @@ for (const args of [
   ["sync", "--config"],
   ["init", "extra"],
   ["sync", "extra"],
+  // --auto is the quiet background sync; it would ignore these.
+  ["sync", "--auto", "--dry-run"],
+  ["sync", "--auto", "--verbose"],
+  ["sync", "--auto", "--config", "example.yaml"],
 ]) {
   test(`invalid arguments are rejected before any action: ${args.join(" ")}`, async () => {
     const f = setup();

@@ -185,12 +185,15 @@ export async function saveImported(
   await writePackage(target, input.entries, runtime);
   // Read back, so Windows (no executable bits) records what an update will see.
   const fingerprint = packageFingerprint(await readDirectory(target, runtime));
-  if (input.mode !== "fork") {
-    const sources = await readSources(workspace.path);
-    sources.imports = sources.imports.filter(
-      (entry) => !(entry.kind === input.kind && entry.name === input.name),
-    );
+  // A record left by an earlier import of this name goes either way: a fork
+  // stops following its repository.
+  const sources = await readSources(workspace.path);
+  const before = sources.imports.length;
+  sources.imports = sources.imports.filter(
+    (entry) => !(entry.kind === input.kind && entry.name === input.name),
+  );
 
+  if (input.mode !== "fork") {
     sources.imports.push({
       kind: input.kind,
       name: input.name,
@@ -202,7 +205,9 @@ export async function saveImported(
       ...(input.files ? { files: input.files } : {}),
       fingerprint,
     });
+  }
 
+  if (sources.imports.length !== before || input.mode !== "fork") {
     await writeSources(workspace.path, sources);
   }
 

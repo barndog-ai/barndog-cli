@@ -179,7 +179,16 @@ export async function gitSnapshot(
       let offset = 0;
       for (const hash of unique) {
         const end = output.indexOf(LF_BYTE, offset);
-        const size = Number(output.toString("utf8", offset, end).split(" ")[2]);
+        const header = output.toString("utf8", offset, end);
+        // `<hash> <type> <size>`, or `<hash> missing` for an absent object.
+        const [, type, sizeText] = header.split(" ");
+        const size = Number(sizeText);
+        if (end < 0 || type === "missing" || !Number.isSafeInteger(size)) {
+          throw new Error(
+            `Git object ${hash} is missing from ${repo}: git cat-file answered "${header}"`,
+          );
+        }
+
         blobs.set(hash, output.subarray(end + 1, end + 1 + size));
         offset = end + 1 + size + 1;
       }

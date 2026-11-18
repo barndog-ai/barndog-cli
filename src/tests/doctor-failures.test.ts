@@ -151,10 +151,15 @@ test("failed git access is reported while installation checks still run", async 
   );
 
   vi.mocked(remoteHead).mockRejectedValue(new CliError("denied", "git clone"));
+  vi.mocked(readFetchState).mockResolvedValue({
+    fetchedAt: new Date(0).toISOString(),
+  });
+
   vi.mocked(synchronize).mockRejectedValue(
     new CliError(
       "~/.claude/skills/review isn't managed by BarnDog.",
       "barndog doctor",
+      { command: "rm -rf ~/.claude/skills/review" },
     ),
   );
 
@@ -165,14 +170,19 @@ test("failed git access is reported while installation checks still run", async 
         status: "fail",
         fix: "git clone",
       }),
+      // Read from this machine, so it still shows while the host is down.
+      expect.objectContaining({ name: "Last fetch", status: "ok" }),
       expect.objectContaining({
         name: "Installation",
         status: "fail",
         detail: "~/.claude/skills/review isn't managed by BarnDog.",
         fix: "barndog doctor",
+        command: "rm -rf ~/.claude/skills/review",
       }),
     ]),
   );
+
+  expect(branchProtected).not.toHaveBeenCalled();
 });
 
 const installation = async (home: string) =>

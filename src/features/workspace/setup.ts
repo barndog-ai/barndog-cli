@@ -1,3 +1,4 @@
+import { gitAccessCommand } from "../../platform.js";
 import type { RuntimeContext } from "../../runtime.js";
 import { POSIX_MODE } from "../../shared/constants.js";
 import { randomUUID } from "node:crypto";
@@ -23,6 +24,7 @@ import {
 } from "./repo-source.js";
 import { barndogPaths } from "../../config/paths.js";
 import { readIfExists } from "../../shared/files.js";
+import { errorCode } from "../../shared/values.js";
 
 /**
  * Branch name used when creating the first commit of an empty Git workspace.
@@ -156,7 +158,7 @@ export async function cloneGitWorkspace(
     } catch (error) {
       throw new CliError(
         `Git couldn't clone ${url}. Check that you have access, and that this URL is right.`,
-        `git clone ${url}`,
+        gitAccessCommand(url, runtime.platform),
         { cause: error },
       );
     }
@@ -213,11 +215,23 @@ export async function localWorkspace(
     return { path, workspaceId: parseConfig(config).workspaceId };
   }
 
+  // barndog.yaml goes last, so a run that stopped part way is finished by the
+  // next one; files that run already wrote are kept as they are.
   const workspaceId = randomUUID();
-  for (const file of skeleton({ workspaceId, name: "My workspace" })) {
+  const files = skeleton({ workspaceId, name: "My workspace" }).sort(
+    (a, b) => Number(a.path === CONFIG_FILE) - Number(b.path === CONFIG_FILE),
+  );
+
+  for (const file of files) {
     const target = join(path, file.path);
     await mkdir(dirname(target), { recursive: true });
-    await writeFile(target, file.data, { flag: "wx" });
+    await writeFile(target, file.data, { flag: "wx" }).catch(
+      (error: unknown) => {
+        if (errorCode(error) !== "EEXIST" || file.path === CONFIG_FILE) {
+          throw error;
+        }
+      },
+    );
   }
 
   return { path, workspaceId };

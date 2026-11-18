@@ -380,6 +380,19 @@ test("moving an unknown name fails before anything is sent", async (t) => {
   ).toEqual([]);
 });
 
+test("a name that is only the start of another asset's name is still unknown", async (t) => {
+  const server = await cloud(t);
+  const { runtime } = await localFixture(server);
+
+  const error = await moveLocalAssets(
+    { names: ["release", "release-notes"] },
+    runtime,
+  ).catch((e: unknown) => e);
+
+  assert(error instanceof CliError);
+  expect(error.message).toBe("No local asset named release.");
+});
+
 /** Replaces a change route with one that records the uploaded package's files. */
 function captureUpload(server: Cloud, path: string, reply: unknown) {
   const files: Record<string, string> = {};

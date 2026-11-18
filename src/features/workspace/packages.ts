@@ -3,7 +3,7 @@ import { fixSteps, removeCommand } from "../../platform.js";
 import type { RuntimeContext } from "../../runtime.js";
 import { POSIX_MODE } from "../../shared/constants.js";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readdir, readFile, rename, rm, lstat } from "node:fs/promises";
+import { mkdir, readdir, rename, rm, lstat } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 import {
@@ -23,9 +23,23 @@ import {
 import { GIT_OBJECT_ID, UUID_V4 } from "../../shared/patterns.js";
 import { CliError, PackageError } from "../../errors.js";
 import { barndogPaths, packageManifest } from "../../config/paths.js";
-import { ifExists, writeAtomic } from "../../shared/files.js";
+import { ifExists, readIfExists, writeAtomic } from "../../shared/files.js";
 
 /** One identity's cache partition: server, organization and developer never mix. */
+
+/** `text` parsed as JSON, or undefined when it is missing or not JSON. */
+function jsonOrUndefined(text: string | null): unknown {
+  if (text === null) {
+    return undefined;
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
+
 export function cacheKey(conn: Connection) {
   const server = createHash("sha256").update(conn.server).digest("hex");
 
@@ -99,9 +113,10 @@ export async function storePackage(
 
   await mkdir(parent, { recursive: true, mode: POSIX_MODE.privateDirectory });
   const check = async (root: string) => {
+    // A missing or unreadable manifest means the same as a wrong fingerprint.
     const saved = z
       .object({ fingerprint: z.string() })
-      .safeParse(JSON.parse(await readFile(packageManifest(root), "utf8")));
+      .safeParse(jsonOrUndefined(await readIfExists(packageManifest(root))));
 
     if (
       !saved.success ||

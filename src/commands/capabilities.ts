@@ -103,7 +103,7 @@ function registerGeneral(program: Command, context: CommandContext) {
       if (!result.root) {
         context.write("Not inside a Git repository.");
         context.write(
-          hint("cd <your-repository> && barndog repo status", "Tip"),
+          `${dim("Tip:")} run ${bold("barndog repo status")} from inside your repository.`,
         );
 
         return;
@@ -173,7 +173,18 @@ function registerGeneral(program: Command, context: CommandContext) {
         );
 
         if (check.fix) {
-          context.write(`  ${" ".repeat(width)}  ${hint(check.fix, "Fix")}`);
+          // A fix in words reads as plain text when a command follows it.
+          context.write(
+            check.command
+              ? `  ${" ".repeat(width)}  ${dim("Fix:")} ${check.fix}`
+              : `  ${" ".repeat(width)}  ${hint(check.fix, "Fix")}`,
+          );
+        }
+
+        if (check.command) {
+          context.write(
+            `  ${" ".repeat(width)}  ${dim("Command:")} ${bold(check.command)}`,
+          );
         }
       }
 

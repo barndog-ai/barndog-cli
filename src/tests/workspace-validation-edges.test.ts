@@ -20,6 +20,15 @@ for (const text of ["null", "[]", "version: 2", "unknown: true"]) {
   });
 }
 
+test("malformed YAML in barndog.yaml is a CliError naming the file", () => {
+  expect(() => parseConfig("version: [1")).toThrow(
+    expect.objectContaining({
+      name: "CliError",
+      message: expect.stringMatching(/^barndog\.yaml isn't valid YAML/),
+    }),
+  );
+});
+
 test("workspace validation reports malformed names, manifests and misplaced knowledge", async (t) => {
   const home = await mkdtemp(join(tmpdir(), "barndog-validation-edges-"));
   t.onTestFinished(() => rm(home, { recursive: true, force: true }));

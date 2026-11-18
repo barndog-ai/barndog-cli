@@ -1,3 +1,4 @@
+import { fixSteps, gitAccessCommand } from "../../platform.js";
 import type { RuntimeContext } from "../../runtime.js";
 import { execFile, spawn } from "node:child_process";
 import { stat } from "node:fs/promises";
@@ -289,7 +290,7 @@ export async function remoteHead(
     if (error instanceof GitError) {
       throw new RepositoryAccessError(
         `Can't read ${url} with your Git credentials: ${gitReason(error.stderr)}`,
-        `git clone ${url}`,
+        gitAccessCommand(url, runtime.platform),
         { cause: error },
       );
     }
@@ -300,8 +301,6 @@ export async function remoteHead(
   return parseRemoteHead(output, url);
 }
 
-const identityHint = 'git config --global user.email "you@example.com"';
-
 /**
  * Git's stderr when a commit has no author: `*** Please tell me who you are.`
  * followed by the `git config` commands to run.
@@ -311,12 +310,25 @@ const identityHint = 'git config --global user.email "you@example.com"';
 export const UNKNOWN_IDENTITY = /tell me who you are/i;
 
 /** Git's "who are you" failure is common on new machines and has one clear fix. */
-export function explainIdentity(error: unknown): never {
+export function explainIdentity(
+  error: unknown,
+  platform: NodeJS.Platform,
+): never {
   if (error instanceof GitError && UNKNOWN_IDENTITY.test(error.stderr)) {
+    // Git needs both; double quotes read the same in Bash, zsh and PowerShell.
     throw new CliError(
       "Git doesn't know who you are, so BarnDog can't make a commit.",
-      identityHint,
-      { cause: error },
+      "Tell Git your name and email for every repository, then try again",
+      {
+        cause: error,
+        command: fixSteps(
+          [
+            'git config --global user.name "Your Name"',
+            'git config --global user.email "you@example.com"',
+          ],
+          platform,
+        ),
+      },
     );
   }
 

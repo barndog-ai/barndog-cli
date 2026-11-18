@@ -36,8 +36,9 @@ export class LoginRequiredError extends Error {
  * credentials or URL suffixes are rejected.
  */
 export function normalizeServer(value: string) {
-  const url = new URL(value);
+  const url = URL.parse(value);
   if (
+    !url ||
     !["http:", "https:"].includes(url.protocol) ||
     url.username ||
     url.password ||

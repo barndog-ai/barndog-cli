@@ -1,3 +1,4 @@
+import { gitAccessCommand } from "../../platform.js";
 import type { RuntimeContext } from "../../runtime.js";
 import { POSIX_MODE } from "../../shared/constants.js";
 import { randomUUID } from "node:crypto";
@@ -171,7 +172,7 @@ export async function fetchRemote<T>(
     if (error instanceof GitError) {
       throw new CliError(
         `Can't read ${location.url}: ${gitReason(error.stderr)}. Make sure you can clone it on this machine.`,
-        `git clone ${location.url}`,
+        gitAccessCommand(location.url, runtime.platform),
         { cause: error },
       );
     }

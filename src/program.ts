@@ -404,7 +404,10 @@ export function createProgram(options: ProgramOptions = {}): Command {
       options.versionFiles ?? ((target) => versionFiles(target, runtime)),
     workingDiff: options.workingDiff ?? (() => workingDiff(runtime)),
     workingStatus: options.workingStatus ?? (() => workingStatus(runtime)),
-    login: options.login ?? ((login) => runLogin({ ...login, runtime }, write)),
+    login:
+      options.login ??
+      ((login) =>
+        runLogin({ ...login, runtime, interactive: mode.interactive }, write)),
     logout: options.logout ?? (() => runLogout(write, runtime)),
     authStatus:
       options.authStatus ??
@@ -416,6 +419,7 @@ export function createProgram(options: ProgramOptions = {}): Command {
           restart,
           server,
           ...setupOptions,
+          interactive: mode.interactive,
           write: options.write,
           runtime,
         })),

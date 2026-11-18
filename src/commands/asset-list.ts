@@ -53,7 +53,9 @@ export function registerList(
         context.inventory(),
         options.available || !narrowed
           ? context.searchCatalog(kind).catch((error: unknown) => {
-              if (onlyAvailable) {
+              // JSON has nowhere to say the list is partial, so it fails;
+              // --installed and --disabled don't need the catalog.
+              if (onlyAvailable || context.mode.json) {
                 throw error;
               }
 
@@ -194,7 +196,10 @@ export function registerSearch(
     for (const line of renderCatalog(
       rows,
       { ...options, search: query },
-      `barndog ${group} search`,
+      {
+        command: `barndog ${group} search`,
+        platform: context.runtime.platform,
+      },
       selected,
     )) {
       context.write(line);

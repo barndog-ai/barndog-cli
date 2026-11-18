@@ -207,12 +207,13 @@ export async function authStatus(
   runtime: RuntimeContext,
   explicitServer?: string,
 ): Promise<AuthStatus> {
-  let server;
-  try {
-    server = await selectedServer(explicitServer, runtime);
-  } catch {
+  // No server yet means never signed in; a bad URL or settings file says so itself.
+  const configured = explicitServer ?? (await configuredServer(runtime));
+  if (!configured) {
     throw new LoginRequiredError();
   }
+
+  const server = normalizeServer(configured);
 
   const context = contextSchema.parse(
     (await apiClient(server, runtime).GET("/v1/context")).data,

@@ -93,7 +93,7 @@ export async function commitFiles(
       ],
       runtime,
       { repo, allowPrompt: options.allowPrompt },
-    ).catch(explainIdentity);
+    ).catch((error: unknown) => explainIdentity(error, runtime.platform));
   } finally {
     await rm(index, { force: true });
     await rm(`${index}.lock`, { force: true });

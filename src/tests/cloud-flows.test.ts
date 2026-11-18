@@ -1,6 +1,6 @@
 import { inspectNative } from "./native.js";
 import { expect, test } from "vitest";
-import { glob, mkdir, readFile, writeFile } from "node:fs/promises";
+import { glob, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import * as contract from "@barndog-ai/api-contract";
 import { cloud, COMMIT, ID, packageReply, packages } from "./cloud.js";
@@ -37,6 +37,23 @@ test("hooks test runs the chosen command with the native input", async (t) => {
   await expect(run("--event", "Stop")).rejects.toThrow(/Choose an event/);
   await expect(run("--handler", "4")).rejects.toThrow(/no command 4/);
   await expect(run("--timeout", "0")).rejects.toThrow();
+  await writeFile(input, "{ not json");
+  await expect(run()).rejects.toThrow(/input\.json isn't valid JSON/);
+  await expect(
+    server.run([
+      "hooks",
+      "test",
+      "release-notes",
+      "--origin",
+      "org",
+      "--harness",
+      "claude",
+      "--input",
+      join(server.home, "missing.json"),
+    ]),
+  ).rejects.toThrow(/missing\.json doesn't exist/);
+
+  await writeFile(input, JSON.stringify({ hook_event_name: "SessionStart" }));
   await expect(
     server.run([
       "hooks",
@@ -85,9 +102,21 @@ test("a downloaded copy changed on this machine is refused with a command that c
       error.hint === "Delete that folder; the next sync downloads it again." &&
       error.command ===
         (process.platform === "win32"
-          ? `Remove-Item -Recurse -Force '${copy}'; barndog sync`
+          ? `Remove-Item -Recurse -Force '${copy}'; if ($?) { barndog sync }`
           : `rm -rf '${copy}' && barndog sync`),
   );
+
+  // A manifest that is gone or cut short means the same: don't trust the copy.
+  for (const damaged of [null, '{"fingerprint":']) {
+    const manifest = join(packages, manifests[0]!);
+    if (damaged === null) {
+      await rm(manifest);
+    } else {
+      await writeFile(manifest, damaged);
+    }
+
+    await expect(run()).rejects.toThrow(/was changed on this machine/);
+  }
 });
 
 test("sets are installed, toggled and removed against the catalog", async (t) => {

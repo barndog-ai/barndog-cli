@@ -15,6 +15,7 @@ import { hookInvocation } from "../native/hook-shell.js";
 import { readSettings } from "../../config/settings.js";
 import { repoForOrigin, selectRepoAsset } from "../workspace/assets.js";
 import { CliError } from "../../errors.js";
+import { inputFile } from "../../shared/files.js";
 
 /** CLI hook test policy caps each input/output stream at one MiB. */
 const HOOK_IO_LIMIT_BYTES = 1048576;
@@ -130,12 +131,22 @@ export async function testHook(
     );
   }
 
-  const input = await readFile(localPath(options.input, runtime));
+  const inputPath = localPath(options.input, runtime);
+  const input = await inputFile(inputPath);
   if (input.length > HOOK_IO_LIMIT_BYTES) {
     throw new CliError("The --input file is over 1 MiB.");
   }
 
-  JSON.parse(input.toString("utf8"));
+  try {
+    JSON.parse(input.toString("utf8"));
+  } catch (error) {
+    throw new CliError(
+      `${inputPath} isn't valid JSON. --input takes the JSON event the tool would send the Hook.`,
+      undefined,
+      { cause: error },
+    );
+  }
+
   const timeout =
     options.timeout ?? handler.timeout ?? DEFAULT_HOOK_TIMEOUT_SECONDS;
 
@@ -164,10 +175,8 @@ export async function testHook(
     windowsHide: true,
   });
 
-  let stdout = "";
-  let stderr = "";
-  let length = 0;
   let timedOut = false;
+  let overLimit = false;
 
   const stop = () => stopProcessTree(child, runtime);
 
@@ -176,29 +185,26 @@ export async function testHook(
     stop();
   }, timeout * MILLISECONDS_PER_SECOND);
 
-  for (const [stream, append] of [
-    [
-      child.stdout,
-      (text: string) => {
-        stdout += text;
-      },
-    ],
-    [
-      child.stderr,
-      (text: string) => {
-        stderr += text;
-      },
-    ],
-  ] as const) {
+  // Bytes are kept and decoded once at the end, so a character split across
+  // chunks survives; each stream has its own limit.
+  const collect = (stream: NodeJS.ReadableStream) => {
+    const chunks: Buffer[] = [];
+    let length = 0;
     stream.on("data", (chunk: Buffer) => {
       length += chunk.length;
       if (length > HOOK_IO_LIMIT_BYTES) {
+        overLimit = true;
         stop();
       } else {
-        append(chunk.toString());
+        chunks.push(chunk);
       }
     });
-  }
+
+    return () => Buffer.concat(chunks).toString("utf8");
+  };
+
+  const stdout = collect(child.stdout);
+  const stderr = collect(child.stderr);
 
   child.stdin.on("error", () => undefined);
   child.stdin.end(input);
@@ -208,8 +214,10 @@ export async function testHook(
       child.once("close", (code) => resolve(code ?? 1));
     });
 
-    if (length > HOOK_IO_LIMIT_BYTES) {
-      throw new CliError("The Hook printed more than 1 MiB.");
+    if (overLimit) {
+      throw new CliError(
+        "The Hook printed more than 1 MiB to stdout or stderr.",
+      );
     }
 
     return {
@@ -217,8 +225,8 @@ export async function testHook(
       event,
       exitCode,
       timedOut,
-      stdout,
-      stderr,
+      stdout: stdout(),
+      stderr: stderr(),
     };
   } finally {
     clearTimeout(timer);

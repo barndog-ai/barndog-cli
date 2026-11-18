@@ -165,7 +165,7 @@ export async function readSettings(
     // Someone edited the file by hand; saving runs the same checks as a guard.
     throw new CliError(
       `${path} isn't valid: ${error instanceof Error ? error.message : String(error)}. Fix it, or move it aside and set up again.`,
-      `mv ${path} ${path}.bak && barndog init`,
+      `Fix the file, or move it aside (keep a copy) and run barndog init`,
       { cause: error },
     );
   }

@@ -38,3 +38,18 @@ test("fails when the program doesn't exist", async () => {
     programOutput("barndog-no-such-program", [], runtime, limits),
   ).rejects.toThrow();
 });
+
+test("keeps a character split across chunks and limits bytes, not characters", async () => {
+  // "é" is two bytes in UTF-8; the second arrives in a later chunk.
+  const [split, halves] = node(
+    "process.stdout.write(Buffer.from([0xc3])); setTimeout(() => process.stdout.write(Buffer.from([0xa9])), 50)",
+  );
+
+  expect(await programOutput(split, halves, runtime, limits)).toBe("é");
+
+  // 3,000 characters but 6,000 bytes, over the 4,096-byte limit.
+  const [wide, text] = node("process.stdout.write('é'.repeat(3000))");
+  await expect(programOutput(wide, text, runtime, limits)).rejects.toThrow(
+    /printed too much/,
+  );
+});

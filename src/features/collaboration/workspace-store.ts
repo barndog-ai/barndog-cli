@@ -16,7 +16,7 @@ import {
 
 import { packageKindList } from "../../config/selection.js";
 import { GIT_OBJECT_ID } from "../../shared/patterns.js";
-import { readIfExists, writeAtomic } from "../../shared/files.js";
+import { isInside, readIfExists, writeAtomic } from "../../shared/files.js";
 import { withPidLock } from "../../shared/lock.js";
 import { barndogPaths } from "../../config/paths.js";
 
@@ -192,9 +192,8 @@ async function recoverySnapshot(work: StoredRecord, runtime: RuntimeContext) {
     );
 
   const path = work.pendingSnapshot;
-  if (
-    !path?.startsWith(barndogPaths(runtime.home).workingCopySnapshots + "/")
-  ) {
+  const snapshots = barndogPaths(runtime.home).workingCopySnapshots;
+  if (!path || path === snapshots || !isInside(snapshots, path)) {
     throw damaged("its record doesn't point at a recovery snapshot");
   }
 
@@ -280,6 +279,35 @@ export const findGit = (runtime: RuntimeContext): Promise<GitWorkingCopy> => {
   });
 };
 
+/**
+ * A working-copy record read from disk. A record that isn't JSON or doesn't
+ * match its schema was damaged, so it says how to start the folder over; the
+ * errors `parse` raises itself pass through.
+ */
+function parseRecord<T extends StoredRecord>(
+  text: string,
+  root: string,
+  runtime: RuntimeContext,
+  parse: (value: unknown) => T,
+): T {
+  try {
+    return parse(JSON.parse(text));
+  } catch (error) {
+    if (error instanceof CliError) {
+      throw error;
+    }
+
+    throw new CliError(
+      `The working-copy record for ${root} is damaged.`,
+      "Save any edits in the folder elsewhere, then remove its working-copy record and pull it again",
+      {
+        cause: error,
+        command: removeCommand(recordPath(root, runtime), runtime.platform),
+      },
+    );
+  }
+}
+
 async function findRecord<T extends StoredRecord>(
   runtime: RuntimeContext,
   parse: (value: unknown) => T,
@@ -288,7 +316,7 @@ async function findRecord<T extends StoredRecord>(
   while (true) {
     const text = await readIfExists(recordPath(path, runtime));
     if (text !== null) {
-      const work = parse(JSON.parse(text));
+      const work = parseRecord(text, path, runtime, parse);
 
       if (work.root !== path) {
         throw new Error(

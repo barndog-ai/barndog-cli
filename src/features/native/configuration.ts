@@ -263,7 +263,7 @@ export function patchNative(
       ) {
         throw new CliError(
           `${sample.file} already has an MCP server named ${next.key} that BarnDog didn't add. Remove it, or install BarnDog's under another name.`,
-          `barndog mcp rename ${next.key}`,
+          `barndog mcp rename ${next.key} --as <new-name>`,
         );
       }
 
@@ -272,7 +272,7 @@ export function patchNative(
       ) {
         throw new CliError(
           `Two MCP servers would both be installed as ${next.key}.`,
-          `barndog mcp rename ${next.key}`,
+          `barndog mcp rename ${next.key} --origin <origin> --as <new-name>`,
         );
       }
     } else {
@@ -365,6 +365,11 @@ export function patchNative(
         change(["hooks", next.key], [next.value]);
       }
     }
+  }
+
+  // A file written by hand may leave the version out; the tool needs it.
+  if (version !== undefined && data.version === undefined && !toml) {
+    change(["version"], version);
   }
 
   if (version !== undefined && data.version !== version) {

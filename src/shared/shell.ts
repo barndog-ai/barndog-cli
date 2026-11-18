@@ -5,8 +5,6 @@ export const posixQuote = (value: string) =>
 /**
  * Text the shell reads as one word without quotes: `claude`, `v1.2-rc`, but
  * not `a b`, `$HOME` or `/usr/bin`.
- *
- * @internal
  */
 export const PLAIN_WORD = /^[\w.-]+$/;
 

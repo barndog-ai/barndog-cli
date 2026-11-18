@@ -1,3 +1,4 @@
+import { gitAccessCommand } from "../platform.js";
 import { fileURLToPath } from "node:url";
 import { fileExecutable, bashShell, directoryLinkType } from "../platform.js";
 import { inspectNative, registeredHook } from "./native.js";
@@ -850,7 +851,8 @@ test("setup explains a repo it can't read and only clones when asked", async (t)
     });
 
   await expect(attempt(async () => false)).rejects.toSatisfy(
-    (error: CliError) => error.hint === `git clone ${missing}`,
+    (error: CliError) =>
+      error.hint === gitAccessCommand(missing, process.platform),
   );
 
   expect(lines.join("\n")).toMatch(/able to clone this repo/);

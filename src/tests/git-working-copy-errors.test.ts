@@ -1,4 +1,13 @@
-import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
+import { gitAccessCommand } from "../platform.js";
+import {
+  mkdtemp,
+  mkdir,
+  readdir,
+  realpath,
+  writeFile,
+  readFile,
+  rm,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -524,7 +533,7 @@ test("a workspace that was never fetched cannot be read from cache or from an un
 
   const fetched = await refusal(gitRepoSource(workspace, runtime).model());
   expect(fetched.message).toContain(`Can't fetch ${workspace.url}`);
-  expect(fetched.hint).toBe(`git clone ${workspace.url}`);
+  expect(fetched.hint).toBe(gitAccessCommand(workspace.url, runtime.platform));
 });
 
 /** A local workspace holding `review`, added from the fixture's upstream repo. */
@@ -677,4 +686,95 @@ test("updating an import whose upstream folder was removed says it no longer exi
   expect(error.message).toBe(
     `org/skills/review no longer exists in ${f.repo}.`,
   );
+});
+
+/** The one working-copy record the fixture's pull wrote. */
+async function onlyRecord(home: string) {
+  const folder = barndogPaths(home).workingCopies;
+  const records = (await readdir(folder)).filter((f) => f.endsWith(".json"));
+  assert(records.length === 1);
+
+  return join(folder, records[0]!);
+}
+
+test("push --origin keeps a record it can't use instead of replacing it with an empty one", async (t) => {
+  const f = await fixture(t);
+  const path = await onlyRecord(f.home);
+  // A record from a Cloud workspace: findGit refuses it with a fix.
+  const cloudRecord = JSON.stringify({ root: f.copy, kind: "skill" });
+  await writeFile(path, cloudRecord);
+
+  await expect(
+    pushGitWorkingCopy(f.workspace, { origin: "org" }, f.runtime),
+  ).rejects.toThrow(/belongs to a BarnDog Cloud Workspace/);
+
+  expect(await readFile(path, "utf8")).toBe(cloudRecord);
+});
+
+test("a damaged working-copy record says how to start the folder over", async (t) => {
+  const f = await fixture(t);
+  await writeFile(await onlyRecord(f.home), "{");
+
+  const failure = await findGit(f.runtime).catch((error: unknown) => error);
+
+  assert(failure instanceof CliError);
+  expect(failure.message).toBe(
+    `The working-copy record for ${await realpath(f.copy)} is damaged.`,
+  );
+
+  expect(failure.command).toMatch(/\.json/);
+});
+
+test("push --origin in a new folder registers it only once the checks pass", async (t) => {
+  const f = await fixture(t);
+  const folder = join(f.home, "fresh");
+  await mkdir(folder);
+  await writeFile(
+    join(folder, "SKILL.md"),
+    "---\nname: fresh\ndescription: New\n---\nBody\n",
+  );
+
+  const before = await readdir(barndogPaths(f.home).workingCopies);
+  await expect(
+    pushGitWorkingCopy(
+      f.workspace,
+      { origin: "org", name: "other" },
+      { ...f.runtime, cwd: folder },
+    ),
+  ).rejects.toThrow(/not other/);
+
+  expect(await readdir(barndogPaths(f.home).workingCopies)).toEqual(before);
+});
+
+test("adding a deleted import again as a fork stops following its repo", async (t) => {
+  const f = await fixture(t);
+  const { local } = await trackedImport(f);
+  await rm(join(local.path, "org/skills/review"), { recursive: true });
+
+  await fetchRemote(
+    { url: f.repo, rest: null },
+    { allowPrompt: false },
+    async (remote) => {
+      await saveImported(
+        {
+          kind: "skill",
+          name: "review",
+          mode: "fork",
+          root: "org/skills/review",
+          entries: [
+            {
+              path: "SKILL.md",
+              data: await readFile(join(f.repo, "org/skills/review/SKILL.md")),
+              executable: false,
+            },
+          ],
+          remote,
+        },
+        f.runtime,
+      );
+    },
+    f.runtime,
+  );
+
+  expect(await importedFrom("skill", "review", f.runtime)).toBeNull();
 });

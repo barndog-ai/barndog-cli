@@ -54,6 +54,7 @@ import {
   decodeFiles,
   encodeFiles,
   findGit,
+  NoWorkingCopyError,
   locked,
   save,
   type GitWorkingCopy,
@@ -79,14 +80,15 @@ const BRANCH_RANDOM_BYTES = 3;
 
 async function latest(workspace: GitWorkspace, runtime: RuntimeContext) {
   const model = await gitRepoSource(workspace, runtime).model();
+  const commit = await acceptedCommit(workspace.workspaceId, runtime);
+  if (!commit) {
+    throw new CliError(
+      "This machine hasn't fetched the Git workspace yet.",
+      "barndog sync",
+    );
+  }
 
-  return {
-    model,
-    commit: defined(
-      await acceptedCommit(workspace.workspaceId, runtime),
-      "This Git workspace hasn't been fetched yet",
-    ),
-  };
+  return { model, commit };
 }
 
 function selectAsset(
@@ -455,10 +457,11 @@ export function pushGitWorkingCopy(
   return locked(runtime, async () => {
     const { model, commit: tip } = await latest(workspace, runtime);
     let work: GitWorkingCopy;
+    let unregistered = false;
     try {
       work = await findGit(runtime);
     } catch (error) {
-      if (!options.origin || !(error instanceof CliError)) {
+      if (!options.origin || !(error instanceof NoWorkingCopyError)) {
         throw error;
       }
 
@@ -476,7 +479,7 @@ export function pushGitWorkingCopy(
         conflicts: [],
       };
 
-      await save(work, runtime);
+      unregistered = true;
     }
 
     if (options.kind && work.kind !== options.kind) {
@@ -497,6 +500,11 @@ export function pushGitWorkingCopy(
       throw new CliError(
         "This working copy belongs to a different Git workspace.",
       );
+    }
+
+    // Registered only once the folder passed the checks above.
+    if (unregistered) {
+      await save(work, runtime);
     }
 
     if (work.conflicts.length) {

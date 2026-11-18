@@ -1,3 +1,4 @@
+import { isWindows } from "../../platform.js";
 import { writePackage, readDirectory } from "../workspace/directory.js";
 import type { RuntimeContext } from "../../runtime.js";
 import { HTTP_STATUS } from "../../shared/constants.js";
@@ -374,6 +375,29 @@ const CONFLICT_MARKER = /^(?:<{7}|\|{7}|={7}|>{7})(?: |$)/m;
 export const hasConflictMarkers = (text: string) => CONFLICT_MARKER.test(text);
 
 /** Clears one conflict once its markers are gone; shared by cloud and Git working copies. */
+/**
+ * The conflict `absolute` names. macOS and Windows folders usually ignore
+ * case, so there a path that differs only in case still matches, as long as
+ * it matches one conflict.
+ */
+function conflictAt(
+  work: Pick<Workspace, "root" | "conflicts">,
+  absolute: string,
+  platform: NodeJS.Platform,
+) {
+  const exact = work.conflicts.find((p) => join(work.root, p) === absolute);
+  if (exact || (platform !== "darwin" && !isWindows(platform))) {
+    return exact;
+  }
+
+  const folded = absolute.toLowerCase();
+  const matches = work.conflicts.filter(
+    (p) => join(work.root, p).toLowerCase() === folded,
+  );
+
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
 export async function markResolved(
   work: Pick<
     Workspace,
@@ -385,7 +409,7 @@ export async function markResolved(
   const { cwd } = runtime;
 
   const absolute = resolve(await realpath(cwd), path);
-  const conflict = work.conflicts.find((p) => join(work.root, p) === absolute);
+  const conflict = conflictAt(work, absolute, runtime.platform);
   if (!conflict) {
     throw new CliError(
       `${path} isn't an unresolved conflict.`,
@@ -473,6 +497,7 @@ export async function pushWorkspace(
 
   return locked(runtime, async () => {
     let work: Workspace;
+    let unregistered = false;
     try {
       work = await find(runtime);
     } catch (error) {
@@ -499,7 +524,7 @@ export async function pushWorkspace(
         conflicts: [],
       };
 
-      await save(work, runtime);
+      unregistered = true;
     }
 
     if (options.kind && work.kind !== options.kind) {
@@ -514,6 +539,11 @@ export async function pushWorkspace(
         `This working copy is ${work.name}, not ${options.name}.`,
         "barndog status",
       );
+    }
+
+    // Registered only once the folder passed the checks above.
+    if (unregistered) {
+      await save(work, runtime);
     }
 
     await connection(runtime, work.connection);

@@ -1,3 +1,4 @@
+import { fixSteps } from "../../platform.js";
 import type { RuntimeContext } from "../../runtime.js";
 import { HTTP_STATUS } from "../../shared/constants.js";
 
@@ -238,7 +239,7 @@ export async function pushExternal(
     if (pull?.state === "closed" && !options.new) {
       throw new CliError(
         "The pull request is closed. Pull, then push a new one.",
-        "barndog pull && barndog push --new",
+        fixSteps(["barndog pull", "barndog push --new"], runtime.platform),
       );
     }
 

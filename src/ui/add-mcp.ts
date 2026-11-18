@@ -1,6 +1,7 @@
 /** `barndog mcp add`: brings MCP servers from JSON or a coding tool into the local workspace. */
 import { localPath } from "../platform.js";
 import { CliError } from "../errors.js";
+import { inputFile } from "../shared/files.js";
 import {
   addMcpServers,
   conflictingEntries,
@@ -9,7 +10,6 @@ import {
   parseMcpText,
   type ImportedServer,
 } from "../features/mcps/import.js";
-import { readFile } from "node:fs/promises";
 import { bold, dim, ok, warn } from "./format.js";
 import { type AddContext, type AddOptions } from "./add-asset.js";
 
@@ -24,7 +24,9 @@ async function serversToAdd(
 
   if (options.file) {
     return parseMcpText(
-      await readFile(localPath(options.file, context.runtime), "utf8"),
+      (await inputFile(localPath(options.file, context.runtime))).toString(
+        "utf8",
+      ),
       name,
     );
   }

@@ -167,6 +167,8 @@ async function candidates(
 
   const items: Candidate[] = [];
   const invalid: MoveRow[] = [];
+  // Requested names, as the local workspace spells them, that matched an asset.
+  const found = new Set<string>();
   for (const asset of model.assets) {
     if (
       !pending(asset.path) ||
@@ -187,6 +189,7 @@ async function candidates(
       continue;
     }
 
+    found.add(asset.name);
     const name = as ?? asset.name;
     items.push({
       kind: asset.kind,
@@ -207,6 +210,7 @@ async function candidates(
       continue;
     }
 
+    found.add(doc.content.name);
     const name = as ?? doc.content.name;
     items.push({
       kind: "knowledge",
@@ -220,10 +224,7 @@ async function candidates(
   }
 
   for (const name of names ?? []) {
-    if (
-      !items.some((item) => item.path.includes(`/${name}`)) &&
-      !invalid.some((row) => row.name === name)
-    ) {
+    if (!found.has(name) && !invalid.some((row) => row.name === name)) {
       throw new CliError(`No local asset named ${name}.`, "barndog local list");
     }
   }

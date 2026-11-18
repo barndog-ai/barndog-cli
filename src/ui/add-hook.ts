@@ -206,7 +206,7 @@ export async function addHook(
 
   await fetchRemote(
     location,
-    { allowPrompt: true },
+    { allowPrompt: context.interactive },
     async (remote) => {
       const { candidates, skipped } = discoverHooks(remote, fallback);
       for (const skip of skipped) {

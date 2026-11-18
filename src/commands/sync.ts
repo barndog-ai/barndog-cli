@@ -1,4 +1,4 @@
-import type { Command } from "commander";
+import { Option, type Command } from "commander";
 import { resolve } from "node:path";
 import type { CommandContext } from "./context.js";
 import { renderSyncOutput } from "../ui/output.js";
@@ -17,7 +17,12 @@ export function registerSync(program: Command, context: CommandContext): void {
       "Also list what is already up to date, including BarnDog's own entries",
     )
     .option("--config <path>", "Use an explicit configuration file once")
-    .option("--auto", "Quiet background sync used at session start")
+    .addOption(
+      new Option(
+        "--auto",
+        "Quiet background sync used at session start",
+      ).conflicts(["dryRun", "verbose", "config"]),
+    )
     .action(
       async (options: {
         config?: string;
