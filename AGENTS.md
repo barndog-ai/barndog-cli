@@ -266,7 +266,7 @@ Connect, import, and transfer make GitHub authoritative. Working-copy `push` cre
 
 ## Native links
 
-Deselecting a harness removes its managed links and keeps selections. Sync refuses to overwrite unmanaged destinations, including links whose ownership records were lost, and never recursively deletes a skill directory.
+Deselecting a harness removes its managed links and keeps selections. `barndog harnesses enable`, `disable` and `select` (`src/features/environment/harnesses.ts`) change `harnesses` in `config.yaml` and sync at once, so a disabled tool loses every link, entry and registration BarnDog owns there, and later syncs never write to it. Sync refuses to overwrite unmanaged destinations, including links whose ownership records were lost, and never recursively deletes a skill directory.
 
 ## Live distribution check
 

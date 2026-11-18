@@ -39,12 +39,11 @@ import type {
 import { synchronize } from "../features/environment/sync.js";
 import { cleanUpIfInterrupted } from "../features/environment/transaction.js";
 import { renderSyncOutput } from "./output.js";
-import checkbox from "@inquirer/checkbox";
 import confirm from "@inquirer/confirm";
 import { existsSync, readdirSync, rmSync } from "node:fs";
 import { basename } from "node:path";
 import { styleText } from "node:util";
-import type { DetectedHarness, Harness } from "../harnesses/registry.js";
+import type { DetectedHarness } from "../harnesses/registry.js";
 import {
   readSettings,
   type GitWorkspace,
@@ -53,9 +52,9 @@ import {
 import {
   initialize,
   type ChosenWorkspace,
-  type HarnessChoice,
 } from "../features/onboarding/setup.js";
-import { checkboxTheme, promptTheme, selected } from "./theme.js";
+import { promptTheme, selected } from "./theme.js";
+import { chooseHarnesses, type ChooseHarnesses } from "./harness-picker.js";
 import {
   bold,
   dim,
@@ -66,26 +65,6 @@ import {
   warn,
 } from "./format.js";
 import { barndogPaths } from "../config/paths.js";
-
-/** Asks which coding tools to manage; tests pass their own answer. */
-type ChooseHarnesses = (choices: HarnessChoice[]) => Promise<Harness[]>;
-
-const chooseHarnesses: ChooseHarnesses = (choices) => {
-  const width = Math.max(...choices.map((choice) => choice.name.length));
-
-  return checkbox<Harness>({
-    loop: false,
-    message: "Which coding tools should BarnDog manage?",
-    choices: choices.map((choice) => ({
-      value: choice.value,
-      checked: choice.checked,
-      short: choice.name,
-      name: `${choice.name.padEnd(width)}  ${choice.evidence ? selected("detected") : dim("not found")}`,
-      description: choice.evidence ?? undefined,
-    })),
-    theme: checkboxTheme,
-  });
-};
 
 /** The source setup was last run with, offered as the default. */
 function savedChoice(

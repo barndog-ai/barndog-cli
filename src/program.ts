@@ -32,6 +32,7 @@ import { registerAuth } from "./commands/auth.js";
 import { runLogin, runLogout, showAuthStatus } from "./ui/auth.js";
 import { registerInit } from "./commands/init.js";
 import { registerSync } from "./commands/sync.js";
+import { registerHarnesses } from "./commands/harnesses.js";
 import { registerStatus } from "./commands/status.js";
 import type { CommandContext, Mode } from "./commands/context.js";
 import { clashPrompt, synchronize } from "./features/environment/sync.js";
@@ -47,6 +48,11 @@ import {
   setKnowledge,
   switchSet,
 } from "./features/environment/operations.js";
+import {
+  changeHarnesses,
+  listHarnesses,
+  selectHarnesses,
+} from "./features/environment/harnesses.js";
 import { doctor } from "./features/doctor/index.js";
 import { repoStatus, workspaceUrl } from "./features/inspection/index.js";
 import { validateFolder } from "./features/workspace/assets.js";
@@ -145,7 +151,17 @@ export type ProgramOptions = Partial<Omit<CommandContext, "mode" | "home">> & {
 const groups: [string, string[]][] = [
   [
     "Get started:",
-    ["init", "login", "logout", "auth", "whoami", "sync", "status", "doctor"],
+    [
+      "init",
+      "login",
+      "logout",
+      "auth",
+      "whoami",
+      "sync",
+      "status",
+      "doctor",
+      "harnesses",
+    ],
   ],
   ["Assets:", ["skills", "mcp", "hooks", "sets", "knowledge"]],
   [
@@ -444,6 +460,13 @@ export function createProgram(options: ProgramOptions = {}): Command {
     switchSet: options.switchSet ?? ((options) => switchSet(options, runtime)),
     setKnowledge:
       options.setKnowledge ?? ((enabled) => setKnowledge(enabled, runtime)),
+    listHarnesses: options.listHarnesses ?? (() => listHarnesses(runtime)),
+    changeHarnesses:
+      options.changeHarnesses ??
+      ((change, targets) => changeHarnesses(change, targets, runtime)),
+    selectHarnesses:
+      options.selectHarnesses ??
+      ((selected) => selectHarnesses(selected, runtime)),
     doctor: options.doctor ?? (() => doctor(runtime)),
     workspaceUrl: options.workspaceUrl ?? (() => workspaceUrl(runtime)),
     repoStatus: options.repoStatus ?? (() => repoStatus(runtime)),
@@ -636,6 +659,7 @@ export function createProgram(options: ProgramOptions = {}): Command {
   registerAuth(program, context);
   registerInit(program, context);
   registerSync(program, context);
+  registerHarnesses(program, context);
   registerStatus(program, context);
   registerEnvironment(program, context);
   registerCapabilities(program, context);

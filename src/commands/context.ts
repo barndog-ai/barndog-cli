@@ -46,6 +46,11 @@ import type {
   SetsList,
   SetTarget,
 } from "../features/environment/operations.js";
+import type {
+  HarnessChange,
+  HarnessesApplied,
+  HarnessStatus,
+} from "../features/environment/harnesses.js";
 import type { Inventory } from "../features/inventory/index.js";
 import type {
   CatalogAsset,
@@ -176,6 +181,12 @@ type FeatureFunctions = {
   ) => Promise<SelectionOutcome>;
   switchSet: (options: SetSelection) => Promise<SelectionOutcome>;
   setKnowledge: (enabled: boolean) => Promise<Applied>;
+  listHarnesses: () => Promise<HarnessStatus[]>;
+  changeHarnesses: (
+    change: HarnessChange,
+    harnesses: readonly Harness[],
+  ) => Promise<HarnessesApplied>;
+  selectHarnesses: (harnesses: readonly Harness[]) => Promise<HarnessesApplied>;
 
   doctor: () => Promise<Check[]>;
   workspaceUrl: () => Promise<string>;
