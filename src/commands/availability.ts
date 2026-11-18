@@ -26,16 +26,23 @@ export const cloudOnlyCommands = [
   /^mcp (?:create|update)$/,
 ];
 
-/**
- * Commands that need published versions and reviews, which a local folder lacks.
- *
- * @internal Exported for its table test in `src/tests/patterns.test.ts`.
- */
-export const reviewCommands = [
+/** Commands that need published versions and reviews, which a local folder lacks. */
+const reviewCommands = [
   /^(?:pull|push|resolve)$/,
   /^(?:skills|hooks) (?:pull|push|create|versions|show|diff)$/,
   /^mcp versions$/,
 ];
+
+/** Every `knowledge …` command. */
+const KNOWLEDGE_COMMANDS = /^knowledge(?: |$)/;
+
+/**
+ * Commands a local folder can't serve yet: nothing adds knowledge documents to
+ * it, so they need a Git repo or Cloud Workspace.
+ *
+ * @internal Exported for its table test in `src/tests/patterns.test.ts`.
+ */
+export const sharedSourceCommands = [...reviewCommands, KNOWLEDGE_COMMANDS];
 
 /**
  * Workspace modes whose storage limits command availability; cloud setups have
@@ -61,7 +68,10 @@ export async function currentSetupMode(
   return settings.localWorkspace ? "local" : undefined;
 }
 
-/** What a command needs that this setup lacks: a server, or shared versions and reviews. */
+/**
+ * What a command needs that this setup lacks: a server, or a shared Git or
+ * Cloud workspace (versions, reviews, knowledge).
+ */
 export type CommandNeed = "cloud" | "shared";
 
 /** What a command needs that this setup lacks; undefined when it can run. */
@@ -75,7 +85,7 @@ export function commandNeeds(
 
   if (
     mode === "local" &&
-    reviewCommands.some((pattern) => pattern.test(command))
+    sharedSourceCommands.some((pattern) => pattern.test(command))
   ) {
     return "shared";
   }
@@ -165,6 +175,13 @@ export async function assertCommandAvailable(
     throw new CliError(
       `\`barndog ${command}\` ${action}, but this machine keeps its assets in ${where}.${git ? "" : " Your local assets stay active if you switch."}`,
       "barndog init --server <url>",
+    );
+  }
+
+  if (needs === "shared" && KNOWLEDGE_COMMANDS.test(command)) {
+    throw new CliError(
+      `\`barndog ${command}\` reads shared knowledge documents, which a local folder can't hold yet.`,
+      "barndog init",
     );
   }
 

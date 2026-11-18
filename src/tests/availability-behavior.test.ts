@@ -201,6 +201,33 @@ test("local mode refuses review commands and says to edit the folder and sync", 
   }
 });
 
+test("local mode refuses knowledge commands and points at init", async (t) => {
+  const { runtime } = await setup(t, "local");
+
+  for (const words of [
+    ["knowledge", "list"],
+    ["knowledge", "get"],
+    ["knowledge", "enable"],
+    ["knowledge", "disable"],
+  ]) {
+    const error = await refusal(assertCommandAvailable(words, {}, runtime));
+
+    expect(error.message).toBe(
+      `\`barndog ${words.join(" ")}\` reads shared knowledge documents, which a local folder can't hold yet.`,
+    );
+
+    expect(error.hint).toBe("barndog init");
+  }
+});
+
+test("git mode allows the knowledge commands", async (t) => {
+  const { runtime } = await setup(t, "git");
+
+  await expect(
+    assertCommandAvailable(["knowledge", "list"], {}, runtime),
+  ).resolves.toBeUndefined();
+});
+
 test("git mode allows the review commands", async (t) => {
   const { runtime } = await setup(t, "git");
 

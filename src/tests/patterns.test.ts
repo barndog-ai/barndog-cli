@@ -5,7 +5,7 @@ import type { Command } from "commander";
 import {
   cloudOnlyCommands,
   commandNeeds,
-  reviewCommands,
+  sharedSourceCommands,
 } from "../commands/availability.js";
 import { SESSION_TOKEN } from "../features/auth/credentials.js";
 import { hasConflictMarkers } from "../features/collaboration/workspace.js";
@@ -578,7 +578,7 @@ describe("command routing", () => {
 
   const commands = paths(createProgram());
 
-  test.each([...cloudOnlyCommands, ...reviewCommands].map((p) => [p]))(
+  test.each([...cloudOnlyCommands, ...sharedSourceCommands].map((p) => [p]))(
     "%s still matches a real command",
     (pattern) => {
       expect(commands.some((command) => pattern.test(command))).toBe(true);
@@ -595,6 +595,11 @@ describe("command routing", () => {
     ["push", "local", "shared"],
     ["skills pull", "local", "shared"],
     ["mcp versions", "local", "shared"],
+    ["knowledge list", "local", "shared"],
+    ["knowledge get", "local", "shared"],
+    ["knowledge disable", "local", "shared"],
+    ["knowledge list", "git", undefined],
+    ["knowledgex", "local", undefined],
     ["push", "git", undefined],
     ["sync", "local", undefined],
     ["skills list", "local", undefined],
