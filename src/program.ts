@@ -58,6 +58,10 @@ import { repoStatus, workspaceUrl } from "./features/inspection/index.js";
 import { validateFolder } from "./features/workspace/assets.js";
 import { migrate } from "./features/migration/migrate.js";
 import { listLocalAssets, moveLocalAssets } from "./features/migration/move.js";
+import { adoptNative } from "./features/adoption/adopt.js";
+import { undoAdoption } from "./features/adoption/undo.js";
+import { listAdoptions } from "./features/adoption/record.js";
+import { scanNative } from "./features/adoption/scan.js";
 import { updateImported } from "./features/imports/local.js";
 import {
   authenticateMcp,
@@ -112,6 +116,7 @@ import { searchCatalog } from "./features/catalog/index.js";
 import { registerEnvironment } from "./commands/environment.js";
 import { registerCapabilities } from "./commands/capabilities.js";
 import { registerWorkspace } from "./commands/workspace.js";
+import { registerAdopt } from "./commands/adopt.js";
 import { registerAdd } from "./commands/add.js";
 import {
   commandNeeds,
@@ -161,6 +166,7 @@ const groups: [string, string[]][] = [
       "status",
       "doctor",
       "harnesses",
+      "adopt",
     ],
   ],
   ["Assets:", ["skills", "mcp", "hooks", "sets", "knowledge"]],
@@ -470,6 +476,11 @@ export function createProgram(options: ProgramOptions = {}): Command {
     doctor: options.doctor ?? (() => doctor(runtime)),
     workspaceUrl: options.workspaceUrl ?? (() => workspaceUrl(runtime)),
     repoStatus: options.repoStatus ?? (() => repoStatus(runtime)),
+    scanNative: options.scanNative ?? (() => scanNative(runtime)),
+    adoptNative: options.adoptNative ?? ((keys) => adoptNative(keys, runtime)),
+    listAdoptions: options.listAdoptions ?? (() => listAdoptions(home)),
+    undoAdoption:
+      options.undoAdoption ?? ((target) => undoAdoption(target, runtime)),
     listLocalAssets:
       options.listLocalAssets ?? (() => listLocalAssets(runtime)),
     knowledgeProblems:
@@ -660,6 +671,7 @@ export function createProgram(options: ProgramOptions = {}): Command {
   registerInit(program, context);
   registerSync(program, context);
   registerHarnesses(program, context);
+  registerAdopt(program, context);
   registerStatus(program, context);
   registerEnvironment(program, context);
   registerCapabilities(program, context);

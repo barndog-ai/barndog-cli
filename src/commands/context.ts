@@ -75,6 +75,10 @@ import type {
   MoveResult,
 } from "../features/migration/move.js";
 import type { ImportUpdate } from "../features/imports/local.js";
+import type { AdoptionResult } from "../features/adoption/adopt.js";
+import type { AdoptionSummary } from "../features/adoption/record.js";
+import type { UndoResult, UndoTarget } from "../features/adoption/undo.js";
+import type { NativeScan } from "../features/adoption/scan.js";
 import type {
   McpAuthentication,
   McpUpdateInput,
@@ -193,6 +197,11 @@ type FeatureFunctions = {
   repoStatus: () => Promise<RepositoryStatus>;
   validateFolder: (directory: string) => Promise<FolderSummary>;
   migrate: (options: MigrateOptions) => Promise<MigrationReport>;
+
+  scanNative: () => Promise<NativeScan>;
+  adoptNative: (keys: readonly string[]) => Promise<AdoptionResult>;
+  listAdoptions: () => Promise<AdoptionSummary[]>;
+  undoAdoption: (target: UndoTarget) => Promise<UndoResult>;
 
   listLocalAssets: () => Promise<LocalAssets>;
   moveLocalAssets: (options: MoveOptions) => Promise<MoveResult>;

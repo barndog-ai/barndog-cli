@@ -24,6 +24,20 @@ export function barndogPaths(home: string) {
     syncLock: join(root, "sync.lock"),
     /** Backups of config.yaml and native files taken before BarnDog changes them. */
     migrations: join(root, "migrations"),
+    /** One folder per `barndog adopt`: its record and the originals it moved aside. */
+    adoptions: join(root, "adoptions"),
+    adoption: (id: string) => {
+      const folder = join(root, "adoptions", id);
+
+      return {
+        folder,
+        record: join(folder, "record.json"),
+        /** Each tool settings file as it was before the adoption changed it. */
+        settings: join(folder, "settings"),
+        /** Skill folders taken out of the tools: `<harness>/<name>`. */
+        skills: join(folder, "skills"),
+      };
+    },
     /** The last Cloud catalog revision a background sync delivered. */
     cloudCheck: join(root, "cloud-check.json"),
     /** Saved sessions, per server. */

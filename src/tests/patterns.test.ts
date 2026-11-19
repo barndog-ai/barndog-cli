@@ -1,3 +1,4 @@
+import { join, sep } from "node:path";
 import { testRuntime } from "./runtime.js";
 import { describe, expect, test } from "vitest";
 import type { Command } from "commander";
@@ -31,6 +32,7 @@ import {
   variableName,
 } from "../features/mcps/import.js";
 import { parseLocation } from "../features/imports/remote.js";
+import { commandPaths } from "../features/adoption/scan.js";
 import { bracedReferences } from "../harnesses/opencode.js";
 import { hookSettingsOwner } from "../harnesses/registry.js";
 import {
@@ -454,6 +456,40 @@ describe("harness settings and hook commands", () => {
     ["dir.sh/file", false],
   ])("scriptLike %j → %s", (path, expected) => {
     expect(scriptLike(path)).toBe(expected);
+  });
+
+  test.each([
+    ["~/.claude/hooks/x.sh", [["~/.claude/hooks/x.sh", ".claude/hooks/x.sh"]]],
+    ["$HOME/a.sh --fix", [["$HOME/a.sh", "a.sh"]]],
+    ['"${HOME}/b c.sh"', []],
+    ['"${HOME}/b.sh"', [["${HOME}/b.sh", "b.sh"]]],
+    ["'~/q.py'", [["~/q.py", "q.py"]]],
+    [
+      "python3 ~/q.py ~/r.py",
+      [
+        ["~/q.py", "q.py"],
+        ["~/r.py", "r.py"],
+      ],
+    ],
+    ["./relative.sh", []],
+    ["echo done", []],
+    ["~user/x.sh", []],
+    ['"', []],
+    ["", []],
+  ])("commandPaths %j", (command, expected) => {
+    expect(commandPaths(command, join(sep, "h"))).toStrictEqual(
+      expected.map(([word, path]) => ({
+        word,
+        path: join(sep, "h", path ?? ""),
+      })),
+    );
+  });
+
+  test("commandPaths keeps absolute paths as written", () => {
+    const absolute = join(sep, "opt", "hooks", "x.sh");
+    expect(commandPaths(`bash ${absolute}`, join(sep, "h"))).toStrictEqual([
+      { word: absolute, path: absolute },
+    ]);
   });
 
   test.each([

@@ -56,6 +56,11 @@ import {
 import { promptTheme, selected } from "./theme.js";
 import { chooseHarnesses, type ChooseHarnesses } from "./harness-picker.js";
 import {
+  offerAdoptionAtSetup,
+  type ChooseAdoption,
+  type ConfirmAdoption,
+} from "./adopt.js";
+import {
   bold,
   dim,
   fields,
@@ -166,6 +171,8 @@ export async function runSetup(options: {
   confirmRestart?: () => Promise<boolean>;
   choose?: ChooseHarnesses;
   chooseEnvironment?: ChooseEnvironment;
+  chooseAdoption?: ChooseAdoption;
+  confirmAdoption?: ConfirmAdoption;
   detected?: DetectedHarness[];
 }): Promise<void> {
   const { runtime } = options;
@@ -526,6 +533,15 @@ export async function runSetup(options: {
     )) {
       write(line);
     }
+  }
+
+  // Only a first setup asks: later runs already had the chance, and `barndog adopt` stays available.
+  if (!previous) {
+    await offerAdoptionAtSetup(runtime, {
+      write,
+      choose: options.chooseAdoption,
+      confirm: options.confirmAdoption,
+    });
   }
 
   write("");

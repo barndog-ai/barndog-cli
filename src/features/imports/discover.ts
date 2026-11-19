@@ -28,7 +28,7 @@ import { asRecord, isRecord } from "../../shared/values.js";
  * What imported Hook commands use for the installed package folder; BarnDog
  * binds it when installing.
  */
-const ROOT_TOKEN = "${BARNDOG_HOOK_ROOT}";
+export const ROOT_TOKEN = "${BARNDOG_HOOK_ROOT}";
 
 /** A link to a folder or file narrows everything to it; the rest of the repo is ignored. */
 const inScope = (remote: RemoteRepo, path: string) =>
