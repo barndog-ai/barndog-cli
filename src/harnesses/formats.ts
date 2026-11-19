@@ -1,10 +1,28 @@
 import type { McpDefinition } from "@barndog-ai/api-contract";
+import type { KeptValues } from "./types.js";
 
 /** The secret references of a definition: environment for stdio, headers for HTTP. */
 export const secretRefs = (definition: McpDefinition) =>
   definition.transport === "stdio"
     ? definition.environment
     : definition.headers;
+
+/**
+ * Each environment variable or header of a definition: the kept value when
+ * BarnDog keeps one, else the tool's reference to the local variable.
+ */
+export function valuesOrReferences(
+  definition: McpDefinition,
+  kept: KeptValues,
+  reference: (variable: string) => string,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(secretRefs(definition)).map(([name, ref]) => [
+      name,
+      kept[ref.secretRef] ?? reference(ref.secretRef),
+    ]),
+  );
+}
 
 /**
  * A server entry for a tool that keeps `mcpServers` in JSON, as Claude Code and
@@ -14,13 +32,9 @@ export const secretRefs = (definition: McpDefinition) =>
 export function jsonMcpServer(
   definition: McpDefinition,
   format: { reference: (variable: string) => string; typed: boolean },
+  kept: KeptValues,
 ): Record<string, unknown> {
-  const references = Object.fromEntries(
-    Object.entries(secretRefs(definition)).map(([name, ref]) => [
-      name,
-      format.reference(ref.secretRef),
-    ]),
-  );
+  const references = valuesOrReferences(definition, kept, format.reference);
 
   const type = format.typed ? { type: definition.transport } : {};
   const some = Object.keys(references).length > 0;

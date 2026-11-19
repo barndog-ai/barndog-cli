@@ -95,6 +95,11 @@ test("prefixed names use single hyphens and the origin type and slug", () => {
   expect(prefixedName(asset("a--b", "dev", "John_Doe"))).toBe(
     "dev-john-doe-a-b",
   );
+
+  // An MCP server keeps its own spelling after the prefix.
+  expect(
+    prefixedName({ ...asset("My_Server", "team", "Web App"), kind: "mcp" }),
+  ).toBe("team-web-app-My_Server");
 });
 
 test("the installed asset keeps its name; otherwise the closest scope does", async () => {

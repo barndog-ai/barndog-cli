@@ -59,11 +59,15 @@ export const cursor: HookAdapter = {
     file: ".cursor/mcp.json",
     files: [".cursor/mcp.json"],
     path: ["mcpServers"],
-    server: (definition) =>
-      jsonMcpServer(definition, {
-        reference: (variable) => `\${env:${variable}}`,
-        typed: false,
-      }),
+    server: (definition, _launcher, kept) =>
+      jsonMcpServer(
+        definition,
+        {
+          reference: (variable) => `\${env:${variable}}`,
+          typed: false,
+        },
+        kept,
+      ),
     login: { settings: "Settings → MCP" },
   },
 };

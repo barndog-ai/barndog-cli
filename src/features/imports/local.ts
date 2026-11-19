@@ -81,6 +81,18 @@ const writeSources = (folder: string, sources: Sources) =>
     { mode: POSIX_MODE.regularFile },
   );
 
+/** Stops following a repository for an asset whose local folder is gone. */
+export async function forgetImport(folder: string, kind: string, name: string) {
+  const sources = await readSources(folder);
+  const kept = sources.imports.filter(
+    (entry) => entry.kind !== kind || entry.name !== name,
+  );
+
+  if (kept.length !== sources.imports.length) {
+    await writeSources(folder, { ...sources, imports: kept });
+  }
+}
+
 /** The repository an asset still follows, or null for a fork or one made here. */
 export async function importedFrom(
   kind: "skill" | "hook",

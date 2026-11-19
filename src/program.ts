@@ -134,6 +134,11 @@ import { versionReport } from "./version.js";
 import { defined } from "./shared/lookup.js";
 import { barndogPaths } from "./config/paths.js";
 import { showPackage } from "./features/inventory/show.js";
+import {
+  forgetMcpValue,
+  keepMcpValue,
+  listKeptValues,
+} from "./features/mcps/values.js";
 import { readSettings } from "./config/settings.js";
 
 /** Keep command help readable at the conventional eighty-column terminal width. */
@@ -483,7 +488,8 @@ export function createProgram(options: ProgramOptions = {}): Command {
     workspaceUrl: options.workspaceUrl ?? (() => workspaceUrl(runtime)),
     repoStatus: options.repoStatus ?? (() => repoStatus(runtime)),
     scanNative: options.scanNative ?? (() => scanNative(runtime)),
-    adoptNative: options.adoptNative ?? ((keys) => adoptNative(keys, runtime)),
+    adoptNative:
+      options.adoptNative ?? ((keys, keep) => adoptNative(keys, keep, runtime)),
     listAdoptions: options.listAdoptions ?? (() => listAdoptions(home)),
     undoAdoption:
       options.undoAdoption ?? ((target) => undoAdoption(target, runtime)),
@@ -505,6 +511,13 @@ export function createProgram(options: ProgramOptions = {}): Command {
     updateImported:
       options.updateImported ??
       ((kind, name, options) => updateImported(kind, name, options, runtime)),
+    keepMcpValue:
+      options.keepMcpValue ??
+      ((variable, value) => keepMcpValue(variable, value, runtime)),
+    forgetMcpValue:
+      options.forgetMcpValue ??
+      ((variable) => forgetMcpValue(variable, runtime)),
+    listKeptValues: options.listKeptValues ?? (() => listKeptValues(runtime)),
     showPackage:
       options.showPackage ??
       ((kind, name, origin) => showPackage(kind, name, origin, runtime)),

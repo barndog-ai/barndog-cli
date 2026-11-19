@@ -96,6 +96,7 @@ export function registerAdd(program: Command, context: CommandContext) {
         harnesses,
       ),
     )
+    .option("--as <name>", "Add one MCP server under a different name")
     .option("--replace", "Replace an existing entry in your coding tools")
     .option("--oauth", "The server signs in through your coding tool (OAuth)")
     .option("--description <text>", "What the server does")

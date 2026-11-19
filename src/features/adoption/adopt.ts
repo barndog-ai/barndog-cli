@@ -22,6 +22,8 @@ import type { SyncEvent } from "../environment/events.js";
 import { synchronize } from "../environment/sync.js";
 import { locked } from "../environment/transaction.js";
 import { ensureLocalWorkspace } from "../imports/local.js";
+import { literalNotes, type LiteralValue } from "../mcps/import.js";
+import { readSecrets, updateSecrets } from "../secrets/index.js";
 import { writePackage } from "../workspace/directory.js";
 import { localRepoSource } from "../workspace/repo-source.js";
 import { copyFingerprint, installed } from "./copies.js";
@@ -128,21 +130,54 @@ async function hasSharedWorkspace(home: string) {
 function adoptionNotes(
   plan: PlannedAsset[],
   sourceOf: (asset: PlannedAsset) => FoundAsset,
+  keep: readonly string[],
 ): AdoptionNote[] {
   const sources = new Map(plan.map((asset) => [asset.source.key, asset]));
 
-  return [...sources.values()].flatMap((asset) =>
-    sourceOf(asset).notes.map((text) => ({
-      kind: asset.kind,
-      name: asset.name,
-      text,
-    })),
+  return [...sources.values()].flatMap((asset) => {
+    const source = sourceOf(asset);
+
+    return [...source.notes, ...literalNotes(source.literals, keep)].map(
+      (text) => ({ kind: asset.kind, name: asset.name, text }),
+    );
+  });
+}
+
+/**
+ * Keeps the chosen values before the sync that writes them into the tools,
+ * and returns how to put the file back as it was if adopting fails.
+ */
+async function keepValues(
+  literals: readonly LiteralValue[],
+  keep: readonly string[],
+  runtime: RuntimeContext,
+) {
+  const chosen = literals.filter((l) => keep.includes(l.variable));
+  if (!chosen.length) {
+    return async () => {};
+  }
+
+  const before = await readSecrets(runtime);
+  await updateSecrets(
+    Object.fromEntries(chosen.map((l) => [l.variable, l.value])),
+    runtime,
   );
+
+  return async () => {
+    await updateSecrets(
+      Object.fromEntries(
+        chosen.map((l) => [l.variable, before[l.variable] ?? null]),
+      ),
+      runtime,
+    );
+  };
 }
 
 /** Takes over the chosen assets; on any failure, puts back what it changed. */
 export async function adoptNative(
   keys: readonly string[],
+  /** Variables whose values BarnDog keeps on this machine (see `mcp env`). */
+  keep: readonly string[],
   runtime: RuntimeContext,
 ): Promise<AdoptionResult> {
   const { home } = runtime;
@@ -216,8 +251,19 @@ export async function adoptNative(
 
     // Written before anything changes, so undo can always find what moved.
     await writeAdoption(record, home);
+    const sources = [
+      ...new Map(plan.map((asset) => [asset.source.key, asset])).values(),
+    ].map(sourceOf);
+
+    let forgetValues = async () => {};
 
     try {
+      forgetValues = await keepValues(
+        sources.flatMap((source) => source.literals),
+        keep,
+        runtime,
+      );
+
       const events = await apply(
         { record, plan, sourceOf, workspace },
         runtime,
@@ -227,7 +273,7 @@ export async function adoptNative(
         id,
         adopted: plan,
         backup: paths.folder,
-        notes: adoptionNotes(plan, sourceOf),
+        notes: adoptionNotes(plan, sourceOf, keep),
         events,
         canShare: await hasSharedWorkspace(home),
       };
@@ -241,6 +287,8 @@ export async function adoptNative(
           );
         },
       );
+
+      await forgetValues();
 
       throw error;
     }

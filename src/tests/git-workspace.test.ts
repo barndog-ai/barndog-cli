@@ -95,6 +95,14 @@ import { parse } from "yaml";
 
 import { adaptHook } from "../features/hooks/adapt.js";
 import { folderDivergence } from "../features/hooks/divergence.js";
+import { readMoved } from "../features/workspace/overlay.js";
+import type { SyncEvent } from "../features/environment/events.js";
+
+const notices = (events: SyncEvent[]) =>
+  events
+    .map((event) => (event.type === "notice" ? event.message : ""))
+    .join("\n");
+
 import {
   fetchRemote,
   parseLocation,
@@ -601,15 +609,24 @@ test("an invalid Skill renamed since it broke still holds its installed name", a
 test("sync names assets it skips because of their name", async (t) => {
   const home = await temp(t);
   const folder = await setupLocal(home);
+  await write(folder, "org/mcp/My.Server.yaml", mcpYaml);
   await write(folder, "org/mcp/My_Server.yaml", mcpYaml);
+  await write(folder, "org/skills/My_Skill/SKILL.md", skill("My_Skill"));
   const events = await synchronize(undefined, testRuntime(home));
+  const text = notices(events);
+  expect(text).toMatch(
+    /org\/mcp\/My\.Server\.yaml was skipped: MCP server names use letters/,
+  );
+
+  expect(text).toMatch(
+    /org\/skills\/My_Skill was skipped: Names use lowercase letters/,
+  );
+
+  // An MCP server keeps the standard name its coding tools use.
+  expect(text).not.toMatch(/My_Server/);
   expect(
-    events.some(
-      (event) =>
-        event.type === "notice" &&
-        event.message.includes("org/mcp/My_Server.yaml was skipped"),
-    ),
-  ).toBeTruthy();
+    (await inventory(testRuntime(home))).items.map((item) => item.name),
+  ).toContain("My_Server");
 });
 
 test("imports refuse unsafe names and occupied folders", async (t) => {
@@ -659,15 +676,15 @@ test("MCP names are checked before anything changes", async (t) => {
   const home = await temp(t);
   const folder = await setupLocal(home);
   const native = JSON.stringify({
-    mcpServers: { My_Server: { command: "run" } },
+    mcpServers: { "My Server": { command: "run" } },
   });
 
   await writeFile(join(home, ".claude.json"), native);
-  for (const name of ["My_Server", "../escape"]) {
+  for (const name of ["My Server", "../escape"]) {
     await expect(
       addMcpServers(
         [{ name, definition: {}, notes: [] }] as never,
-        { replace: true },
+        { replace: true, keep: [] },
         testRuntime(home),
       ),
     ).rejects.toThrow(/can't be used as an MCP name/);
@@ -1868,9 +1885,10 @@ test("moving into an empty repo commits directly", async (t) => {
     ).length,
   ).toBe(1);
 
-  expect(
-    await readFile(join(folder, "org/skills/code-review/SKILL.md"), "utf8"),
-  ).toBe(skill("code-review"));
+  // Setup's "move" makes the shared copy the only one.
+  await expect(lstat(join(folder, "org/skills/code-review"))).rejects.toThrow();
+
+  expect(await readMoved(folder)).toStrictEqual([]);
 });
 
 test("moving into a used repo opens a review, lists clashes, and can move them later", async (t) => {
@@ -1884,11 +1902,29 @@ test("moving into a used repo opens a review, lists clashes, and can move them l
   );
 
   await write(folder, "org/skills/mine/SKILL.md", skill("mine"));
+  await write(folder, "org/skills/edited/SKILL.md", skill("edited"));
+  await write(folder, "org/knowledge/notes.md", knowledgeMd);
   await setupGit(url, home, "keep");
-  const result = await moveLocalAssets({}, testRuntime(home));
+  const result = await moveLocalAssets({ keepLocal: false }, testRuntime(home));
   expect(result.rows.map((r) => [r.name, r.status]).sort()).toStrictEqual([
     ["code-review", "clash"],
+    ["edited", "moved"],
     ["mine", "moved"],
+    ["notes", "moved"],
+  ]);
+
+  expect(renderMove(result).join("\n")).toMatch(
+    /local copies stay in use until then/,
+  );
+
+  const moving = (await listLocalAssets(testRuntime(home))).assets.filter(
+    (asset) => asset.state === "moving",
+  );
+
+  expect(moving.map((asset) => [asset.name, asset.movingTo])).toStrictEqual([
+    ["edited", url],
+    ["mine", url],
+    ["notes", url],
   ]);
 
   expect(result.branch!).toMatch(/^barndog\/local-move-/);
@@ -1902,19 +1938,39 @@ test("moving into a used repo opens a review, lists clashes, and can move them l
     run(clone, "show", "origin/main:org/skills/mine/SKILL.md"),
   ).rejects.toThrow();
 
-  // Until it merges, the local copy keeps working.
-  await synchronize(undefined, testRuntime(home), undefined, { prompt: false });
+  // Until it merges, the local copy keeps working, and sync says so.
+  const waiting = await synchronize(undefined, testRuntime(home), undefined, {
+    prompt: false,
+  });
+
   expect(await installed(home, "skills/mine/SKILL.md")).toMatch(/mine/);
+  expect(notices(waiting)).toMatch(/mine is still moving to .*merges/);
+  await write(folder, "org/skills/edited/SKILL.md", skill("edited", "Later."));
   await run(clone, "merge", "--no-edit", `origin/${result.branch}`);
   await run(clone, "push", "origin", "main");
-  await synchronize(undefined, testRuntime(home), undefined, { prompt: false });
+  const merged = await synchronize(undefined, testRuntime(home), undefined, {
+    prompt: false,
+  });
+
   expect(
     (await inventory(testRuntime(home))).items.filter((i) => i.name === "mine")
       .length,
   ).toBe(1);
 
+  expect(notices(merged)).toMatch(/mine moved to .*Removed the local copy/);
+  expect(notices(merged)).toMatch(/notes moved to .*Removed the local copy/);
+  await expect(lstat(join(folder, "org/knowledge/notes.md"))).rejects.toThrow();
+  await expect(lstat(join(folder, "org/skills/mine"))).rejects.toThrow();
+  // Edited after the move, so it stays as its own asset.
+  expect(notices(merged)).toMatch(/edited changed after it was moved/);
+  expect(
+    await readFile(join(folder, "org/skills/edited/SKILL.md"), "utf8"),
+  ).toMatch(/Later/);
+
+  expect(await readMoved(folder)).toStrictEqual([]);
+
   const later = await moveLocalAssets(
-    { names: ["code-review"], as: "my-review" },
+    { keepLocal: false, names: ["code-review"], as: "my-review" },
     testRuntime(home),
   );
 
@@ -1929,11 +1985,14 @@ test("moving into a used repo opens a review, lists clashes, and can move them l
   ).toMatch(/name: my-review/);
 
   await expect(
-    moveLocalAssets({ names: ["nope"] }, testRuntime(home)),
+    moveLocalAssets({ keepLocal: true, names: ["nope"] }, testRuntime(home)),
   ).rejects.toThrow(/No local asset named nope/);
 
   await expect(
-    moveLocalAssets({ names: ["a", "b"], as: "x" }, testRuntime(home)),
+    moveLocalAssets(
+      { keepLocal: true, names: ["a", "b"], as: "x" },
+      testRuntime(home),
+    ),
   ).rejects.toThrow(/exactly one/);
 });
 
@@ -1941,7 +2000,9 @@ test("moving from a local-only machine asks for a destination first", async (t) 
   const root = await temp(t);
   const home = join(root, "dev");
   await setupLocal(home);
-  await expect(moveLocalAssets({}, testRuntime(home))).rejects.toSatisfy(
+  await expect(
+    moveLocalAssets({ keepLocal: true }, testRuntime(home)),
+  ).rejects.toSatisfy(
     (error: CliError) =>
       /nowhere to move/.test(error.message) &&
       Boolean(error.hint?.includes("--repo <url>")) &&
@@ -2069,7 +2130,7 @@ test("moving to cloud defaults to personal and keeps knowledge within permission
     /DOCS_TOKEN/,
   );
 
-  const result = await moveLocalAssets({}, testRuntime(home));
+  const result = await moveLocalAssets({ keepLocal: true }, testRuntime(home));
   expect(origins).toStrictEqual([{ type: "dev", id: dev }]);
   expect(result.rows.map((r) => [r.name, r.status])).toStrictEqual([
     ["docs", "moved"],
@@ -2985,7 +3046,7 @@ test("a local-only machine can promote to a repo without switching", async (t) =
   await write(folder, "org/skills/mine/SKILL.md", skill("mine"));
   await synchronize(undefined, testRuntime(home));
   const result = await moveLocalAssets(
-    { repo: url, to: "team/web", names: ["mine"] },
+    { keepLocal: true, repo: url, to: "team/web", names: ["mine"] },
     testRuntime(home),
   );
 
@@ -3018,7 +3079,10 @@ test("a local-only machine can promote to a repo without switching", async (t) =
   );
 
   await expect(
-    moveLocalAssets({ server: "http://127.0.0.1:9" }, testRuntime(home)),
+    moveLocalAssets(
+      { keepLocal: true, server: "http://127.0.0.1:9" },
+      testRuntime(home),
+    ),
   ).rejects.toSatisfy(
     (error: CliError) =>
       error.hint === "barndog login --server http://127.0.0.1:9",
@@ -3122,7 +3186,7 @@ test("a moved asset is used from its new scope once it exists there, and removin
   await write(folder, "org/skills/mine/SKILL.md", skill("mine"));
   await setupGit(url, home, "keep");
   const result = await moveLocalAssets(
-    { names: ["mine"], to: "team/web" },
+    { keepLocal: false, names: ["mine"], to: "team/web" },
     testRuntime(home),
   );
 
@@ -3137,6 +3201,8 @@ test("a moved asset is used from its new scope once it exists there, and removin
   expect(items.map((i) => [i.origin, i.state])).toStrictEqual([
     ["team/web", "installed"],
   ]);
+
+  await expect(lstat(join(folder, "org/skills/mine"))).rejects.toThrow();
 
   await changeAsset(
     "remove",

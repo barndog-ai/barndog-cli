@@ -1,13 +1,22 @@
 import type { RuntimeContext } from "../../runtime.js";
 import { basename } from "node:path";
-import { readSettings, SetupRequiredError } from "../../config/settings.js";
+import {
+  readSettings,
+  SetupRequiredError,
+  type Settings,
+} from "../../config/settings.js";
 import { selectionState } from "../../config/environment.js";
 import { readState } from "../../config/state.js";
 import { treeFingerprint } from "../workspace/tree.js";
 import { linkTarget } from "../environment/transaction.js";
 import { environmentCatalog } from "../server/catalog.js";
 import { openRepoSource } from "../workspace/workspace-source.js";
-import { localOverlay, mergeLocalCatalog } from "../workspace/overlay.js";
+import {
+  localOverlay,
+  mergeLocalCatalog,
+  moveDestination,
+  readMoved,
+} from "../workspace/overlay.js";
 import { resolveAssets } from "../asset-selection/index.js";
 import { installedName, resolveClashes } from "../environment/names.js";
 import { originLabel, scopes } from "../server/origin.js";
@@ -48,7 +57,21 @@ export type Inventory = {
   /** Set when the workspace could not be reached; items then come from local state only. */
   offline: string | null;
   items: InventoryItem[];
+  /** Local assets moving to the shared workspace, waiting for their shared copy. */
+  moving: { kind: string; name: string; to: string }[];
 };
+
+/** Local assets still moving to the shared workspace; none without a local folder. */
+async function pendingMoves(settings: Settings) {
+  const folder = settings.localWorkspace?.path;
+  const records = folder ? await readMoved(folder) : [];
+
+  return records.map((entry) => ({
+    kind: entry.kind,
+    name: entry.name,
+    to: moveDestination(entry),
+  }));
+}
 
 /** What is selected and what is actually installed on this machine. */
 /** The state of a selected asset; the first that applies wins. */
@@ -296,5 +319,6 @@ export async function inventory(runtime: RuntimeContext): Promise<Inventory> {
     knowledge: !!(conn || repo) && settings.knowledge !== false,
     offline,
     items,
+    moving: await pendingMoves(settings),
   };
 }

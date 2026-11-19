@@ -30,6 +30,17 @@ export const NAME = /^[a-z\d]+(?:-[a-z\d]+)*$/;
 export const validAssetName = (name: string) =>
   NAME.test(name) && name.length <= MAX_ASSET_NAME_LENGTH;
 
+/**
+ * An MCP server name as coding tools accept it: letters, digits, `_` and `-`,
+ * such as `my_server` or `GitHub`. Tools name its tools after it
+ * (`mcp__my_server__search`), so BarnDog keeps it as written.
+ */
+export const MCP_NAME = /^[\w-]+$/;
+
+/** Whether `name` can be an MCP server's name: {@link MCP_NAME}, at most 64 characters. */
+export const validMcpName = (name: string) =>
+  MCP_NAME.test(name) && name.length <= MAX_ASSET_NAME_LENGTH;
+
 /** Turns any text into a {@link NAME}-shaped slug: `Team A/Review!` → `team-a-review`. */
 export function slugify(text: string): string {
   return text

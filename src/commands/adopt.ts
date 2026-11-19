@@ -82,7 +82,8 @@ export function registerAdopt(program: Command, context: CommandContext) {
         );
       }
 
-      const result = await context.adoptNative(keys);
+      // Without a terminal nothing is kept; the notes say which variables to set.
+      const result = await context.adoptNative(keys, []);
       if (context.mode.json) {
         return context.write(json(result));
       }

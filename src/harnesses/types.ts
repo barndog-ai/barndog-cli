@@ -90,6 +90,9 @@ type McpLogin =
   /** Where to sign in inside the tool, for one without a login command. */
   | { settings: string };
 
+/** Variable name → value, for the MCP variables BarnDog keeps on this machine. */
+export type KeptValues = Readonly<Record<string, string>>;
+
 type McpProfile = {
   /** The user-level MCP configuration file, relative to the home directory. */
   file: string;
@@ -106,13 +109,16 @@ type McpProfile = {
    */
   imported?: (entry: Record<string, unknown>) => Record<string, unknown>;
   /**
-   * One server entry in the tool's own format. Secrets stay references to
-   * local environment variables. `launcher` is BarnDog's script that starts a
+   * One server entry in the tool's own format. A variable in `kept` (the
+   * values BarnDog keeps on this machine) is written as its value, the way the
+   * tool stores values it's given; every other one stays a reference to a
+   * local environment variable. `launcher` is BarnDog's script that starts a
    * stdio server with renamed variables, for a tool that can't rename them.
    */
   server: (
     definition: McpDefinition,
     launcher: string,
+    kept: KeptValues,
   ) => Record<string, unknown>;
   login: McpLogin;
 };

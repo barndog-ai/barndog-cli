@@ -13,11 +13,11 @@ import { parse as parseToml, stringify as stringifyToml } from "smol-toml";
 // source positions, and toml-eslint-parser (despite the name, a plain TOML parser
 // that doesn't need ESLint) gives each table's range in the text. See tomlEdit().
 import { parseForESLint } from "toml-eslint-parser";
-import { isDeepStrictEqual } from "node:util";
 import type { Harness } from "../../harnesses/types.js";
 import { adapters, type NativeKind } from "../../harnesses/registry.js";
 import { isRecord } from "../../shared/values.js";
 import { CliError } from "../../errors.js";
+import { sameValue, type SecretUse } from "./secret-values.js";
 
 /**
  * One owned native configuration entry, including its destination file and
@@ -30,6 +30,8 @@ export type NativeEntry = {
   file: string;
   key: string;
   value: Record<string, unknown>;
+  /** Kept MCP values written into `value`; `state.json` records only their hashes. */
+  secrets?: readonly SecretUse[];
 };
 
 function object(value: unknown, file: string): Record<string, unknown> {
@@ -48,7 +50,7 @@ function same(left: unknown, right: unknown): boolean {
     return left === right;
   }
 
-  return isDeepStrictEqual(
+  return sameValue(
     JSON.parse(JSON.stringify(left)),
     JSON.parse(JSON.stringify(right)),
   );

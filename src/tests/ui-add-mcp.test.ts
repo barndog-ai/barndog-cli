@@ -308,3 +308,70 @@ test("--file with a server name the file doesn't have adds nothing and lists its
 
   expect(await stored(context)).toEqual({});
 });
+
+test("an MCP server keeps a standard name with capitals or underscores", async (t) => {
+  const { context } = await fixture(t);
+  await addMcp(
+    undefined,
+    { config: '{"My_Server":{"command":"node"}}' },
+    context,
+  );
+
+  expect(Object.keys(await stored(context))).toEqual(["My_Server"]);
+});
+
+test("a name taken locally, even only in case, asks for another in a terminal", async (t) => {
+  const { context } = await fixture(t);
+  await addMcp(undefined, { config: '{"docs":{"command":"node"}}' }, context);
+  vi.mocked(context.prompts.text)
+    .mockResolvedValueOnce("bad name")
+    .mockResolvedValueOnce(" Docs_2 ");
+
+  await addMcp(undefined, { config: '{"Docs":{"command":"node"}}' }, context);
+
+  const written = vi.mocked(context.write).mock.calls.map(([line]) => line);
+  expect(written).toContainEqual(
+    expect.stringMatching(
+      /Docs differs from your local MCP server docs only in case/,
+    ),
+  );
+
+  expect(written).toContainEqual(
+    expect.stringMatching(/bad name can't be an MCP server name/),
+  );
+
+  expect(Object.keys(await stored(context)).sort()).toEqual(["Docs_2", "docs"]);
+});
+
+test("without a terminal, a taken name fails with --as as the fix, and --as renames one server", async (t) => {
+  const { context } = await fixture(t);
+  const quiet = { ...context, interactive: false };
+  await addMcp(undefined, { config: '{"docs":{"command":"node"}}' }, quiet);
+
+  await expect(
+    addMcp(undefined, { config: '{"DOCS":{"command":"node"}}' }, quiet),
+  ).rejects.toSatisfy(
+    (error: CliError) =>
+      /only in case/.test(error.message) &&
+      error.hint === "barndog mcp add DOCS --as <new-name>",
+  );
+
+  await addMcp(
+    undefined,
+    { config: '{"DOCS":{"command":"node"}}', as: "docs_upper" },
+    quiet,
+  );
+
+  await expect(
+    addMcp(
+      undefined,
+      { config: '{"a":{"command":"x"},"b":{"command":"y"}}', as: "c" },
+      quiet,
+    ),
+  ).rejects.toThrow(/--as renames one MCP server/);
+
+  expect(Object.keys(await stored(context)).sort()).toEqual([
+    "docs",
+    "docs_upper",
+  ]);
+});

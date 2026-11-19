@@ -11,7 +11,9 @@ import { localWorkspace } from "../features/workspace/setup.js";
 import { readSettings, saveSettings } from "../config/settings.js";
 import { CliError } from "../shared/cli-error.js";
 import { synchronize } from "../features/environment/sync.js";
-import { readMoved } from "../features/workspace/overlay.js";
+import { readMoved, recordMoved } from "../features/workspace/overlay.js";
+import { finishMoves } from "../features/environment/moves.js";
+import { selectionState } from "../config/environment.js";
 import {
   moveLocalAssets,
   listLocalAssets,
@@ -66,7 +68,8 @@ const refuse = () =>
 /** What each local asset becomes after `moveLocalAssets`, by "kind:name". */
 type Outcome = {
   rows: Record<string, { status: string; detail?: string }>;
-  states: Record<string, "active" | "moved" | "invalid">;
+  /** "removed" when the local copy is already gone. */
+  states: Record<string, "active" | "moving" | "invalid" | "removed">;
   posted: string[];
   synced: boolean;
 };
@@ -81,7 +84,7 @@ const modes: Record<"clash" | "denied" | "failure" | "publish", Outcome> = {
     },
     states: {
       "skill:release-notes": "active",
-      "hook:release-notes": "moved",
+      "hook:release-notes": "moving",
       "knowledge:context": "active",
       "skill:broken": "invalid",
     },
@@ -99,8 +102,8 @@ const modes: Record<"clash" | "denied" | "failure" | "publish", Outcome> = {
       "skill:broken": { status: "skipped" },
     },
     states: {
-      "skill:release-notes": "moved",
-      "hook:release-notes": "moved",
+      "skill:release-notes": "moving",
+      "hook:release-notes": "moving",
       "knowledge:context": "active",
       "skill:broken": "invalid",
     },
@@ -135,9 +138,9 @@ const modes: Record<"clash" | "denied" | "failure" | "publish", Outcome> = {
       "skill:broken": { status: "skipped" },
     },
     states: {
-      "skill:release-notes": "moved",
-      "hook:release-notes": "moved",
-      "knowledge:context": "moved",
+      "skill:release-notes": "moving",
+      "hook:release-notes": "moving",
+      "knowledge:context": "removed",
       "skill:broken": "invalid",
     },
     posted: [
@@ -226,7 +229,7 @@ for (const mode of ["clash", "denied", "failure", "publish"] as const) {
     const expected = modes[mode];
 
     const result = await moveLocalAssets(
-      { to: "me", server: "http://127.0.0.1:9" },
+      { keepLocal: false, to: "me" },
       runtime,
     );
 
@@ -240,13 +243,11 @@ for (const mode of ["clash", "denied", "failure", "publish"] as const) {
       }
     }
 
-    const moved = await readMoved(local.path);
+    const listed = (await listLocalAssets(runtime)).assets;
     const states = Object.fromEntries(
-      (await listLocalAssets(runtime)).assets.map((asset) => [
-        keyOf(asset),
-        moved.some((entry) => entry.path === asset.path)
-          ? "moved"
-          : asset.state,
+      Object.keys(expected.states).map((key) => [
+        key,
+        listed.find((asset) => keyOf(asset) === key)?.state ?? "removed",
       ]),
     );
 
@@ -261,11 +262,20 @@ for (const mode of ["clash", "denied", "failure", "publish"] as const) {
     ).toEqual(expected.posted);
 
     expect(vi.mocked(synchronize).mock.calls.length > 0).toBe(expected.synced);
+    // Only knowledge goes at once; the rest waits for sync to see the shared copy.
+    const kept = preservedPaths.filter(
+      (path) =>
+        !path.endsWith("context.md") ||
+        expected.states["knowledge:context"] !== "removed",
+    );
+
     expect(
       await Promise.all(
-        preservedPaths.map((path) => readFile(join(local.path, path), "utf8")),
+        kept.map((path) => readFile(join(local.path, path), "utf8")),
       ),
-    ).toEqual(before);
+    ).toEqual(
+      before.filter((_, index) => kept.includes(preservedPaths[index]!)),
+    );
   });
 }
 
@@ -275,7 +285,10 @@ test("local move uploads each asset under its own name to the chosen personal sc
   const { personal } = arrange(server, "publish");
   const sent = server.sent.length;
 
-  await moveLocalAssets({ to: "me", server: "http://127.0.0.1:9" }, runtime);
+  await moveLocalAssets(
+    { keepLocal: true, to: "me", server: "http://127.0.0.1:9" },
+    runtime,
+  );
 
   const bodies = Object.fromEntries(
     server.sent
@@ -306,10 +319,7 @@ test("failed moves stay active, so running the move again retries only them", as
   const server = await cloud(t);
   const { runtime } = await localFixture(server);
   arrange(server, "failure");
-  const first = await moveLocalAssets(
-    { to: "me", server: "http://127.0.0.1:9" },
-    runtime,
-  );
+  const first = await moveLocalAssets({ keepLocal: false, to: "me" }, runtime);
 
   expect(first.rows.filter((row) => row.status === "failed")).toHaveLength(3);
 
@@ -323,10 +333,7 @@ test("failed moves stay active, so running the move again retries only them", as
     sample(contract.knowledgeDocumentSchema),
   );
 
-  const second = await moveLocalAssets(
-    { to: "me", server: "http://127.0.0.1:9" },
-    runtime,
-  );
+  const second = await moveLocalAssets({ keepLocal: false, to: "me" }, runtime);
 
   expect(
     second.rows
@@ -335,10 +342,7 @@ test("failed moves stay active, so running the move again retries only them", as
       .sort(),
   ).toEqual(["hook:release-notes", "knowledge:context", "skill:release-notes"]);
 
-  const third = await moveLocalAssets(
-    { to: "me", server: "http://127.0.0.1:9" },
-    runtime,
-  );
+  const third = await moveLocalAssets({ keepLocal: false, to: "me" }, runtime);
 
   expect(third.rows.map(keyOf)).toEqual(["skill:broken"]);
 });
@@ -357,9 +361,10 @@ test("moving with --as requires exactly one name and tells the user how", async 
   const server = await cloud(t);
   const { runtime } = await localFixture(server);
 
-  const error = await moveLocalAssets({ as: "renamed" }, runtime).catch(
-    (e: unknown) => e,
-  );
+  const error = await moveLocalAssets(
+    { keepLocal: true, as: "renamed" },
+    runtime,
+  ).catch((e: unknown) => e);
 
   assert(error instanceof CliError);
   expect(error.message).toContain("name exactly one");
@@ -372,9 +377,10 @@ test("moving an unknown name fails before anything is sent", async (t) => {
   const { runtime } = await localFixture(server);
   const sent = server.sent.length;
 
-  const error = await moveLocalAssets({ names: ["missing"] }, runtime).catch(
-    (e: unknown) => e,
-  );
+  const error = await moveLocalAssets(
+    { keepLocal: true, names: ["missing"] },
+    runtime,
+  ).catch((e: unknown) => e);
 
   assert(error instanceof CliError);
   expect(error.message).toBe("No local asset named missing.");
@@ -389,7 +395,7 @@ test("a name that is only the start of another asset's name is still unknown", a
   const { runtime } = await localFixture(server);
 
   const error = await moveLocalAssets(
-    { names: ["release", "release-notes"] },
+    { keepLocal: true, names: ["release", "release-notes"] },
     runtime,
   ).catch((e: unknown) => e);
 
@@ -436,7 +442,13 @@ test("renaming a Hook uploads it under the new name and rewrites its hook.yaml",
 
   const sent = server.sent.length;
   const moved = await moveLocalAssets(
-    { to: "org", names: ["release-notes"], as: "new-name", kind: "hook" },
+    {
+      keepLocal: true,
+      to: "org",
+      names: ["release-notes"],
+      as: "new-name",
+      kind: "hook",
+    },
     runtime,
   );
 
@@ -474,7 +486,13 @@ test("renaming a Skill uploads it under the new name and rewrites its SKILL.md",
 
   const sent = server.sent.length;
   await moveLocalAssets(
-    { to: "org", names: ["release-notes"], as: "new-name", kind: "skill" },
+    {
+      keepLocal: true,
+      to: "org",
+      names: ["release-notes"],
+      as: "new-name",
+      kind: "skill",
+    },
     runtime,
   );
 
@@ -486,11 +504,11 @@ test("renaming a Skill uploads it under the new name and rewrites its SKILL.md",
   expect(files["SKILL.md"]).toMatch(/^name: new-name$/m);
 });
 
-test("renaming a knowledge document publishes it under the new name and marks the local file moved", async (t) => {
+test("moving a knowledge document under a new name removes the local file once it's published", async (t) => {
   const server = await cloud(t);
   const { runtime, local: folder } = await localFixture(server);
   const result = await moveLocalAssets(
-    { to: "org", names: ["context"], as: "renamed" },
+    { keepLocal: false, to: "org", names: ["context"], as: "renamed" },
     runtime,
   );
 
@@ -506,14 +524,73 @@ test("renaming a knowledge document publishes it under the new name and marks th
     server.sent.find((s) => s.request === "POST /v1/knowledge/publish")!.body,
   ).toMatchObject({ content: { name: "renamed" } });
 
-  const local = (await listLocalAssets(runtime)).assets.find(
-    (asset) => asset.kind === "knowledge",
-  );
-
-  expect(local).toMatchObject({ name: "context", state: "active" });
-  expect(await readMoved(folder.path)).toEqual([
-    expect.objectContaining({ kind: "knowledge", path: local?.path }),
+  expect(result.removed).toEqual([
+    join(folder.path, "org/knowledge/context.md"),
   ]);
 
+  expect(
+    (await listLocalAssets(runtime)).assets.some(
+      (asset) => asset.kind === "knowledge",
+    ),
+  ).toBe(false);
+
+  expect(await readMoved(folder.path)).toEqual([]);
   expect(vi.mocked(synchronize)).toHaveBeenCalledOnce();
+});
+
+test("keeping local copies records nothing and leaves every local file", async (t) => {
+  const server = await cloud(t);
+  const { runtime, local: folder } = await localFixture(server);
+  arrange(server, "publish");
+  const result = await moveLocalAssets(
+    { keepLocal: true, to: "me", server: "http://127.0.0.1:9" },
+    runtime,
+  );
+
+  expect(result).toMatchObject({ keepLocal: true, removed: [] });
+  expect(await readMoved(folder.path)).toEqual([]);
+  expect(
+    (await listLocalAssets(runtime)).assets.map((asset) => asset.state),
+  ).not.toContain("moving");
+});
+
+test("a move to another server only copies, and moves this machine stopped using are dropped", async (t) => {
+  const server = await cloud(t);
+  const { runtime, local } = await localFixture(server);
+  arrange(server, "publish");
+  const result = await moveLocalAssets(
+    { keepLocal: false, to: "me", server: "http://127.0.0.1:9" },
+    runtime,
+  );
+
+  expect(result.keepLocal).toBe(true);
+  expect(await readMoved(local.path)).toStrictEqual([]);
+
+  // Recorded while connected, then the machine went local-only.
+  await recordMoved(local.path, [
+    { kind: "skill", name: "release-notes", path: "org/skills/release-notes" },
+  ]);
+
+  const settings = (await readSettings(server.home))!;
+  const localOnly = { harnesses: settings.harnesses, localWorkspace: local };
+  await saveSettings(localOnly, server.home);
+  expect(
+    (await listLocalAssets(runtime)).assets.map((asset) => asset.state),
+  ).not.toContain("moving");
+
+  const finished = await finishMoves({
+    settings: localOnly,
+    source: undefined,
+    catalog: { assets: [], distributions: [] },
+    selection: selectionState(localOnly),
+    options: {},
+    configPath: undefined,
+    runtime,
+  });
+
+  expect(finished.notices).toStrictEqual([
+    "This machine no longer uses the workspace release-notes was moving to, so its local copy stays as it is.",
+  ]);
+
+  expect(await readMoved(local.path)).toStrictEqual([]);
 });

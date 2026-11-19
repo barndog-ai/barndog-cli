@@ -38,6 +38,7 @@ import { hookSettingsOwner } from "../harnesses/registry.js";
 import {
   CONSTANT_CASE,
   GIT_OBJECT_ID,
+  MCP_NAME,
   NAME,
   POSITIVE_INTEGER,
   setYamlName,
@@ -46,6 +47,7 @@ import {
   splitOrigin,
   UUID_V4,
   VARIABLE_NAME,
+  validMcpName,
 } from "../shared/patterns.js";
 import { createProgram } from "../program.js";
 import { WINDOWS_DEVICE_NAME } from "../platform.js";
@@ -90,6 +92,29 @@ describe("shared identifier patterns", () => {
     ["", false],
   ])("NAME %j → %s", (value, expected) => {
     expect(NAME.test(value)).toBe(expected);
+  });
+
+  test.each([
+    ["my_server", true],
+    ["GitHub", true],
+    ["code-review", true],
+    ["a--b_", true],
+    ["-start", true],
+    ["my server", false],
+    ["my.server", false],
+    ["../escape", false],
+    ["sérveur", false],
+    ["", false],
+  ])("MCP_NAME %j → %s", (value, expected) => {
+    expect(MCP_NAME.test(value)).toBe(expected);
+  });
+
+  test.each([
+    ["a".repeat(64), true],
+    ["a".repeat(65), false],
+    ["My_Server", true],
+  ])("validMcpName %j → %s", (value, expected) => {
+    expect(validMcpName(value)).toBe(expected);
   });
 
   test.each([

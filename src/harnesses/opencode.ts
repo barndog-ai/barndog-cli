@@ -1,20 +1,23 @@
 import type { McpDefinition } from "@barndog-ai/api-contract";
 import { VARIABLE_NAME } from "../shared/patterns.js";
 import { asRecord, asStrings } from "../shared/values.js";
-import { secretRefs } from "./formats.js";
-import type { PluginAdapter } from "./types.js";
+import { valuesOrReferences } from "./formats.js";
+import type { KeptValues, PluginAdapter } from "./types.js";
 
 /**
  * OpenCode's server entry (`mcp.servers.<name>` in opencode.jsonc): a stdio
  * server is `local` with the program and its arguments in one `command` list,
  * an HTTP server is `remote`. Values refer to a local variable as `{env:NAME}`.
  */
-function mcpServer(definition: McpDefinition): Record<string, unknown> {
-  const references = Object.fromEntries(
-    Object.entries(secretRefs(definition)).map(([name, ref]) => [
-      name,
-      `{env:${ref.secretRef}}`,
-    ]),
+function mcpServer(
+  definition: McpDefinition,
+  _launcher: string,
+  kept: KeptValues,
+): Record<string, unknown> {
+  const references = valuesOrReferences(
+    definition,
+    kept,
+    (variable) => `{env:${variable}}`,
   );
 
   const some = Object.keys(references).length > 0;

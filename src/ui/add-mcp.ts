@@ -1,15 +1,20 @@
 /** `barndog mcp add`: brings MCP servers from JSON or a coding tool into the local workspace. */
 import { localPath } from "../platform.js";
 import { CliError } from "../errors.js";
+import { only } from "../shared/lookup.js";
 import { inputFile } from "../shared/files.js";
 import {
   addMcpServers,
   conflictingEntries,
   convertServer,
   harnessServers,
+  localMcpNamed,
   parseMcpText,
   type ImportedServer,
+  type LiteralValue,
 } from "../features/mcps/import.js";
+import { assetKinds } from "../features/asset-kinds/index.js";
+import { validMcpName } from "../shared/patterns.js";
 import { bold, dim, ok, warn } from "./format.js";
 import { type AddContext, type AddOptions } from "./add-asset.js";
 
@@ -103,6 +108,91 @@ async function serversToAdd(
 }
 
 /**
+ * Which literal values BarnDog keeps on this machine. Only asked in a
+ * terminal; otherwise none are kept and the notes say which variables to set.
+ */
+async function chooseKept(
+  found: { server: string; literal: LiteralValue }[],
+  context: AddContext,
+): Promise<string[]> {
+  if (!found.length || !context.interactive) {
+    return [];
+  }
+
+  context.write(
+    dim(
+      "BarnDog can keep these values in ~/.barndog/secrets.json, which only you can read and which is never uploaded, and write them into your coding tools' settings. Leave one unticked to set it yourself.",
+    ),
+  );
+
+  return context.prompts.chooseMany(
+    "Which values should BarnDog keep on this machine?",
+    found.map(({ server, literal }) => ({
+      name: `${literal.variable}  ${dim(`${server}: ${literal.key}`)}`,
+      short: literal.variable,
+      value: literal.variable,
+      checked: true,
+    })),
+  );
+}
+
+/** Why a server can't be added under `name` here, or null when it can. */
+async function nameProblem(name: string, context: AddContext) {
+  if (!validMcpName(name)) {
+    return `${name} can't be an MCP server name. ${assetKinds.mcp.nameRule}.`;
+  }
+
+  const existing = await localMcpNamed(name, context.runtime);
+  if (existing === null) {
+    return null;
+  }
+
+  return existing === name
+    ? `You already have a local MCP server named ${name}.`
+    : `${name} differs from your local MCP server ${existing} only in case, and they'd share one file on this disk.`;
+}
+
+/**
+ * Applies `--as`, then asks in a terminal for a new name wherever one is
+ * unusable or taken. Without a terminal, adding reports it with the fix.
+ */
+async function namedServers(
+  servers: ImportedServer[],
+  as: string | undefined,
+  context: AddContext,
+): Promise<ImportedServer[]> {
+  const one = only(servers);
+  if (as !== undefined && !one) {
+    throw new CliError(
+      "--as renames one MCP server, so add exactly one.",
+      "barndog mcp add <name> --as <new-name>",
+    );
+  }
+
+  const renamed = one && as !== undefined ? [{ ...one, name: as }] : servers;
+  if (!context.interactive) {
+    return renamed;
+  }
+
+  const result: ImportedServer[] = [];
+  for (const server of renamed) {
+    let name = server.name;
+    for (
+      let problem = await nameProblem(name, context);
+      problem;
+      problem = await nameProblem(name, context)
+    ) {
+      context.write(`${warn("!")} ${problem}`);
+      name = (await context.prompts.text(`New name for ${server.name}`)).trim();
+    }
+
+    result.push({ ...server, name });
+  }
+
+  return result;
+}
+
+/**
  * `mcp add`: imports MCP servers from a harness's configuration or pasted JSON
  * into the local workspace.
  */
@@ -119,7 +209,12 @@ export async function addMcp(
     );
   }
 
-  const imported = await serversToAdd(name, options, context);
+  const imported = await namedServers(
+    await serversToAdd(name, options, context),
+    options.as,
+    context,
+  );
+
   const oauth = new Set<string>();
   for (const { name: server, server: raw } of imported) {
     if (
@@ -169,7 +264,19 @@ export async function addMcp(
     }
   }
 
-  const result = await addMcpServers(servers, { replace }, context.runtime);
+  const keep = await chooseKept(
+    servers.flatMap((server) =>
+      server.literals.map((literal) => ({ server: server.name, literal })),
+    ),
+    context,
+  );
+
+  const result = await addMcpServers(
+    servers,
+    { replace, keep },
+    context.runtime,
+  );
+
   for (const added of result.added) {
     context.write(`${ok("✔")} Added ${bold(added)}`);
   }
@@ -177,6 +284,13 @@ export async function addMcp(
   for (const note of result.notes) {
     context.write(`${warn("!")} ${bold(note.server)}: ${note.text}`);
   }
+
+  // Sync says where each kept value was written.
+  result.events.forEach((event) => {
+    if (event.type === "notice") {
+      context.write(dim(event.message));
+    }
+  });
 
   for (const backup of result.backups) {
     context.write(dim(`Backup: ${backup}`));

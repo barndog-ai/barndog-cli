@@ -151,7 +151,7 @@ test.each([
   [1, "You have 1 local asset. What should happen to it?"],
   [2, "You have 2 local assets. What should happen to them?"],
 ])(
-  "local asset prompt for %i asset(s) offers keep, move and leave and returns the choice",
+  "local asset prompt for %i asset(s) offers keep, copy, move and leave and returns the choice",
   async (count, message) => {
     vi.mocked(select).mockResolvedValue("move");
 
@@ -161,6 +161,7 @@ test.each([
     expect(options.message).toBe(message);
     expect(options.choices).toEqual([
       expect.objectContaining({ value: "keep" }),
+      expect.objectContaining({ value: "copy" }),
       expect.objectContaining({ value: "move" }),
       expect.objectContaining({ value: "leave" }),
     ]);

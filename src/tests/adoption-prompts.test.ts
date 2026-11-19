@@ -35,6 +35,7 @@ const asset = (overrides: Partial<NativeAsset>): NativeAsset => ({
   sameName: [],
   identical: true,
   notes: [],
+  values: [],
   ...overrides,
 });
 
@@ -110,7 +111,7 @@ test("the picker groups assets by tool and adopts only what's picked", async () 
     "cursor/mcp/github",
   ]);
 
-  expect(adoptNative).toHaveBeenCalledWith(["claude/mcp/github"]);
+  expect(adoptNative).toHaveBeenCalledWith(["claude/mcp/github"], []);
   const text = lines.join("\n");
   expect(text).toMatch(/differs from Cursor/);
   expect(text).toMatch(/same as OpenCode/);
@@ -205,7 +206,7 @@ test("adopt in a terminal opens the picker, and reports when there's nothing", a
     });
 
   await program(scan).parseAsync(["adopt"], { from: "user" });
-  expect(adoptNative).toHaveBeenCalledWith(["codex/skill/notes"]);
+  expect(adoptNative).toHaveBeenCalledWith(["codex/skill/notes"], []);
 
   const empty = { assets: [], skipped: [] };
   await program(empty).parseAsync(["adopt"], { from: "user" });
@@ -217,4 +218,41 @@ test("adopt in a terminal opens the picker, and reports when there's nothing", a
   expect(lines).toContain("Nothing to adopt.");
   expect(lines.some((line) => line.includes('"adopted": []'))).toBe(true);
   expect(lines.join("\n")).toMatch(/no Skills, MCP servers or Hooks/);
+});
+
+test("adopting asks once per value which ones BarnDog keeps, and passes the answer on", async () => {
+  vi.mocked(checkbox)
+    .mockResolvedValueOnce(["claude/mcp/github"])
+    .mockResolvedValueOnce(["TOKEN"]);
+
+  vi.mocked(confirm).mockResolvedValue(true);
+  const lines: string[] = [];
+  const adoptNative = vi.fn().mockResolvedValue(result);
+  const valued: NativeScan = {
+    ...scan,
+    assets: scan.assets.map((item) =>
+      item.kind === "mcp"
+        ? { ...item, values: [{ key: "TOKEN", variable: "TOKEN" }] }
+        : item,
+    ),
+  };
+
+  await offerAdoption(valued, {
+    adoptNative,
+    write: (line) => lines.push(line),
+    runtime,
+  });
+
+  // Cursor's github comes along but shares claude's source, so TOKEN is asked once.
+  const asked = vi.mocked(checkbox).mock.calls[1]![0];
+  expect(asked.message).toBe(
+    "Which values should BarnDog keep on this machine?",
+  );
+
+  expect(asked.choices).toStrictEqual([
+    expect.objectContaining({ value: "TOKEN", checked: true }),
+  ]);
+
+  expect(lines.join("\n")).toMatch(/never uploaded/);
+  expect(adoptNative).toHaveBeenCalledWith(["claude/mcp/github"], ["TOKEN"]);
 });

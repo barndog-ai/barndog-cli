@@ -80,7 +80,7 @@ for (const [given, expected] of [
   });
 }
 
-test("MCP conversion turns every environment value into a reference and never stores a literal", () => {
+test("MCP conversion turns every environment value into a reference and keeps literals out of the definition", () => {
   const result = convertServer({
     name: "fixture",
     server: {
@@ -101,8 +101,12 @@ test("MCP conversion turns every environment value into a reference and never st
     },
   });
 
-  expect(JSON.stringify(result)).not.toContain("private-value");
-  expect(result.notes.join("\n")).toContain("LITERAL");
+  // The value never reaches the definition; it's handed back so the caller can ask whether to keep it.
+  expect(JSON.stringify(result.definition)).not.toContain("private-value");
+  expect(result.literals).toStrictEqual([
+    { key: "LITERAL", variable: "LITERAL", value: "private-value" },
+  ]);
+
   expect(
     convertServer({ name: "fixture", server: { command: "node", args: {} } })
       .definition,

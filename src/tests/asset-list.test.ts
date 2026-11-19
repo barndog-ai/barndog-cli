@@ -155,6 +155,7 @@ test("list shows installed, then disabled, then available, and filters each", as
         server: null,
         knowledge: false,
         offline: null,
+        moving: [],
         items,
       }),
     }).parseAsync(["skills", "list", ...args], { from: "user" });
@@ -196,6 +197,7 @@ test("list shows installed, then disabled, then available, and filters each", as
       server: null,
       knowledge: false,
       offline: null,
+      moving: [],
       items: [],
     }),
   });
@@ -233,6 +235,7 @@ test("search flags parse for every asset type and invalid pages fail before load
       server: null,
       knowledge: false,
       offline: null,
+      moving: [],
       items: [],
     }),
   });
@@ -288,6 +291,7 @@ test("search returns the same matches as JSON and as a table", async () => {
         server: null,
         knowledge: false,
         offline: null,
+        moving: [],
         items: [],
       }),
     }).parseAsync(["skills", "search", "review", ...args], { from: "user" });

@@ -11,6 +11,7 @@ import { LoginRequiredError } from "../auth/transport.js";
 import { synchronize } from "../environment/sync.js";
 import { assetKinds } from "../asset-kinds/index.js";
 import { barndogPaths } from "../../config/paths.js";
+import type { SyncEvent } from "../environment/events.js";
 
 export type Check = {
   name: string;
@@ -20,6 +21,22 @@ export type Check = {
   /** A command that deletes or changes something; `fix` says it in words. */
   command?: string;
 };
+
+/** An MCP variable installed servers refer to that has no value on this machine. */
+function variableCheck(event: SyncEvent): Check[] {
+  if (event.type !== "unset-variable") {
+    return [];
+  }
+
+  return [
+    {
+      name: "MCP variable",
+      status: "warn",
+      detail: `${event.variable} has no value here, so ${event.servers.join(", ")} can't use it: BarnDog doesn't keep it and it isn't set in this shell. Coding tools opened outside a terminal may not see your shell's variables either.`,
+      fix: `barndog mcp env set ${event.variable}`,
+    },
+  ];
+}
 
 const failure = (error: unknown) => ({
   detail: error instanceof Error ? error.message : String(error),
@@ -171,6 +188,7 @@ export async function doctor(runtime: RuntimeContext): Promise<Check[]> {
       fix: pending ? "barndog sync" : undefined,
     });
 
+    checks.push(...events.flatMap(variableCheck));
     for (const event of events) {
       if (event.type === "notice") {
         checks.push({ name: "Notice", status: "warn", detail: event.message });

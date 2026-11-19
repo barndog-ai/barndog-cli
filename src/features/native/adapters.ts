@@ -8,7 +8,12 @@ import {
 } from "../../platform.js";
 import type { HookManifest, McpDefinition } from "@barndog-ai/api-contract";
 import { adapters, nativeFile } from "../../harnesses/registry.js";
-import type { Harness, HookHarness } from "../../harnesses/types.js";
+import type {
+  Harness,
+  HookHarness,
+  KeptValues,
+} from "../../harnesses/types.js";
+import { secretRefs } from "../../harnesses/formats.js";
 import { type NativeEntry } from "./configuration.js";
 import { hookCommand } from "./hook-shell.js";
 
@@ -86,27 +91,45 @@ export async function hookIssue(
 }
 
 /**
- * Builds a harness-specific MCP configuration entry with secret references;
- * does not write native settings.
+ * Builds a harness-specific MCP configuration entry; does not write native
+ * settings. Variables in `kept` are written as their values, the rest as
+ * references to local environment variables.
  */
 export function mcpEntry(
   harness: Harness,
-  asset: { id: string; name: string },
-  definition: McpDefinition,
+  server: { id: string; name: string; definition: McpDefinition },
+  kept: KeptValues,
   runtime: RuntimeContext,
 ): NativeEntry {
   const { home } = runtime;
 
+  const used = Object.fromEntries(
+    Object.values(secretRefs(server.definition)).flatMap((ref) => {
+      const value = kept[ref.secretRef];
+
+      return value === undefined ? [] : [[ref.secretRef, value] as const];
+    }),
+  );
+
   return {
-    id: asset.id,
+    id: server.id,
     kind: "mcp",
     harness,
     file: nativeFile(harness, "mcp", home),
-    key: asset.name,
+    key: server.name,
     value: adapters[harness].mcp.server(
-      definition,
+      server.definition,
       fileURLToPath(new URL("../../entry/mcp-launch.js", import.meta.url)),
+      used,
     ),
+    ...(Object.keys(used).length
+      ? {
+          secrets: Object.entries(used).map(([variable, value]) => ({
+            variable,
+            value,
+          })),
+        }
+      : {}),
   };
 }
 

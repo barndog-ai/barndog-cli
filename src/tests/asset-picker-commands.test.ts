@@ -34,6 +34,7 @@ const item: InventoryItem = {
 const inventory: Inventory = {
   server: null,
   offline: null,
+  moving: [],
   knowledge: false,
   harnesses: [],
   items: [
@@ -511,6 +512,8 @@ describe("interactive fork and promote", () => {
 describe("promotion of a local asset", () => {
   const move = {
     target: "org",
+    keepLocal: true,
+    removed: [],
     rows: [{ kind: "skill", name: "release-notes", status: "moved" }],
   };
 
@@ -553,6 +556,7 @@ describe("promotion of a local asset", () => {
       "  Status  Kind   Name",
       "  moved   skill  release-notes",
       "",
+      expect.stringMatching(/local copies stay as separate assets/),
     ]);
   });
 

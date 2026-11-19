@@ -20,7 +20,6 @@ import {
   loadWorkspace,
   type RepoAsset,
   type WorkspaceModel,
-  NAME_RULE,
 } from "./format.js";
 import { git, GitError, gitReason, gitText } from "./git.js";
 import { folderSnapshot, gitSnapshot, type Snapshot } from "./snapshot.js";
@@ -87,7 +86,7 @@ function repoSource(
             `Knowledge file ${problem.path} was skipped: ${problem.reason}`,
         ),
         ...problems
-          .filter((problem) => problem.reason === NAME_RULE)
+          .filter((problem) => problem.badName)
           .map(
             (problem) =>
               `${problem.path} was skipped: ${problem.reason}. Rename it to deliver it.`,

@@ -151,6 +151,14 @@ function cloneCleanup(
   return { discard, keep: cleanUpIfInterrupted(discard) };
 }
 
+/** The setup choices that send local assets to the new workspace. */
+const sharesLocalAssets: Record<LocalAssetChoice, boolean> = {
+  keep: false,
+  copy: true,
+  move: true,
+  leave: false,
+};
+
 export async function runSetup(options: {
   restart?: boolean;
   server?: string;
@@ -519,7 +527,7 @@ export async function runSetup(options: {
     return;
   }
 
-  if (localChoice === "move" && localCount) {
+  if (sharesLocalAssets[localChoice] && localCount) {
     const to =
       choice.kind === "cloud"
         ? await (options.chooseMoveTarget ?? chooseMoveTarget)(
@@ -529,7 +537,10 @@ export async function runSetup(options: {
 
     write("");
     for (const line of renderMove(
-      await moveLocalAssets({ to }, options.runtime),
+      await moveLocalAssets(
+        { to, keepLocal: localChoice === "copy" },
+        options.runtime,
+      ),
     )) {
       write(line);
     }

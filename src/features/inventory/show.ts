@@ -44,7 +44,7 @@ export async function showPackage(
   const settings = await readSettings(home);
   const repo = settings && repoForOrigin(settings, runtime, origin);
   const described = repo
-    ? repoDetails(selectRepoAsset(await repo.model(), kind, name, origin))
+    ? repoDetails(selectRepoAsset(await repo.model(), kind, name, origin), kind)
     : await cloudDetails(kind, name, origin, runtime);
 
   const item = (await inventory(runtime)).items.find(
@@ -59,7 +59,7 @@ export async function showPackage(
   };
 }
 
-function repoDetails(asset: RepoAsset): Described {
+function repoDetails(asset: RepoAsset, kind: PackageKind): Described {
   const view = showRepoAsset(asset);
   const events = view.manifest
     ? eventsByTool((harness) => view.manifest?.implementations[harness]?.events)
@@ -67,7 +67,7 @@ function repoDetails(asset: RepoAsset): Described {
 
   return {
     id: view.id,
-    kind: view.kind === "hook" ? "hook" : "skill",
+    kind,
     name: view.name,
     origin: view.origin,
     version: view.version,

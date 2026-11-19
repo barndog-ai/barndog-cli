@@ -2,7 +2,6 @@ import type { RuntimeContext } from "../../runtime.js";
 import type { Settings } from "../../config/settings.js";
 import type { AssetCatalog, AssetReference } from "../asset-selection/types.js";
 import type { SelectionState } from "../../config/selection.js";
-import { resolveAssets } from "../asset-selection/index.js";
 import type { WorkspaceSource } from "./source.js";
 import type { WorkspaceModel } from "./format.js";
 import { localRepoSource, type RepoSource } from "./repo-source.js";
@@ -10,6 +9,7 @@ import { z } from "zod";
 import { localWorkspaceFiles } from "../../config/paths.js";
 import { readJsonIfExists, writeAtomic } from "../../shared/files.js";
 import { POSIX_MODE } from "../../shared/constants.js";
+import { rm } from "node:fs/promises";
 
 /** How assets in the kept local folder are addressed next to a shared workspace. */
 export const LOCAL_ORIGIN = "local";
@@ -21,20 +21,31 @@ const movedSchema = z.array(
     name: z.string(),
     /** Scope it was moved to; knowledge has none. */
     originId: z.string().optional(),
-    /** Set once the shared copy was selected, so removing it later sticks. */
-    adopted: z.boolean().optional(),
+    /**
+     * The local version that was moved, so an edit made since keeps the local
+     * copy. Moves recorded before this was kept have none.
+     */
+    version: z.string().optional(),
+    /** Where it went, as `local list` names it: a scope or a repository. */
+    target: z.string().optional(),
+    /** The pull request it waits for, when the move needs a review. */
+    url: z.string().nullable().optional(),
   }),
 );
 
 /**
- * Persisted local path and shared destination metadata used to track moved
- * assets.
+ * A local asset on its way to the shared workspace: it stays in use until the
+ * shared copy exists, then sync replaces it with that copy.
  */
 export type MovedAsset = z.infer<typeof movedSchema>[number];
 
+/** Where a move is going, as people read it: its pull request, else the destination. */
+export const moveDestination = (entry: MovedAsset) =>
+  entry.url ?? entry.target ?? "the shared workspace";
+
 /**
  * Reads and validates movement records in a workspace folder; an absent file
- * means nothing has moved.
+ * means nothing is moving.
  */
 export async function readMoved(folder: string): Promise<MovedAsset[]> {
   return (
@@ -45,16 +56,29 @@ export async function readMoved(folder: string): Promise<MovedAsset[]> {
 
 /**
  * Writes movement records in the folder, replacing prior entries with the same
- * local path.
+ * local path and dropping the `finished` ones.
  */
-export async function recordMoved(folder: string, added: MovedAsset[]) {
+export async function recordMoved(
+  folder: string,
+  added: MovedAsset[],
+  finished: readonly string[] = [],
+) {
   const kept = (await readMoved(folder)).filter(
-    (entry) => !added.some((asset) => asset.path === entry.path),
+    (entry) =>
+      !finished.includes(entry.path) &&
+      !added.some((asset) => asset.path === entry.path),
   );
+
+  const next = [...kept, ...added];
+  if (!next.length) {
+    await rm(localWorkspaceFiles(folder).moved, { force: true });
+
+    return;
+  }
 
   await writeAtomic(
     localWorkspaceFiles(folder).moved,
-    JSON.stringify([...kept, ...added], null, 2) + "\n",
+    JSON.stringify(next, null, 2) + "\n",
     { mode: POSIX_MODE.regularFile },
   );
 }
@@ -136,52 +160,6 @@ export async function mergeLocalCatalog(
       },
     ],
   };
-}
-
-/** Once a moved asset exists in the shared workspace, this machine uses that copy. */
-export async function adoptMoved(
-  overlay: RepoSource,
-  catalog: AssetCatalog,
-  state: SelectionState,
-  persist: boolean,
-): Promise<SelectionState> {
-  const moved = await readMoved(overlay.label);
-  const selected = new Set(
-    resolveAssets(catalog, state).assets.map((entry) => entry.asset.id),
-  );
-
-  const ids = [...state.individualAssetIds];
-  const adopted: MovedAsset[] = [];
-  for (const entry of moved) {
-    if (entry.adopted || !entry.originId) {
-      continue;
-    }
-
-    const asset = catalog.assets.find(
-      (a) =>
-        a.kind === entry.kind &&
-        a.name === entry.name &&
-        a.origin.id === entry.originId,
-    );
-
-    if (!asset) {
-      continue;
-    }
-
-    if (!selected.has(asset.id)) {
-      ids.push(asset.id);
-    }
-
-    adopted.push({ ...entry, adopted: true });
-  }
-
-  if (persist && adopted.length) {
-    await recordMoved(overlay.label, adopted);
-  }
-
-  return ids.length === state.individualAssetIds.length
-    ? state
-    : { ...state, individualAssetIds: ids };
 }
 
 /** Keeps every local asset selected, including ones added to the folder later. */

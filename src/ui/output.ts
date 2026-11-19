@@ -99,7 +99,11 @@ function rows(events: SyncEvent[]): Row[] {
   };
 
   for (const event of events) {
-    if (event.type === "disabled" || event.type === "notice") {
+    if (
+      event.type === "disabled" ||
+      event.type === "notice" ||
+      event.type === "unset-variable"
+    ) {
       continue;
     }
 

@@ -55,6 +55,18 @@ import {
   renderSyncOutput,
 } from "../ui/output.js";
 
+import type { Harness } from "../harnesses/types.js";
+import type { McpDefinition } from "@barndog-ai/api-contract";
+import type { RuntimeContext } from "../runtime.js";
+
+/** An MCP entry with every variable left as a reference, as before values were kept. */
+const referenceEntry = (
+  harness: Harness,
+  asset: { id: string; name: string },
+  definition: McpDefinition,
+  runtime: RuntimeContext,
+) => mcpEntry(harness, { ...asset, definition }, {}, runtime);
+
 const plain = (lines: string[]) =>
   // eslint-disable-next-line no-control-regex
   lines.join("\n").replace(/\u001b\[[0-9;]*m/g, "");
@@ -716,7 +728,7 @@ test("Codex entries omit an empty header table", () => {
     authentication: "native-oauth",
   });
 
-  const entry = mcpEntry(
+  const entry = referenceEntry(
     "codex",
     { id: "1", name: "docs" },
     definition,

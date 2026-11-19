@@ -10,6 +10,7 @@ import { parse } from "yaml";
 import {
   hookManifestSchema,
   type HookManifest,
+  type McpDefinition,
 } from "@barndog-ai/api-contract";
 import { packageFingerprint } from "@barndog-ai/api-contract/package";
 
@@ -21,7 +22,8 @@ import {
   isHookHarness,
   skillDirectory,
 } from "../../harnesses/registry.js";
-import type { Harness } from "../../harnesses/types.js";
+import type { Harness, KeptValues } from "../../harnesses/types.js";
+import { secretRefs } from "../../harnesses/formats.js";
 import { isInside } from "../../shared/files.js";
 import { defined } from "../../shared/lookup.js";
 import type { SelectionResult } from "../asset-selection/types.js";
@@ -40,6 +42,31 @@ export type StagedAssets = {
   events: SyncEvent[];
 };
 
+/**
+ * One event per variable that installed MCP servers refer to but that has no
+ * value here: BarnDog doesn't keep it and this environment doesn't set it.
+ */
+function unsetVariables(
+  servers: readonly { name: string; definition: McpDefinition }[],
+  kept: KeptValues,
+  env: NodeJS.ProcessEnv,
+): SyncEvent[] {
+  const unset = new Map<string, string[]>();
+  for (const { name, definition } of servers) {
+    for (const { secretRef } of Object.values(secretRefs(definition))) {
+      if (kept[secretRef] === undefined && !env[secretRef]) {
+        unset.set(secretRef, [...(unset.get(secretRef) ?? []), name]);
+      }
+    }
+  }
+
+  return [...unset].map(([variable, names]) => ({
+    type: "unset-variable",
+    variable,
+    servers: names,
+  }));
+}
+
 export async function stageAssets(input: {
   assets: SelectionResult["assets"];
   /** Asset ID → why the workspace's copy can't be installed. */
@@ -53,6 +80,8 @@ export async function stageAssets(input: {
   /** Absent when no workspace is connected; the catalog is then empty. */
   source: WorkspaceSource | undefined;
   harnesses: readonly Harness[];
+  /** MCP values BarnDog keeps on this machine, written into the tools' settings. */
+  kept: KeptValues;
   runtime: RuntimeContext;
 }): Promise<StagedAssets> {
   const { invalid, vanished, skipped, localNames, source, harnesses, runtime } =
@@ -68,6 +97,8 @@ export async function stageAssets(input: {
   const events: SyncEvent[] = [];
   const names = new Set<string>();
   const ids = new Set<string>();
+  /** Installed MCP servers, to report the variables they find no value for. */
+  const servers: { name: string; definition: McpDefinition }[] = [];
 
   const addSkill = (id: string, source: string, name: string) => {
     if (names.has(name)) {
@@ -220,9 +251,15 @@ export async function stageAssets(input: {
       );
     } else if (ref.kind === "mcp") {
       const definition = await source.mcpDefinition(ref);
+      servers.push({ name, definition });
       for (const harness of harnesses) {
         native.push(
-          mcpEntry(harness, { id: ref.id, name }, definition, runtime),
+          mcpEntry(
+            harness,
+            { id: ref.id, name, definition },
+            input.kept,
+            runtime,
+          ),
         );
       }
     } else {
@@ -254,6 +291,8 @@ export async function stageAssets(input: {
       events.push(...registered.events);
     }
   }
+
+  events.push(...unsetVariables(servers, input.kept, input.runtime.env));
 
   return { links: desired, native, trees, events };
 }

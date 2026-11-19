@@ -19,6 +19,7 @@ import {
 } from "../../config/selection.js";
 import { CliError, PackageError } from "../../errors.js";
 import { only } from "../../shared/lookup.js";
+import { validAssetName, validMcpName } from "../../shared/patterns.js";
 
 /** A Hook as the server describes it. */
 export type Hook = z.infer<typeof hookSchema>;
@@ -56,6 +57,10 @@ type KindFacts = {
   route: string;
   folder: string;
   schema: ZodType;
+  /** Whether a name can be this kind's folder, file and installed name. */
+  validName: (name: string) => boolean;
+  /** The naming rule as a sentence, for errors. */
+  nameRule: string;
 };
 
 type PackageFacts = KindFacts & {
@@ -84,6 +89,10 @@ implementations:
               command: '\${BARNDOG_HOOK_ROOT}/scripts/hook.sh'
 `;
 
+/** Skill and Hook names, which become folder names: the `NAME` shape. */
+const ASSET_NAME_RULE =
+  "Names use lowercase letters, numbers and single hyphens, at most 64 characters";
+
 /**
  * What differs between asset kinds. Code that needs a kind's word, route, folder
  * or schema reads it here instead of comparing `kind`.
@@ -100,6 +109,8 @@ export const assetKinds = {
     /** Inside a workspace scope and `~/.barndog/installed/`. */
     folder: assetFolders.skill,
     schema: skillSchema,
+    validName: validAssetName,
+    nameRule: ASSET_NAME_RULE,
     manifest: "SKILL.md",
     scaffold: (name: string): PackageEntry[] => [
       file(
@@ -116,6 +127,9 @@ export const assetKinds = {
     route: "mcps",
     folder: assetFolders.mcp,
     schema: mcpSchema,
+    validName: validMcpName,
+    nameRule:
+      "MCP server names use letters, numbers, underscores and hyphens, at most 64 characters",
   },
   hook: {
     one: "Hook",
@@ -125,6 +139,8 @@ export const assetKinds = {
     route: "hooks",
     folder: assetFolders.hook,
     schema: hookSchema,
+    validName: validAssetName,
+    nameRule: ASSET_NAME_RULE,
     manifest: "hook.yaml",
     scaffold: (name: string): PackageEntry[] => [
       file("hook.yaml", hookManifest(name)),

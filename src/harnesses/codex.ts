@@ -1,43 +1,56 @@
 import type { McpDefinition } from "@barndog-ai/api-contract";
 import { hookSpecificContext, nestedHookEntry, secretRefs } from "./formats.js";
-import type { HookAdapter } from "./types.js";
+import type { HookAdapter, KeptValues } from "./types.js";
 
 /**
  * Codex forwards variables by name (`env_vars`, `env_http_headers`) instead of
- * interpolating references, so secrets stay out of `config.toml`. It can't give
- * a stdio server a variable under another name; BarnDog's launcher does that.
+ * interpolating references. It can't give a stdio server a variable under
+ * another name; BarnDog's launcher does that. A value BarnDog keeps goes in
+ * `env` or `http_headers` as written, the way Codex stores values it's given.
  */
 function mcpServer(
   definition: McpDefinition,
   launcher: string,
+  kept: KeptValues,
 ): Record<string, unknown> {
-  const refs = secretRefs(definition);
-  const variables = Object.values(refs).map((ref) => ref.secretRef);
+  const refs = Object.entries(secretRefs(definition));
+  const literal = refs.filter(([, ref]) => kept[ref.secretRef] !== undefined);
+  const forwarded = refs.filter(([, ref]) => kept[ref.secretRef] === undefined);
+  const values = Object.fromEntries(
+    literal.map(([name, ref]) => [name, kept[ref.secretRef] ?? ""]),
+  );
+
+  const variables = forwarded.map(([, ref]) => ref.secretRef);
 
   if (definition.transport === "http") {
     return {
       url: definition.url,
-      ...(variables.length
+      ...(literal.length ? { http_headers: values } : {}),
+      ...(forwarded.length
         ? {
             env_http_headers: Object.fromEntries(
-              Object.entries(refs).map(([name, ref]) => [name, ref.secretRef]),
+              forwarded.map(([name, ref]) => [name, ref.secretRef]),
             ),
           }
         : {}),
     };
   }
 
-  const renamed = Object.entries(refs).some(
-    ([name, ref]) => name !== ref.secretRef,
-  );
-
+  const inline = literal.length ? { env: values } : {};
+  const renamed = forwarded.some(([name, ref]) => name !== ref.secretRef);
   if (renamed) {
+    // The launcher checks only the variables it forwards; kept ones arrive in `env`.
+    const environment = Object.fromEntries(forwarded);
+
     return {
       command: process.execPath,
       args: [
         launcher,
-        Buffer.from(JSON.stringify(definition)).toString("base64url"),
+        Buffer.from(JSON.stringify({ ...definition, environment })).toString(
+          "base64url",
+        ),
       ],
+      ...inline,
       env_vars: variables,
     };
   }
@@ -45,6 +58,7 @@ function mcpServer(
   return {
     command: definition.command,
     args: definition.args,
+    ...inline,
     env_vars: variables,
   };
 }

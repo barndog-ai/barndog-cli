@@ -5,7 +5,7 @@ import { parse, stringify } from "yaml";
 import { z } from "zod";
 import { type SelectionState, selectionStateSchema } from "./selection.js";
 import { isHarness, type Harness } from "../harnesses/registry.js";
-import { NAME, UUID_V4 } from "../shared/patterns.js";
+import { MCP_NAME, UUID_V4 } from "../shared/patterns.js";
 import { readIfExists, writeAtomic } from "../shared/files.js";
 import { CliError } from "../errors.js";
 import { barndogPaths } from "./paths.js";
@@ -74,9 +74,11 @@ const localWorkspaceSchema = z.looseObject({
   workspaceId: uuid,
 });
 
+// An MCP server's name may hold `_` and capitals; every other kind is checked
+// against its own rule when renamed.
 const localNamesSchema = z.record(
   uuid,
-  z.string().regex(NAME).max(MAX_ASSET_NAME_LENGTH),
+  z.string().regex(MCP_NAME).max(MAX_ASSET_NAME_LENGTH),
 );
 
 /** Every part of the file; each optional key is named only here. */

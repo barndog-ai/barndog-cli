@@ -30,6 +30,18 @@ import { adapters, nativeFile, skillDirectory } from "../harnesses/registry.js";
 import { runSetup } from "../ui/onboarding.js";
 import { testRuntime } from "./runtime.js";
 
+import type { Harness } from "../harnesses/types.js";
+import type { McpDefinition } from "@barndog-ai/api-contract";
+import type { RuntimeContext } from "../runtime.js";
+
+/** An MCP entry with every variable left as a reference, as before values were kept. */
+const referenceEntry = (
+  harness: Harness,
+  asset: { id: string; name: string },
+  definition: McpDefinition,
+  runtime: RuntimeContext,
+) => mcpEntry(harness, { ...asset, definition }, {}, runtime);
+
 const id = "729b9d5a-4a8c-4aa7-9b8d-975a55ac373e";
 const runtime = testRuntime("/fixture");
 
@@ -62,7 +74,7 @@ test("OpenCode gets Skills, MCP servers and BarnDog's plugin under ~/.config/ope
 
 test("OpenCode MCP entries use local/remote types, a command list and {env:} references", () => {
   expect(
-    mcpEntry("opencode", { id, name: "docs" }, stdio, runtime).value,
+    referenceEntry("opencode", { id, name: "docs" }, stdio, runtime).value,
   ).toStrictEqual({
     type: "local",
     command: ["npx", "-y", "docs-server"],
@@ -70,7 +82,7 @@ test("OpenCode MCP entries use local/remote types, a command list and {env:} ref
   });
 
   expect(
-    mcpEntry(
+    referenceEntry(
       "opencode",
       { id, name: "docs" },
       {
@@ -89,7 +101,7 @@ test("OpenCode MCP entries use local/remote types, a command list and {env:} ref
   });
 
   expect(
-    mcpEntry(
+    referenceEntry(
       "opencode",
       { id, name: "docs" },
       { ...stdio, args: [], environment: {} },
@@ -98,7 +110,7 @@ test("OpenCode MCP entries use local/remote types, a command list and {env:} ref
   ).toStrictEqual({ type: "local", command: ["npx"] });
 
   expect(
-    mcpEntry(
+    referenceEntry(
       "opencode",
       { id, name: "open" },
       {
@@ -140,7 +152,13 @@ test("OpenCode entries are read back in Claude Code's shape for mcp add --from",
 });
 
 test("OpenCode MCP servers go under mcp.servers and leave the rest of opencode.json alone", () => {
-  const managed = mcpEntry("opencode", { id, name: "docs" }, stdio, runtime);
+  const managed = referenceEntry(
+    "opencode",
+    { id, name: "docs" },
+    stdio,
+    runtime,
+  );
+
   const original =
     '{\n  // Mine\n  "theme": "dark",\n  "mcp": { "servers": { "mine": { "type": "remote", "url": "https://mine.example" } } }\n}\n';
 
@@ -530,11 +548,16 @@ test("mcp add --from opencode reads every OpenCode config file and takes a serve
     },
   ]);
 
-  await expect(addMcpServers([docs], {}, runtime)).rejects.toThrow(
+  await expect(addMcpServers([docs], { keep: [] }, runtime)).rejects.toThrow(
     /already configured/,
   );
 
-  const { backups } = await addMcpServers([docs], { replace: true }, runtime);
+  const { backups } = await addMcpServers(
+    [docs],
+    { replace: true, keep: [] },
+    runtime,
+  );
+
   expect(backups).toHaveLength(1);
 
   const theirs = parseJson(

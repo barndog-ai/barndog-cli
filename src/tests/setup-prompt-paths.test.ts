@@ -557,7 +557,7 @@ test("cloud setup retries authentication only for a missing session", async (t) 
   await expect(runSetup(options)).rejects.toThrow("offline");
 });
 
-for (const choice of ["keep", "move", "leave"] as const) {
+for (const choice of ["keep", "copy", "move", "leave"] as const) {
   test(`reconnecting setup handles kept local assets with ${choice}`, async (t) => {
     const server = await cloud(t);
     const runtime = testRuntime(server.home);
@@ -581,6 +581,8 @@ for (const choice of ["keep", "move", "leave"] as const) {
 
     vi.mocked(moveLocalAssets).mockResolvedValue({
       target: "org",
+      keepLocal: choice === "copy",
+      removed: [],
       rows: [{ kind: "skill", name: "local", status: "moved" }],
     });
 
@@ -608,9 +610,14 @@ for (const choice of ["keep", "move", "leave"] as const) {
       }),
     );
 
-    expect(moveLocalAssets).toHaveBeenCalledTimes(choice === "move" ? 1 : 0);
-    if (choice === "move") {
-      expect(moveLocalAssets).toHaveBeenCalledWith({ to: "org" }, runtime);
+    const shares = choice === "move" || choice === "copy";
+    expect(moveLocalAssets).toHaveBeenCalledTimes(shares ? 1 : 0);
+    if (shares) {
+      expect(moveLocalAssets).toHaveBeenCalledWith(
+        { to: "org", keepLocal: choice === "copy" },
+        runtime,
+      );
+
       expect(output.flat().join("\n")).toMatch(/moved\s+skill\s+local/);
     } else {
       expect(output.flat().join("\n")).not.toContain("Status");

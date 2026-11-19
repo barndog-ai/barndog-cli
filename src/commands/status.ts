@@ -2,7 +2,16 @@ import type { Command } from "commander";
 import type { CommandContext } from "./context.js";
 import { harnessNames, inventoryHints, renderInventory } from "../ui/assets.js";
 import { renderCollaboration } from "../ui/collaboration.js";
-import { dim, fields, heading, hint, json, ok, plural } from "../ui/format.js";
+import {
+  dim,
+  fields,
+  heading,
+  hint,
+  json,
+  ok,
+  plural,
+  warn,
+} from "../ui/format.js";
 import { assetKindList, assetKinds } from "../features/asset-kinds/index.js";
 
 function knowledgeState(enabled: boolean) {
@@ -55,6 +64,12 @@ export function registerStatus(program: Command, context: CommandContext) {
       if (inventory.offline) {
         context.write(dim(`\nShowing local state only: ${inventory.offline}`));
       }
+
+      inventory.moving.forEach((move) =>
+        context.write(
+          `\n${warn("!")} ${move.name} is moving to ${move.to}. Your local copy stays in use until that merges.`,
+        ),
+      );
 
       for (const kind of assetKindList) {
         const items = inventory.items.filter((item) => item.kind === kind);

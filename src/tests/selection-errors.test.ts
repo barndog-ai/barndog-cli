@@ -272,7 +272,7 @@ test("a rename needs a valid name, and says to pass --as or --reset when given n
     ),
   ).toHaveProperty(
     "message",
-    "Use lowercase letters, numbers and single hyphens (at most 64 characters).",
+    "Names use lowercase letters, numbers and single hyphens, at most 64 characters.",
   );
 
   expect(

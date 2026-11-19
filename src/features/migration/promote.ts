@@ -30,6 +30,8 @@ export async function promote(
         {
           names: [input.name],
           kind: input.kind,
+          // Promoting shares a copy; the original stays, as on the server.
+          keepLocal: true,
           to: input.target,
           as: input.newName === input.name ? undefined : input.newName,
         },

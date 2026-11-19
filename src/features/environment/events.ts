@@ -18,6 +18,8 @@ export type SyncEvent =
       reason: string;
     }
   | { type: "disabled"; id: string }
+  /** A variable installed MCP servers refer to that has no value here: not kept by BarnDog, not in this environment. */
+  | { type: "unset-variable"; variable: string; servers: string[] }
   | { type: "notice"; message: string }
   | {
       type: "invalid";

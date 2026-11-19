@@ -14,6 +14,11 @@ import { fixSteps, removeCommand } from "../../platform.js";
 import { treeFingerprint } from "../workspace/tree.js";
 import { assetKinds } from "../asset-kinds/index.js";
 import { patchNative, type NativeEntry } from "../native/configuration.js";
+import {
+  recordedVariables,
+  redacted,
+  sameValue,
+} from "../native/secret-values.js";
 import { inPluginModule, pluginModule } from "../native/plugin-module.js";
 import type { SyncEvent } from "./events.js";
 import { linkTarget, type Write } from "./transaction.js";
@@ -187,6 +192,66 @@ export async function linkWrites(
   return { writes, events };
 }
 
+/** The same entry, comparing kept values with the hashes `state.json` records. */
+const sameEntry = (left: NativeEntry, right: NativeEntry) =>
+  left.id === right.id &&
+  left.kind === right.kind &&
+  left.harness === right.harness &&
+  left.file === right.file &&
+  left.key === right.key &&
+  sameValue(left.value, right.value);
+
+/** A notice for kept values a changed entry no longer holds. */
+function removedSecrets(
+  entry: NativeEntry,
+  still: readonly string[],
+): SyncEvent[] {
+  const gone = recordedVariables(entry.value).filter(
+    (variable) => !still.includes(variable),
+  );
+
+  return gone.length
+    ? [
+        {
+          type: "notice",
+          message: `Removed the kept ${plural(gone)} ${gone.join(", ")} from ${entry.file}.`,
+        },
+      ]
+    : [];
+}
+
+/** Says where kept values were written, and where they were taken out. */
+function secretNotices(
+  entry: NativeEntry,
+  old: readonly NativeEntry[],
+  changed: boolean,
+  nameOf: (entry: NativeEntry) => string,
+): SyncEvent[] {
+  if (!changed) {
+    return [];
+  }
+
+  const written = (entry.secrets ?? []).map((secret) => secret.variable);
+  const before = old.find(
+    (e) => e.id === entry.id && e.harness === entry.harness,
+  );
+
+  return [
+    ...(written.length
+      ? [
+          {
+            type: "notice" as const,
+            message: `Wrote the kept ${plural(written)} ${written.join(", ")} into ${entry.file} for ${nameOf(entry)}. ${written.length === 1 ? "It stays" : "They stay"} on this machine.`,
+          },
+        ]
+      : []),
+    ...(before ? removedSecrets(before, written) : []),
+  ];
+}
+
+const plural = (variables: readonly string[]) =>
+  variables.length === 1 ? "value of" : "values of";
+
 /**
  * One write per native settings file that holds, or will hold, an entry of
  * BarnDog's. `nameOf` gives the name an entry is reported under.
@@ -223,28 +288,32 @@ export async function nativeWrites(
     });
 
     for (const entry of next) {
+      const action = changeType({
+        sameAsset: old.some(
+          (e) => e.id === entry.id && e.harness === entry.harness,
+        ),
+        current: old.some((e) => sameEntry(e, entry)),
+        contentChanged:
+          entry.kind === "hook" &&
+          trees.some((t) => t.id === entry.id && updated.has(t.path)),
+      });
+
       events.push({
         type: "native",
-        action: changeType({
-          sameAsset: old.some(
-            (e) => e.id === entry.id && e.harness === entry.harness,
-          ),
-          current: old.some((e) => JSON.stringify(e) === JSON.stringify(entry)),
-          contentChanged:
-            entry.kind === "hook" &&
-            trees.some((t) => t.id === entry.id && updated.has(t.path)),
-        }),
+        action,
         kind: entry.kind,
         harness: entry.harness,
         name: nameOf(entry),
       });
+
+      events.push(...secretNotices(entry, old, action !== "unchanged", nameOf));
     }
 
     for (const entry of old) {
       if (
         !next.some(
           (e) =>
-            JSON.stringify(e) === JSON.stringify(entry) ||
+            sameEntry(e, entry) ||
             (e.id === entry.id && e.harness === entry.harness),
         )
       ) {
@@ -255,6 +324,8 @@ export async function nativeWrites(
           harness: entry.harness,
           name: nameOf(entry),
         });
+
+        events.push(...removedSecrets(entry, []));
       }
     }
   }
@@ -297,7 +368,11 @@ export function stateText(plan: {
       {
         version: 1,
         links: plan.links,
-        native: plan.native,
+        // Kept MCP values are recorded only as hashes; see secret-values.ts.
+        native: plan.native.map(({ secrets, ...entry }) => ({
+          ...entry,
+          value: redacted(entry.value, secrets ?? []),
+        })),
         installed: plan.trees.map(
           ({ id, kind, path, fingerprint, versionId }) => ({
             id,

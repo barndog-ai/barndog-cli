@@ -1,6 +1,5 @@
 import select from "@inquirer/select";
 import type { Clash, ClashChoice } from "../features/environment/names.js";
-import { validAssetName } from "../shared/patterns.js";
 import { originLabel } from "../features/server/origin.js";
 import { bold, dim, fields, warn } from "./format.js";
 import { promptTheme } from "./theme.js";
@@ -27,7 +26,7 @@ export async function promptClash(clash: Clash): Promise<ClashChoice> {
 
   if (
     clash.incoming.renamable !== false &&
-    validAssetName(clash.incomingRename)
+    assetKinds[clash.kind].validName(clash.incomingRename)
   ) {
     choices.push({
       name: `Rename the new one to ${clash.incomingRename}`,
@@ -37,7 +36,7 @@ export async function promptClash(clash: Clash): Promise<ClashChoice> {
 
   if (
     clash.installed.renamable !== false &&
-    validAssetName(clash.installedRename)
+    assetKinds[clash.kind].validName(clash.installedRename)
   ) {
     choices.push({
       name: `Rename the installed one to ${clash.installedRename}`,

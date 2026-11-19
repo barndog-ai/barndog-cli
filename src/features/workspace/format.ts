@@ -209,7 +209,8 @@ export type RepoKnowledge = {
   content: KnowledgeContent;
 };
 
-type Problem = { path: string; reason: string };
+/** `badName` marks a file or folder skipped for its name, so sync can say to rename it. */
+type Problem = { path: string; reason: string; badName?: boolean };
 
 /**
  * Everything a Git or local workspace holds at one commit, with the same
@@ -354,12 +355,16 @@ export async function loadWorkspace(
   const assets: RepoAsset[] = [];
   const knowledge: RepoKnowledge[] = [];
   const invalidKnowledge: InvalidKnowledge[] = [];
-  const named = (path: string, name: string) => {
-    if (validAssetName(name)) {
+  const named = (
+    path: string,
+    name: string,
+    rule = { validName: validAssetName, nameRule: NAME_RULE },
+  ) => {
+    if (rule.validName(name)) {
       return true;
     }
 
-    problems.push({ path, reason: NAME_RULE });
+    problems.push({ path, reason: rule.nameRule, badName: true });
 
     return false;
   };
@@ -460,7 +465,7 @@ export async function loadWorkspace(
       }
 
       const name = file.replace(/\.ya?ml$/, "");
-      if (!named(entry.path, name)) {
+      if (!named(entry.path, name, assetKinds.mcp)) {
         continue;
       }
 

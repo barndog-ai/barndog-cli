@@ -100,9 +100,10 @@ export async function chooseConnection(
 
 /**
  * What happens to local assets when the machine connects to a workspace: keep
- * them active beside it, move them in, or leave them inactive.
+ * them private beside it, share a copy and keep them, move them in so the
+ * shared copy is the only one, or leave them inactive.
  */
-export type LocalAssetChoice = "keep" | "move" | "leave";
+export type LocalAssetChoice = "keep" | "copy" | "move" | "leave";
 
 export function chooseLocalAssets(count: number): Promise<LocalAssetChoice> {
   return select<LocalAssetChoice>({
@@ -115,10 +116,16 @@ export function chooseLocalAssets(count: number): Promise<LocalAssetChoice> {
           "They keep working next to the shared assets. Move them any time with barndog local move.",
       },
       {
-        name: "Keep active, and move to the new workspace",
+        name: "Share a copy, and keep them here too",
+        value: "copy",
+        description:
+          "The local ones stay as separate assets. Anything whose name is already taken is left out and listed.",
+      },
+      {
+        name: "Move them to the new workspace",
         value: "move",
         description:
-          "Also shares them. Anything whose name is already taken is left out and listed.",
+          "The shared copies become the only ones; the local ones are removed once they exist. Anything whose name is already taken stays local and is listed.",
       },
       {
         name: "Stop using them",

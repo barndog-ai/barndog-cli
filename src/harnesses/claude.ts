@@ -73,11 +73,15 @@ export const claude: HookAdapter = {
     file: ".claude.json",
     files: [".claude.json"],
     path: ["mcpServers"],
-    server: (definition) =>
-      jsonMcpServer(definition, {
-        reference: (variable) => `\${${variable}}`,
-        typed: true,
-      }),
+    server: (definition, _launcher, kept) =>
+      jsonMcpServer(
+        definition,
+        {
+          reference: (variable) => `\${${variable}}`,
+          typed: true,
+        },
+        kept,
+      ),
     login: { command: ["claude", "mcp", "login"] },
   },
   configHome: {

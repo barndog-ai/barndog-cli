@@ -17,8 +17,10 @@ import { assertSupportedConfigHomes, startupEntries } from "./own-entries.js";
 import { resolveAssets } from "../asset-selection/index.js";
 import { pruneCache } from "../workspace/packages.js";
 import { followImports } from "../imports/local.js";
-import { adoptMoved, localOverlay } from "../workspace/overlay.js";
+import { localOverlay } from "../workspace/overlay.js";
 import { openWorkspaceSource } from "../workspace/workspace-source.js";
+import { finishMoves } from "./moves.js";
+import { readSecrets } from "../secrets/index.js";
 import {
   type RefreshPolicy,
   type WorkspaceSource,
@@ -109,7 +111,7 @@ export async function synchronize(
           ])
         : [];
 
-    const source =
+    let source =
       options.source ??
       openWorkspaceSource(settings, runtime, {
         refresh: options.refresh,
@@ -125,19 +127,22 @@ export async function synchronize(
       );
     }
 
-    const catalog = source
+    let catalog = source
       ? (options.catalog ?? (await source.catalog()))
       : { assets: [], distributions: [] };
 
+    const moves = await finishMoves({
+      settings,
+      source,
+      catalog,
+      selection,
+      options,
+      configPath,
+      runtime,
+    });
+
+    ({ source, catalog, selection } = moves);
     const overlay = localOverlay(settings, runtime);
-    if (overlay) {
-      selection = await adoptMoved(
-        overlay,
-        catalog,
-        selection,
-        !options.dryRun,
-      );
-    }
 
     const invalid: ReadonlyMap<string, string> = source
       ? await source.invalidAssets()
@@ -154,6 +159,7 @@ export async function synchronize(
     const events: SyncEvent[] = [
       ...new Set([
         ...followNotices,
+        ...moves.notices,
         ...(source?.notices() ?? []),
         ...((await source?.warnings?.()) ?? []),
         ...((await overlay?.warnings?.()) ?? []),
@@ -200,6 +206,7 @@ export async function synchronize(
       state: before,
       source,
       harnesses: settings.harnesses,
+      kept: await readSecrets(runtime),
       runtime,
     });
 

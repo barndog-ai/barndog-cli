@@ -1,4 +1,6 @@
-import { slugify, validAssetName } from "../../shared/patterns.js";
+import { slugify } from "../../shared/patterns.js";
+import { assetKinds } from "../asset-kinds/index.js";
+import type { AssetKind } from "../../config/selection.js";
 
 /** Eight ID characters distinguish hooks with the same display name. */
 const HOOK_ID_SUFFIX_LENGTH = 8;
@@ -65,14 +67,18 @@ const rank: Record<string, number> = {
 };
 
 /** `<origin-type>-<origin-slug>-<name>` with single hyphens, e.g. team-super-team-review. */
-export function prefixedName(asset: Pick<NamedAsset, "name" | "origin">) {
-  return slugify(
-    [
-      asset.origin.type,
-      asset.origin.slug ?? asset.origin.id ?? "",
-      asset.name,
-    ].join("-"),
-  );
+export function prefixedName(
+  asset: Pick<NamedAsset, "name" | "origin"> & { kind: AssetKind },
+) {
+  const prefix = [
+    asset.origin.type,
+    asset.origin.slug ?? asset.origin.id ?? "",
+  ].join("-");
+
+  // An MCP server keeps its own spelling, such as my_server; only the prefix is a slug.
+  return asset.kind === "mcp"
+    ? `${slugify(prefix)}-${asset.name}`
+    : slugify(`${prefix}-${asset.name}`);
 }
 
 /**
@@ -123,7 +129,7 @@ export function hookFolders(
   };
 
   const plain = (hook: HookPlacement) =>
-    localNames[hook.id] ?? prefixedName(hook);
+    localNames[hook.id] ?? prefixedName({ ...hook, kind: "hook" });
 
   const idText = (hook: HookPlacement) =>
     hook.id.replace(/[^a-z0-9]/gi, "").toLowerCase();
@@ -286,7 +292,7 @@ export async function resolveClashes(
       const name = prefixedName(rename);
       if (
         rename.renamable === false ||
-        !validAssetName(name) ||
+        !assetKinds[rename.kind].validName(name) ||
         active.some(
           (other) =>
             other.id !== rename.id &&

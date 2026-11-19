@@ -43,6 +43,7 @@ import { renamedSkill } from "../imports/local.js";
 import { convertServer, harnessServers } from "../mcps/import.js";
 import { assetKinds } from "../asset-kinds/index.js";
 import { assetPath, NAME_RULE } from "../workspace/format.js";
+import { localMcpNamed, type LiteralValue } from "../mcps/import.js";
 import type { NativeAssetKind, Original } from "./record.js";
 
 /** One asset a coding tool has that BarnDog didn't install. */
@@ -64,6 +65,11 @@ export type NativeAsset = {
   identical: boolean;
   /** What changes once BarnDog manages it, such as a variable to set. */
   notes: string[];
+  /**
+   * An MCP server's values that were written into its entry, by variable name
+   * only: adopting asks whether BarnDog keeps each on this machine.
+   */
+  values: { key: string; variable: string }[];
 };
 
 /** Another tool's asset, by key and tool. */
@@ -87,6 +93,8 @@ type AdoptedContent =
 
 /** A scanned asset with what adopting it writes and removes. */
 export type FoundAsset = NativeAsset & {
+  /** The values themselves; kept in memory, never shown or recorded. */
+  literals: LiteralValue[];
   content: AdoptedContent;
   original: Original;
   /** Where its copy goes inside the local folder, such as `org/mcp/github.yaml`. */
@@ -115,6 +123,7 @@ const publicAsset = (asset: FoundAsset): NativeAsset => ({
   sameName: asset.sameName,
   identical: asset.identical,
   notes: asset.notes,
+  values: asset.values,
 });
 
 /** Every adoptable asset in the selected tools, with its contents. */
@@ -131,9 +140,16 @@ export async function findNativeAssets(
   const state = await readState(home);
   const selected = settings.harnesses;
   const local = settings.localWorkspace?.path;
-  const taken = async (kind: NativeAssetKind, name: string) =>
-    local !== undefined &&
-    (await ifExists(lstat(join(local, assetPath("org", kind, name))))) !== null;
+  /** The local asset a candidate's name collides with; for an MCP server, ignoring case. */
+  const taken = async (kind: NativeAssetKind, name: string) => {
+    if (kind === "mcp") {
+      return localMcpNamed(name, runtime);
+    }
+
+    const path = local && join(local, assetPath("org", kind, name));
+
+    return path && (await ifExists(lstat(path))) !== null ? name : null;
+  };
 
   const skipped: SkippedAsset[] = [];
   const candidates: Candidate[] = [];
@@ -160,13 +176,18 @@ export async function findNativeAssets(
   // made up here, so it moves aside instead.
   const kept: Candidate[] = [];
   for (const candidate of candidates) {
-    if (
-      candidate.kind !== "hook" &&
-      (await taken(candidate.kind, candidate.name))
-    ) {
+    const existing =
+      candidate.kind === "hook"
+        ? null
+        : await taken(candidate.kind, candidate.name);
+
+    if (existing !== null) {
       skipped.push({
         ...describe(candidate),
-        reason: `Your local folder already has ${assetKinds[candidate.kind].a} named ${candidate.name}.`,
+        reason:
+          existing === candidate.name
+            ? `Your local folder already has ${assetKinds[candidate.kind].a} named ${candidate.name}.`
+            : `Your local folder has ${existing}, which differs only in case and would share its file on this disk.`,
       });
     } else {
       kept.push(candidate);
@@ -337,6 +358,8 @@ async function readSkill(
     ...where,
     description: skill.description,
     notes: [],
+    literals: [],
+    values: [],
     content: { kind: "skill", entries: renamedSkill(skill, name) },
     original:
       link === null
@@ -368,10 +391,10 @@ async function toolServers(
       location: server.file,
     };
 
-    if (!validAssetName(server.name)) {
+    if (!assetKinds.mcp.validName(server.name)) {
       skipped.push({
         ...asset,
-        reason: `${server.name} can't be a BarnDog name. ${NAME_RULE}.`,
+        reason: `${server.name} can't be a BarnDog name. ${assetKinds.mcp.nameRule}.`,
       });
 
       continue;
@@ -397,6 +420,11 @@ async function toolServers(
         ...asset,
         description: converted.definition.description,
         notes: converted.notes,
+        literals: converted.literals,
+        values: converted.literals.map(({ key, variable }) => ({
+          key,
+          variable,
+        })),
         content: { kind: "mcp", definition: converted.definition },
         original: {
           type: "entry",
@@ -476,6 +504,8 @@ async function toolHooks(
           name: hook.name,
           description: hook.description,
           notes: hook.notes,
+          literals: [],
+          values: [],
           content: { kind: "hook", entries: hook.entries },
           original: {
             type: "entry",

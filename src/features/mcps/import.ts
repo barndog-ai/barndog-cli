@@ -1,7 +1,7 @@
 import type { RuntimeContext } from "../../runtime.js";
 import { POSIX_MODE } from "../../shared/constants.js";
 import { readState } from "../../config/state.js";
-import { lstat, mkdir, readFile } from "node:fs/promises";
+import { mkdir, readFile, readdir } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { basename, join } from "node:path";
 
@@ -26,10 +26,11 @@ import { fileText, ifExists, writeAtomic } from "../../shared/files.js";
 import type { SyncEvent } from "../environment/events.js";
 import { synchronize } from "../environment/sync.js";
 import { patchNative } from "../native/configuration.js";
-import { NAME_RULE } from "../workspace/format.js";
-import { validAssetName, VARIABLE_NAME } from "../../shared/patterns.js";
+import { validMcpName, VARIABLE_NAME } from "../../shared/patterns.js";
+import { assetKinds } from "../asset-kinds/index.js";
 import { LOCAL_ORIGIN } from "../workspace/overlay.js";
 import { ensureLocalWorkspace } from "../imports/local.js";
+import { updateSecrets } from "../secrets/index.js";
 import { asRecord, asStrings, isRecord } from "../../shared/values.js";
 import { barndogPaths } from "../../config/paths.js";
 
@@ -151,14 +152,38 @@ export type ConvertedServer = {
   definition: McpDefinition;
   /** What the developer has to do before it works. */
   notes: string[];
+  /**
+   * Values the tool's entry held as written. Kept in memory only, so the
+   * developer can choose whether BarnDog keeps each on this machine; never
+   * part of the definition.
+   */
+  literals: LiteralValue[];
 };
 
-/** Secrets are named, never stored: every literal becomes a variable to set locally. */
+/** A value written into a tool's entry, and the variable the definition now names for it. */
+export type LiteralValue = { key: string; variable: string; value: string };
+
+/**
+ * What to tell the developer about each literal: where BarnDog keeps it, or
+ * which variable to set. `kept` holds the variables BarnDog keeps.
+ */
+export function literalNotes(
+  literals: readonly LiteralValue[],
+  kept: readonly string[],
+): string[] {
+  return literals.map((literal) =>
+    kept.includes(literal.variable)
+      ? `BarnDog keeps the value of ${literal.variable} in ~/.barndog/secrets.json on this machine, never uploaded, and writes it into your coding tools.`
+      : `${literal.key} held a literal value, which BarnDog doesn't keep. Set ${literal.variable} in your environment, or keep it with barndog mcp env set ${literal.variable}.`,
+  );
+}
+
+/** Secrets are named, never shared: every literal becomes a variable the definition refers to. */
 function reference(
   key: string,
   value: unknown,
   fallback: string,
-  notes: string[],
+  found: { notes: string[]; literals: LiteralValue[] },
 ) {
   const text = String(value);
   const whole = variableName(text);
@@ -168,16 +193,14 @@ function reference(
 
   const inside = embeddedVariable(text);
   if (inside) {
-    notes.push(
+    found.notes.push(
       `${key} mixes text with ${inside}. Set ${inside} to the complete value of ${key}, including that text.`,
     );
 
     return { secretRef: inside };
   }
 
-  notes.push(
-    `${key} held a literal value, which BarnDog doesn't store. Set ${fallback} in your environment.`,
-  );
+  found.literals.push({ key, variable: fallback, value: text });
 
   return { secretRef: fallback };
 }
@@ -205,6 +228,8 @@ export function convertServer(
   oauth?: boolean,
 ): ConvertedServer {
   const notes: string[] = [];
+  const literals: LiteralValue[] = [];
+  const found = { notes, literals };
   const type = typeof server.type === "string" ? server.type : undefined;
   if (type === "sse" || type === "ws") {
     throw new CliError(
@@ -227,7 +252,7 @@ export function convertServer(
     for (const [key, value] of Object.entries(
       asRecord(server.headers ?? server.http_headers),
     )) {
-      headers[key] = reference(key, value, envName(`${name}_${key}`), notes);
+      headers[key] = reference(key, value, envName(`${name}_${key}`), found);
     }
 
     for (const [key, value] of Object.entries(
@@ -269,7 +294,7 @@ export function convertServer(
 
     const environment: Record<string, { secretRef: string }> = {};
     for (const [key, value] of Object.entries(asRecord(server.env))) {
-      environment[key] = reference(key, value, key, notes);
+      environment[key] = reference(key, value, key, found);
     }
 
     for (const key of asStrings(server.env_vars)) {
@@ -301,7 +326,7 @@ export function convertServer(
     );
   }
 
-  return { name, definition: parsed.data, notes };
+  return { name, definition: parsed.data, notes, literals };
 }
 
 export type HarnessServer = ImportedServer & {
@@ -456,6 +481,29 @@ export async function conflictingEntries(
     }));
 }
 
+/**
+ * The local MCP server named `name`, ignoring case: macOS and Windows disks
+ * usually treat `Docs.yaml` and `docs.yaml` as one file. Null when none is.
+ */
+export async function localMcpNamed(
+  name: string,
+  runtime: RuntimeContext,
+): Promise<string | null> {
+  const settings = await readSettings(runtime.home);
+  const folder = settings?.localWorkspace
+    ? join(settings.localWorkspace.path, "org", assetKinds.mcp.folder)
+    : null;
+
+  const files = folder ? ((await ifExists(readdir(folder))) ?? []) : [];
+  const names = files
+    .filter((file) => file.endsWith(".yaml"))
+    .map((file) => file.slice(0, -".yaml".length));
+
+  return (
+    names.find((other) => other.toLowerCase() === name.toLowerCase()) ?? null
+  );
+}
+
 /** Something to do before an added server works, and which server it's for. */
 type ServerNote = { server: string; text: string };
 
@@ -475,27 +523,33 @@ export type AddedServers = {
  */
 export async function addMcpServers(
   servers: ConvertedServer[],
-  options: { replace?: boolean },
+  options: {
+    replace?: boolean;
+    /** Variables whose literal values BarnDog keeps on this machine. */
+    keep: readonly string[];
+  },
   runtime: RuntimeContext,
 ): Promise<AddedServers> {
   const { home } = runtime;
 
-  const invalid = servers.filter(({ name }) => !validAssetName(name));
+  const invalid = servers.filter(({ name }) => !validMcpName(name));
   if (invalid.length) {
     throw new CliError(
-      `${invalid.map(({ name }) => name).join(", ")} can't be used as ${invalid.length === 1 ? "an MCP name" : "MCP names"}. ${NAME_RULE}. To add one, save only that server to a JSON file under a new name.`,
-      "barndog mcp add <new-name> --file <path>",
+      `${invalid.map(({ name }) => name).join(", ")} can't be used as ${invalid.length === 1 ? "an MCP name" : "MCP names"}. ${assetKinds.mcp.nameRule}.`,
+      "barndog mcp add <name> --as <new-name>",
     );
   }
 
   return locked(runtime, async () => {
     const workspace = await ensureLocalWorkspace(runtime);
     for (const { name } of servers) {
-      const target = join(workspace.path, "org/mcp", `${name}.yaml`);
-      if ((await ifExists(lstat(target))) !== null) {
+      const existing = await localMcpNamed(name, runtime);
+      if (existing !== null) {
         throw new CliError(
-          `A local MCP server named ${name} already exists.`,
-          `barndog mcp add ${name}-2 --file <path>`,
+          existing === name
+            ? `A local MCP server named ${name} already exists.`
+            : `${name} differs from the local MCP server ${existing} only in case, and they'd share one file on this disk.`,
+          `barndog mcp add ${name} --as <new-name>`,
         );
       }
 
@@ -554,6 +608,18 @@ export async function addMcpServers(
       );
     }
 
+    // Saved before the sync, which writes them into the tools' settings.
+    const kept = servers.flatMap((s) =>
+      s.literals.filter((literal) => options.keep.includes(literal.variable)),
+    );
+
+    if (kept.length) {
+      await updateSecrets(
+        Object.fromEntries(kept.map((l) => [l.variable, l.value])),
+        runtime,
+      );
+    }
+
     const events = await synchronize(undefined, runtime, undefined, {
       prompt: false,
     });
@@ -561,7 +627,10 @@ export async function addMcpServers(
     return {
       added: servers.map((s) => s.name),
       notes: servers.flatMap((s) =>
-        s.notes.map((text) => ({ server: s.name, text })),
+        [...s.notes, ...literalNotes(s.literals, options.keep)].map((text) => ({
+          server: s.name,
+          text,
+        })),
       ),
       backups,
       events,

@@ -44,7 +44,7 @@ import { inputFile } from "../../shared/files.js";
 import { originLabel } from "../server/origin.js";
 import { assetKinds } from "../asset-kinds/index.js";
 import { only } from "../../shared/lookup.js";
-import { splitOrigin, validAssetName } from "../../shared/patterns.js";
+import { splitOrigin } from "../../shared/patterns.js";
 
 /** How to treat exclusions and disabled assets that a change would undo. */
 export type Overrides = {
@@ -449,10 +449,8 @@ export async function renameAsset(
       delete names[id];
     } else {
       const name = target.as ?? "";
-      if (!validAssetName(name)) {
-        throw new CliError(
-          "Use lowercase letters, numbers and single hyphens (at most 64 characters).",
-        );
+      if (!assetKinds[target.kind].validName(name)) {
+        throw new CliError(`${assetKinds[target.kind].nameRule}.`);
       }
 
       const held = await installedNames(runtime);

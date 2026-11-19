@@ -43,6 +43,12 @@ export function barndogPaths(home: string) {
     /** Saved sessions, per server. */
     credentials: join(root, "credentials.json"),
     credentialsLock: join(root, "credentials.lock"),
+    /**
+     * MCP variable values kept on this machine only, by variable name. Never
+     * uploaded; sync writes them into the coding tools' settings.
+     */
+    secrets: join(root, "secrets.json"),
+    secretsLock: join(root, "secrets.lock"),
     /** Where `claude mcp login` and `codex mcp login` run. */
     nativeAuth: join(root, "native-auth"),
     /** The default local workspace folder. */

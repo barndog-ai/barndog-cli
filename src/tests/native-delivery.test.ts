@@ -18,6 +18,18 @@ import { mcpEntry } from "../features/native/adapters.js";
 import { createProgram } from "../program.js";
 import { spawnSync } from "node:child_process";
 
+import type { Harness } from "../harnesses/types.js";
+import type { McpDefinition } from "@barndog-ai/api-contract";
+import type { RuntimeContext } from "../runtime.js";
+
+/** An MCP entry with every variable left as a reference, as before values were kept. */
+const referenceEntry = (
+  harness: Harness,
+  asset: { id: string; name: string },
+  definition: McpDefinition,
+  runtime: RuntimeContext,
+) => mcpEntry(harness, { ...asset, definition }, {}, runtime);
+
 const id = "729b9d5a-4a8c-4aa7-9b8d-975a55ac373e";
 
 function entry(
@@ -177,7 +189,7 @@ test("MCP adapters retain secret references and support Codex environment aliase
   };
 
   for (const harness of ["claude", "codex", "cursor"] as const) {
-    const result = mcpEntry(
+    const result = referenceEntry(
       harness,
       { id, name: "docs" },
       definition,

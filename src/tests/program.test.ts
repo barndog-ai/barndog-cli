@@ -223,6 +223,7 @@ test("asset search never synchronizes and install forwards name and origin", asy
       server: null,
       knowledge: false,
       offline: null,
+      moving: [],
       items: [],
     }),
     changeAsset: async (...args) => {
@@ -518,6 +519,7 @@ test("offline status reports what is installed without claiming it is current", 
       server: "https://barndog.example.com",
       knowledge: false,
       offline: "fetch failed",
+      moving: [{ kind: "skill", name: "mine", to: "https://example.test/1" }],
       items: [
         {
           id: "1",
@@ -536,6 +538,10 @@ test("offline status reports what is installed without claiming it is current", 
 
   const text = lines.join("\n");
   expect(text).toMatch(/Showing local state only: fetch failed/);
+  expect(text).toMatch(
+    /mine is moving to https:\/\/example\.test\/1\. Your local copy stays in use until that merges\./,
+  );
+
   expect(text).toMatch(/1 asset installed\. Couldn't check for updates/);
   expect(text).not.toMatch(/up to date/);
 });

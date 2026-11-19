@@ -24,6 +24,7 @@ import {
 import { undoAdoption } from "../features/adoption/undo.js";
 import { directoryLinkType } from "../platform.js";
 import { scanNative } from "../features/adoption/scan.js";
+import { readSecrets } from "../features/secrets/index.js";
 import type { Harness } from "../harnesses/registry.js";
 import { createProgram } from "../program.js";
 import { runSetup } from "../ui/onboarding.js";
@@ -184,6 +185,7 @@ test("adopting moves the chosen assets to BarnDog and undo puts them back", asyn
       "claude/mcp/github",
       "claude/hook/check",
     ],
+    [],
     runtime,
   );
 
@@ -285,6 +287,7 @@ test("undo can put back part of an adoption", async (t) => {
   await toolAssets(home);
   const { id } = await adoptNative(
     ["claude/mcp/github", "claude/mcp/lonely"],
+    [],
     runtime,
   );
 
@@ -313,7 +316,7 @@ test("undo can put back part of an adoption", async (t) => {
 test("undo keeps edits made to BarnDog's copy unless forced", async (t) => {
   const { home, folder, runtime } = await machine(t);
   await toolAssets(home);
-  const { id } = await adoptNative(["claude/skill/notes"], runtime);
+  const { id } = await adoptNative(["claude/skill/notes"], [], runtime);
   await writeFile(
     join(folder, "org/skills/notes/SKILL.md"),
     skill("notes", "Edited."),
@@ -334,14 +337,16 @@ test("undo keeps edits made to BarnDog's copy unless forced", async (t) => {
 test("an adoption that stopped halfway blocks the next one until undone", async (t) => {
   const { home, runtime } = await machine(t);
   await toolAssets(home);
-  await adoptNative(["claude/skill/notes", "claude/mcp/lonely"], runtime);
+  await adoptNative(["claude/skill/notes", "claude/mcp/lonely"], [], runtime);
 
   // As if the process died after taking the originals out.
   const [record] = await readAdoptions(home);
   assert(record);
   await writeAdoption({ ...record, status: "pending" }, home);
 
-  await expect(adoptNative(["claude/hook/done"], runtime)).rejects.toSatisfy(
+  await expect(
+    adoptNative(["claude/hook/done"], [], runtime),
+  ).rejects.toSatisfy(
     (error: CliError) => error.hint === `barndog adopt undo ${record.id}`,
   );
 
@@ -367,9 +372,9 @@ test("a failed adoption puts everything back", async (t) => {
   await mkdir(join(home, ".cursor/skills/notes"), { recursive: true });
   await write(home, ".cursor/skills/notes/readme.txt", "mine");
 
-  await expect(adoptNative(["claude/skill/notes"], runtime)).rejects.toThrow(
-    /didn't install/,
-  );
+  await expect(
+    adoptNative(["claude/skill/notes"], [], runtime),
+  ).rejects.toThrow(/didn't install/);
 
   expect(
     await readFile(join(home, ".claude/skills/notes/SKILL.md"), "utf8"),
@@ -516,6 +521,7 @@ test("adopt passes its options to the adoption functions", async () => {
             sameName: [],
             identical: true,
             notes: [],
+            values: [],
           },
         ],
         skipped: [],
@@ -577,6 +583,11 @@ test("a scan explains what it can't adopt and keeps Hook names apart", async (t)
   await write(home, ".claude/skills/taken/SKILL.md", skill("taken"));
   await write(folder, "org/skills/taken/SKILL.md", skill("taken"));
   await write(folder, "org/hooks/check/hook.yaml", "name: check\n");
+  await write(
+    folder,
+    "org/mcp/docs.yaml",
+    "transport: stdio\ncommand: d\nargs: []\nenvironment: {}\ndescription: Docs\nauthentication: none\n",
+  );
 
   // MCP servers: a bad name, a transport BarnDog can't hold, and one name in two OpenCode files.
   await write(
@@ -584,8 +595,11 @@ test("a scan explains what it can't adopt and keeps Hook names apart", async (t)
     ".claude.json",
     JSON.stringify({
       mcpServers: {
-        Bad_Name: { command: "x" },
+        "Bad.Name": { command: "x" },
         streaming: { type: "sse", url: "https://example.com/sse" },
+        // The standard format is kept; only a case-only twin of a local one is refused.
+        My_Server: { command: "m" },
+        DOCS: { command: "d" },
       },
     }),
   );
@@ -670,7 +684,10 @@ test("a scan explains what it can't adopt and keeps Hook names apart", async (t)
     "claude/skill/dangling": expect.stringMatching(/doesn't exist/),
     "claude/skill/broken": expect.any(String),
     "claude/skill/taken": expect.stringMatching(/already has a Skill/),
-    "claude/mcp/Bad_Name": expect.stringMatching(/can't be a BarnDog name/),
+    "claude/mcp/Bad.Name": expect.stringMatching(/can't be a BarnDog name/),
+    "claude/mcp/DOCS": expect.stringMatching(
+      /has docs, which differs only in case/,
+    ),
     "claude/mcp/streaming": expect.stringMatching(/stdio and HTTP/),
     "opencode/mcp/twin": expect.stringMatching(/also configures twin/),
     "claude/hook/PostToolUse hook": expect.stringMatching(
@@ -690,6 +707,10 @@ test("a scan explains what it can't adopt and keeps Hook names apart", async (t)
     .sort();
 
   expect(hooks).toStrictEqual(["claude/hook/check-2", "cursor/hook/check-3"]);
+  expect(scan.assets.map((asset) => asset.key)).toContain(
+    "claude/mcp/My_Server",
+  );
+
   expect(scan.assets.some((asset) => asset.key === "opencode/mcp/twin")).toBe(
     true,
   );
@@ -697,7 +718,7 @@ test("a scan explains what it can't adopt and keeps Hook names apart", async (t)
   // A renamed Hook still adopts and installs. The local folder's own taken
   // Skill would block that sync, since the tool has an unmanaged one too.
   await rm(join(folder, "org/skills/taken"), { recursive: true });
-  await adoptNative(["cursor/hook/check-3"], runtime);
+  await adoptNative(["cursor/hook/check-3"], [], runtime);
   expect(
     await readFile(join(folder, "org/hooks/check-3/hook.yaml"), "utf8"),
   ).toMatch(/name: check-3/);
@@ -736,7 +757,7 @@ test.skipIf(process.platform === "win32")(
     await toolAssets(home);
     await inlineHook(home);
 
-    await adoptNative(["claude/hook/notification"], runtime);
+    await adoptNative(["claude/hook/notification"], [], runtime);
     expect(
       await readFile(
         join(folder, "org/hooks/notification/notification-1.sh"),
@@ -768,7 +789,7 @@ test("adopt list leaves out the settings an asset came from", async (t) => {
     }),
   );
 
-  const result = await adoptNative(["claude/mcp/keyed"], runtime);
+  const result = await adoptNative(["claude/mcp/keyed"], [], runtime);
   expect(result.notes).toStrictEqual([
     expect.objectContaining({ kind: "mcp", name: "keyed" }),
   ]);
@@ -792,13 +813,13 @@ test("adopting stops before changing anything when it can't go ahead", async (t)
   const { home, folder, runtime } = await machine(t);
   await toolAssets(home);
 
-  await expect(adoptNative([], runtime)).rejects.toThrow(/at least one/);
+  await expect(adoptNative([], [], runtime)).rejects.toThrow(/at least one/);
 
   // The copy's place filled up after the scan.
   const scan = await scanNative(runtime);
   expect(scan.assets.some((a) => a.key === "claude/mcp/lonely")).toBe(true);
   await write(folder, "org/mcp/lonely.yaml", "taken");
-  await expect(adoptNative(["claude/mcp/lonely"], runtime)).rejects.toThrow(
+  await expect(adoptNative(["claude/mcp/lonely"], [], runtime)).rejects.toThrow(
     /isn't an asset BarnDog can adopt/,
   );
 
@@ -808,7 +829,7 @@ test("adopting stops before changing anything when it can't go ahead", async (t)
 test("undo won't replace what took an adopted asset's place", async (t) => {
   const { home, runtime } = await machine(t, ["cursor"]);
   await toolAssets(home);
-  const { id } = await adoptNative(["cursor/skill/linked"], runtime);
+  const { id } = await adoptNative(["cursor/skill/linked"], [], runtime);
 
   // Something else now sits where the link was; BarnDog's link is gone after sync.
   const [record] = await readAdoptions(home);
@@ -842,7 +863,7 @@ test("undo won't replace what took an adopted asset's place", async (t) => {
 test("undo won't move a Skill folder over one that came back", async (t) => {
   const { home, runtime } = await machine(t, ["claude"]);
   await toolAssets(home);
-  const { id } = await adoptNative(["claude/skill/notes"], runtime);
+  const { id } = await adoptNative(["claude/skill/notes"], [], runtime);
   const [record] = await readAdoptions(home);
   assert(record);
   await writeAdoption(
@@ -863,8 +884,8 @@ test("undo won't move a Skill folder over one that came back", async (t) => {
 test("a damaged adoption record stops adopt and undo", async (t) => {
   const { home, runtime } = await machine(t);
   await toolAssets(home);
-  await adoptNative(["claude/mcp/lonely"], runtime);
-  await adoptNative(["claude/skill/notes"], runtime);
+  await adoptNative(["claude/mcp/lonely"], [], runtime);
+  await adoptNative(["claude/skill/notes"], [], runtime);
   const records = await readAdoptions(home);
   expect(records.map((r) => r.items[0]?.key)).toStrictEqual([
     "claude/skill/notes",
@@ -881,7 +902,7 @@ test("an asset BarnDog doesn't install isn't adopted, and nothing changes", asyn
   await toolAssets(home);
 
   // A copy's ID depends only on its place, so the second adoption reuses it.
-  const first = await adoptNative(["claude/mcp/lonely"], runtime);
+  const first = await adoptNative(["claude/mcp/lonely"], [], runtime);
   const [record] = await readAdoptions(home);
   const assetId = record?.items[0]?.assetId;
   assert(assetId);
@@ -900,11 +921,47 @@ test("an asset BarnDog doesn't install isn't adopted, and nothing changes", asyn
     home,
   );
 
-  await expect(adoptNative(["claude/mcp/lonely"], runtime)).rejects.toThrow(
+  await expect(adoptNative(["claude/mcp/lonely"], [], runtime)).rejects.toThrow(
     /couldn't install claude\/mcp\/lonely, so nothing was adopted/,
   );
 
   expect(await json(join(home, ".claude.json"))).toMatchObject({
     mcpServers: { lonely: { command: "lonely" } },
+  });
+});
+
+test("adopting can keep an MCP server's values on this machine, and says where", async (t) => {
+  const { home, runtime } = await machine(t, ["claude"]);
+  await write(
+    home,
+    ".claude.json",
+    JSON.stringify({
+      mcpServers: {
+        keyed: { command: "k", env: { API_KEY: "sk-secret", OTHER: "o" } },
+      },
+    }),
+  );
+
+  const scan = await scanNative(runtime);
+  expect(
+    scan.assets.find((asset) => asset.key === "claude/mcp/keyed")?.values,
+  ).toStrictEqual([
+    { key: "API_KEY", variable: "API_KEY" },
+    { key: "OTHER", variable: "OTHER" },
+  ]);
+
+  expect(JSON.stringify(scan)).not.toContain("sk-secret");
+  const result = await adoptNative(["claude/mcp/keyed"], ["API_KEY"], runtime);
+  expect(await readSecrets(runtime)).toStrictEqual({ API_KEY: "sk-secret" });
+  expect(result.notes.map((note) => note.text)).toStrictEqual([
+    expect.stringMatching(
+      /keeps the value of API_KEY in ~\/\.barndog\/secrets\.json/,
+    ),
+    expect.stringMatching(/Set OTHER in your environment/),
+  ]);
+
+  const claude = await json(join(home, ".claude.json"));
+  expect(claude).toMatchObject({
+    mcpServers: { keyed: { env: { API_KEY: "sk-secret", OTHER: "${OTHER}" } } },
   });
 });

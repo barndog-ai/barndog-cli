@@ -10,7 +10,8 @@ import {
   table,
   warn,
 } from "../ui/format.js";
-import { renderMove } from "../ui/move.js";
+import { chooseKeepLocal, pickLocalAssets, renderMove } from "../ui/move.js";
+import { CliError } from "../errors.js";
 import type { CommandContext } from "./context.js";
 import type { MigrationRow } from "../features/migration/migrate.js";
 
@@ -67,8 +68,9 @@ export function registerWorkspace(program: Command, context: CommandContext) {
           dim(asset.kind),
           asset.state === "invalid" ? warn(asset.state) : asset.state,
           dim(asset.path),
+          asset.movingTo ? dim(`to ${asset.movingTo}`) : "",
         ]),
-        { header: ["Name", "Kind", "State", "Path"] },
+        { header: ["Name", "Kind", "State", "Path", ""] },
       )) {
         context.write(line);
       }
@@ -76,7 +78,16 @@ export function registerWorkspace(program: Command, context: CommandContext) {
 
   local
     .command("move [names...]")
-    .description("Copy local assets into your Git or Cloud workspace")
+    .description("Move local assets into your Git or Cloud workspace")
+    .option("--all", "Move every local asset that isn't already moving")
+    .option(
+      "--keep-local",
+      "Share a copy and keep the local assets as separate ones",
+    )
+    .option(
+      "--no-keep-local",
+      "Make the shared copy the only one; the local copy is removed once it exists",
+    )
     .option(
       "--to <origin>",
       "Destination, such as me, org or team/web. Defaults to me in cloud, org in Git",
@@ -90,13 +101,39 @@ export function registerWorkspace(program: Command, context: CommandContext) {
       "--server <url>",
       "Send to this Cloud Workspace; this machine stays as it is",
     )
+    .addHelpText(
+      "after",
+      `
+Without names, a terminal lists your local assets to pick from; elsewhere, name them or pass --all.
+
+It then asks whether to move them or keep separate local copies; --keep-local or --no-keep-local answers without asking.
+  Move: the shared copy becomes the only one. Once it exists, the next sync installs it and removes the local copy.
+        A move into a Git repo with assets in it waits for its pull request: until it merges, local list shows
+        the asset as moving and the local copy stays in use. A local copy edited before then stays as a separate asset.
+  Keep: a copy is shared and the local asset stays. When both have the same name, sync asks which to rename.
+With --repo or --server this machine stays as it is, so the assets are always copied.`,
+    )
     .action(
       async (
         names: string[],
-        options: { to?: string; as?: string; repo?: string; server?: string },
+        options: {
+          all?: boolean;
+          keepLocal?: boolean;
+          to?: string;
+          as?: string;
+          repo?: string;
+          server?: string;
+        },
       ) => {
+        const chosen = await chooseNames(names, options.all);
+        // --repo and --server send a copy and leave this machine as it is.
+        const oneOff = Boolean(options.repo || options.server);
+        const keepLocal =
+          options.keepLocal ?? (oneOff || (await askKeepLocal(chosen?.length)));
+
         const result = await context.moveLocalAssets({
-          names,
+          names: chosen,
+          keepLocal,
           to: options.to,
           as: options.as,
           repo: options.repo,
@@ -112,6 +149,40 @@ export function registerWorkspace(program: Command, context: CommandContext) {
         }
       },
     );
+
+  /** The names to move; undefined means every local asset not already moving. */
+  async function chooseNames(names: string[], all: boolean | undefined) {
+    if (all && names.length) {
+      throw new CliError(
+        "Name the assets to move or pass --all, not both.",
+        "barndog local move --help",
+      );
+    }
+
+    if (all || names.length) {
+      return all ? undefined : names;
+    }
+
+    if (!context.mode.interactive) {
+      throw new CliError(
+        "Name the local assets to move, or pass --all.",
+        "barndog local move <names...> --keep-local, or barndog local move --all --no-keep-local",
+      );
+    }
+
+    return pickLocalAssets(await context.listLocalAssets());
+  }
+
+  async function askKeepLocal(count: number | undefined) {
+    if (!context.mode.interactive) {
+      throw new CliError(
+        "Say whether to keep separate local copies: --keep-local keeps them, --no-keep-local makes the shared copy the only one.",
+        "barndog local move --help",
+      );
+    }
+
+    return chooseKeepLocal(count ?? 2);
+  }
 
   program
     .command("migrate")

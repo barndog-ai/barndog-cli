@@ -70,6 +70,7 @@ import type {
   MigrationReport,
 } from "../features/migration/migrate.js";
 import type { PackageDetails } from "../features/inventory/show.js";
+import type { KeptValueChange, KeptVariable } from "../features/mcps/values.js";
 import type {
   LocalAssets,
   MoveOptions,
@@ -202,7 +203,10 @@ type FeatureFunctions = {
   migrate: (options: MigrateOptions) => Promise<MigrationReport>;
 
   scanNative: () => Promise<NativeScan>;
-  adoptNative: (keys: readonly string[]) => Promise<AdoptionResult>;
+  adoptNative: (
+    keys: readonly string[],
+    keep: readonly string[],
+  ) => Promise<AdoptionResult>;
   listAdoptions: () => Promise<AdoptionSummary[]>;
   undoAdoption: (target: UndoTarget) => Promise<UndoResult>;
 
@@ -214,6 +218,9 @@ type FeatureFunctions = {
     options: { force?: boolean; dryRun?: boolean },
   ) => Promise<ImportUpdate[]>;
 
+  keepMcpValue: (variable: string, value: string) => Promise<KeptValueChange>;
+  forgetMcpValue: (variable: string) => Promise<KeptValueChange>;
+  listKeptValues: () => Promise<KeptVariable[]>;
   showPackage: (
     kind: PackageKind,
     name: string,

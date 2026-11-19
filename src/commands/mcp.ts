@@ -5,6 +5,7 @@ import { harnesses } from "../harnesses/registry.js";
 import { type Harness } from "../harnesses/types.js";
 import { defined } from "../shared/lookup.js";
 import { commandHelpers } from "./helpers.js";
+import { registerMcpEnv } from "./mcp-env.js";
 
 /** `barndog mcp` commands that publish, inspect and authenticate MCP configurations. */
 export function registerMcp(program: Command, context: CommandContext) {
@@ -122,4 +123,6 @@ export function registerMcp(program: Command, context: CommandContext) {
         );
       },
     );
+
+  registerMcpEnv(mcp, context);
 }

@@ -1,6 +1,7 @@
 import type { RuntimeContext } from "../../runtime.js";
 import { randomBytes } from "node:crypto";
-import { basename } from "node:path";
+import { basename, join } from "node:path";
+import { rm } from "node:fs/promises";
 
 import {
   type KnowledgeContent,
@@ -41,7 +42,12 @@ import {
 } from "../auth/transport.js";
 import { connectionContext } from "../auth/session.js";
 import { publishKnowledge, publishMcp, publishPackage } from "./migrate.js";
-import { readMoved, recordMoved } from "../workspace/overlay.js";
+import {
+  moveDestination,
+  readMoved,
+  recordMoved,
+  type MovedAsset,
+} from "../workspace/overlay.js";
 import {
   commitFiles,
   openPullRequest,
@@ -72,7 +78,13 @@ type MoveRow = {
 
 /** Which local assets to move, and where. */
 export type MoveOptions = {
+  /** Every local asset not already moving when absent. */
   names?: string[];
+  /**
+   * True copies them and leaves the local assets as they are. False makes the
+   * shared copy the only one: the local copy goes once the shared one exists.
+   */
+  keepLocal: boolean;
   to?: string;
   as?: string;
   repo?: string;
@@ -82,6 +94,9 @@ export type MoveOptions = {
 
 export type MoveResult = {
   target: string;
+  keepLocal: boolean;
+  /** Local knowledge files deleted at once, because their shared copy already exists. */
+  removed: string[];
   /** The scope moved assets now belong to. */
   originId?: string;
   rows: MoveRow[];
@@ -319,6 +334,8 @@ async function moveToGit(
 
   const result: MoveResult = {
     target: workspace.url,
+    keepLocal: true,
+    removed: [],
     rows,
     originId: stableId(
       workspace.workspaceId,
@@ -493,10 +510,67 @@ async function moveToCloud(
     }
   }
 
-  return { target: originLabel(scope), rows, originId: scope.id };
+  return {
+    target: originLabel(scope),
+    keepLocal: true,
+    removed: [],
+    rows,
+    originId: scope.id,
+    direct: true,
+  };
 }
 
-/** Copies local assets into the shared workspace; the local folder is never deleted. */
+/** A one-off destination (`--repo`, `--server`) leaves this machine as it is, so it only copies. */
+const keepsLocal = (options: MoveOptions) =>
+  options.keepLocal || Boolean(options.repo ?? options.server);
+
+/**
+ * Records full moves so sync can replace each local copy with the shared one
+ * once it exists. Knowledge that is already published needs no selection, so
+ * its local file goes at once; the rest waits for the next sync.
+ */
+async function finishMove(
+  folder: string,
+  result: MoveResult,
+  moved: MoveRow[],
+  items: Candidate[],
+) {
+  const removed: string[] = [];
+  const records: MovedAsset[] = [];
+  for (const row of moved) {
+    const item = defined(
+      items.find((i) => i.kind === row.kind && i.name === row.name),
+      `${row.name} isn't among the moved items`,
+    );
+
+    if (row.kind === "knowledge" && result.direct) {
+      const path = join(folder, item.path);
+      await rm(path, { force: true });
+      removed.push(path);
+      continue;
+    }
+
+    records.push({
+      kind: row.kind,
+      name: row.name,
+      path: item.path,
+      version: item.version,
+      target: result.target,
+      ...(row.kind !== "knowledge" ? { originId: result.originId } : {}),
+      ...(result.url ? { url: result.url } : {}),
+    });
+  }
+
+  await recordMoved(folder, records);
+
+  return removed;
+}
+
+/**
+ * Copies local assets into the shared workspace. With `keepLocal` false the
+ * shared copy becomes the only one: sync removes each local copy once its
+ * shared copy exists.
+ */
 export function moveLocalAssets(
   options: MoveOptions,
   runtime: RuntimeContext,
@@ -569,19 +643,12 @@ export function moveLocalAssets(
     const result = await moveItems();
 
     result.rows.unshift(...invalid);
+    result.keepLocal = keepsLocal(options);
+
     const moved = result.rows.filter((row) => row.status === "moved");
-    await recordMoved(
-      overlay.label,
-      moved.map((row) => ({
-        kind: row.kind,
-        name: row.name,
-        ...(row.kind !== "knowledge" ? { originId: result.originId } : {}),
-        path: defined(
-          items.find((i) => i.kind === row.kind && i.name === row.name),
-          `${row.name} isn't among the moved items`,
-        ).path,
-      })),
-    );
+    if (!result.keepLocal) {
+      result.removed = await finishMove(overlay.label, result, moved, items);
+    }
 
     if (moved.length) {
       await synchronize(undefined, runtime, undefined, { prompt: false });
@@ -592,10 +659,10 @@ export function moveLocalAssets(
 }
 
 /**
- * A moved asset is still "active": sync installs the shared copy once it
- * exists, and the local one until then, so either way the asset is in use.
+ * `moving` while a full move waits for its shared copy, such as a pull request
+ * to merge; the local copy stays in use until then.
  */
-type LocalAssetState = "active" | "invalid";
+type LocalAssetState = "active" | "moving" | "invalid";
 
 /** The local folder and every asset and knowledge document in it. */
 export type LocalAssets = {
@@ -605,6 +672,8 @@ export type LocalAssets = {
     name: string;
     path: string;
     state: LocalAssetState;
+    /** Where a moving asset is going: its pull request, else the destination. */
+    movingTo?: string;
   }[];
 };
 
@@ -623,8 +692,26 @@ export async function listLocalAssets(
 
   const source = localRepoSource(settings.localWorkspace, runtime);
   const model = await source.model();
-  const state = (invalid?: string): LocalAssetState =>
-    invalid ? "invalid" : "active";
+  // A move can only be under way while the workspace it goes to is in use.
+  const moving =
+    settings.connection || settings.gitWorkspace
+      ? await readMoved(source.label)
+      : [];
+
+  const state = (path: string, invalid?: string) => {
+    if (invalid) {
+      return { state: "invalid" as const };
+    }
+
+    const entry = moving.find((m) => m.path === path);
+
+    return entry
+      ? {
+          state: "moving" as const,
+          movingTo: moveDestination(entry),
+        }
+      : { state: "active" as const };
+  };
 
   return {
     folder: settings.localWorkspace.path,
@@ -633,13 +720,13 @@ export async function listLocalAssets(
         kind: asset.kind,
         name: asset.name,
         path: asset.path,
-        state: state(asset.invalid),
+        ...state(asset.path, asset.invalid),
       })),
       ...model.knowledge.map((doc) => ({
         kind: "knowledge" as const,
         name: doc.content.name,
         path: doc.path,
-        state: state(),
+        ...state(doc.path),
       })),
     ],
   };

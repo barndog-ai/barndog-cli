@@ -240,6 +240,7 @@ export function registerRename(
           target = item.id;
           const [type = "", slug = ""] = item.origin.split("/");
           suggestion = prefixedName({
+            kind: item.kind,
             name: item.name,
             origin: { type, slug },
           });

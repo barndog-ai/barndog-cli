@@ -226,12 +226,33 @@ export function renderAdoptions(list: AdoptionSummary[]): string[] {
 
 /** The operations the adoption prompt needs. */
 export type AdoptionPrompt = {
-  adoptNative: (keys: readonly string[]) => Promise<AdoptionResult>;
+  adoptNative: (
+    keys: readonly string[],
+    keep: readonly string[],
+  ) => Promise<AdoptionResult>;
   write: (message: string) => void;
   runtime: RuntimeContext;
   choose?: ChooseAdoption;
   confirm?: ConfirmAdoption;
+  keepValues?: ChooseKeptValues;
 };
+
+/** Which of the plan's MCP values BarnDog keeps on this machine, by variable. */
+type ChooseKeptValues = (
+  values: { server: string; key: string; variable: string }[],
+) => Promise<string[]>;
+
+const chooseKeptValues: ChooseKeptValues = (values) =>
+  checkbox({
+    message: "Which values should BarnDog keep on this machine?",
+    choices: values.map((value) => ({
+      name: `${value.variable}  ${dim(`${value.server}: ${value.key}`)}`,
+      short: value.variable,
+      value: value.variable,
+      checked: true,
+    })),
+    theme: checkboxTheme,
+  });
 
 /** Shows what a scan found, asks which assets to adopt, and adopts them. */
 export async function offerAdoption(scan: NativeScan, prompt: AdoptionPrompt) {
@@ -266,10 +287,27 @@ export async function offerAdoption(scan: NativeScan, prompt: AdoptionPrompt) {
     return;
   }
 
-  for (const line of renderAdoption(
-    await prompt.adoptNative(keys),
-    prompt.runtime,
-  )) {
+  // Same-named copies share one source, so each value is asked about once.
+  const values = plan
+    .filter((asset) => asset.key === asset.source.key)
+    .flatMap((asset) =>
+      asset.values.map((value) => ({ server: asset.name, ...value })),
+    );
+
+  let keep: string[] = [];
+  if (values.length) {
+    write("");
+    write(
+      dim(
+        "These MCP values were written into the tools' settings. BarnDog can keep them in ~/.barndog/secrets.json, which only you can read and which is never uploaded, and write them into each tool it manages. Leave one unticked to set it yourself.",
+      ),
+    );
+
+    keep = await (prompt.keepValues ?? chooseKeptValues)(values);
+  }
+
+  const result = await prompt.adoptNative(keys, keep);
+  for (const line of renderAdoption(result, prompt.runtime)) {
     write(line);
   }
 }
@@ -280,14 +318,14 @@ export async function offerAdoption(scan: NativeScan, prompt: AdoptionPrompt) {
  */
 export async function offerAdoptionAtSetup(
   runtime: RuntimeContext,
-  prompt: Pick<AdoptionPrompt, "write" | "choose" | "confirm">,
+  prompt: Pick<AdoptionPrompt, "write" | "choose" | "confirm" | "keepValues">,
 ) {
   try {
     const scan = await scanNative(runtime);
     if (scan.assets.length) {
       await offerAdoption(scan, {
         ...prompt,
-        adoptNative: (keys) => adoptNative(keys, runtime),
+        adoptNative: (keys, keep) => adoptNative(keys, keep, runtime),
         runtime,
       });
     }
