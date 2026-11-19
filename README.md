@@ -66,7 +66,7 @@ npm install -g barndog
 ```sh
 barndog init                                     # choose a workspace and your coding tools
 barndog status                                   # what's installed on this machine, and where
-barndog skills install https://github.com/...    # add one asset
+barndog skills add https://github.com/...        # add a Skill from a repository
 barndog skills search review                     # browse what the workspace offers
 barndog sync                                     # apply changes now
 barndog doctor                                   # check everything and print a fix for each problem
