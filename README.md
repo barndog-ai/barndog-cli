@@ -1,8 +1,8 @@
 # BarnDog CLI
 
-Set up your and your team's AI coding environment once, and have it show up in every developer's Claude Code, Codex, or any other coding harness.
+Set up your AI coding environment once, and have it show up in Claude Code, Codex, or any other harness you love.
 
-`barndog` is the command-line tool for [BarnDog](https://barndog.dev). It installs your organization's shared Skills, MCP servers, Hooks, and knowledge into the coding agents your developers already use, keeps them up to date, and lets the team improve them together with review, like code.
+`barndog` is the command-line tool for [BarnDog](https://barndog.dev). It installs Skills, MCP servers, Hooks, and knowledge into the coding agents you already use, keeps them up to date, and lets you improve them like code. It works the same whether it's just you, a small team, or a whole organization; only where the assets live changes.
 
 Currently supported harnesses:
 
@@ -13,24 +13,36 @@ Currently supported harnesses:
 
 ## Why
 
-Every coding agent has its own place for skills, its own MCP config format, and its own hook settings. Keeping a team's setup consistent across them usually means copying files around and hoping nobody's copy is stale.
+Every coding agent has its own place for skills, its own MCP config format, and its own hook settings. Keeping one setup consistent across them, or across a team, usually means copying files around and hoping nobody's copy is stale.
 
-BarnDog keeps one shared setup and writes it into each tool in that tool's own format. Developers keep working in the agent they prefer.
+BarnDog keeps one setup and writes it into each tool in that tool's own format. You keep working in the agent you prefer.
+
+## Pick your setup
+
+| Workspace          | Run                         | Best for                                     | What you get                                                                                                                                    |
+| ------------------ | --------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Local folder**   | `barndog init --local`      | Just you                                     | One copy of your assets in every tool. No account, nothing shared.                                                                              |
+| **Git repository** | `barndog init --repo <url>` | Teams that want full control over their data | BarnDog stores nothing. You edit `barndog.yaml` and the folders by hand, and the repository's permissions decide who can change what.           |
+| **BarnDog Cloud**  | `barndog init`              | Teams of any size                            | A web catalog to manage, distribute, and discover assets, teams and people; per-team approval rules, and review in the terminal or the browser. |
+
+Git trades discoverability for governance: there are no per-team approval rules, people management or web catalog, and a growing setup can get heavy to maintain by hand. BarnDog Cloud is free during the beta, and will stay free for teams of up to 5 people.
+
+Installing and syncing work the same everywhere. Knowledge needs Git or Cloud. Switch later with `barndog local move` or `barndog migrate --to <server>`.
 
 ## How it works
 
 ```mermaid
 flowchart LR
-  W["Your workspace<br/>BarnDog Cloud, a Git repo,<br/>or a local folder"] -->|barndog sync| C["barndog CLI"]
+  W["Your workspace<br/>a local folder, a Git repo,<br/>or BarnDog Cloud"] -->|barndog sync| C["barndog CLI"]
   C --> CC[Claude Code]
   C --> CX[Codex]
   C --> CU[Other harnesses]
 ```
 
-1. **Connect to a workspace.** `barndog init` signs you in to a BarnDog server, or points at a Git repository or local folder that holds your or your team's assets.
-2. **Choose what you want.** Pick your coding tools, then the sets you need: the whole organization, your team, the repositories you work in, plus any individual assets.
+1. **Connect to a workspace.** `barndog init` points at a local folder, a Git repository, or a BarnDog server.
+2. **Choose what you want.** Pick your coding tools, then what to install. On BarnDog Cloud that means sets (the organization, your team, the repositories you work in) plus any individual assets.
 3. **Sync.** `barndog sync` writes everything into each tool's native location. It runs again automatically when a coding session starts, so updates arrive without anyone thinking about it.
-4. **Improve together.** Pull an asset into a folder, edit it, and `barndog push` a Suggested Change. Teammates review it line by line, and once it's merged everyone gets the new version on their next sync.
+4. **Improve.** Edit a local asset directly, or, in a Git or Cloud workspace, pull it into a folder, edit it, and `barndog push` it for review. Once merged, everyone gets the new version on their next sync.
 
 ## What it manages
 
@@ -39,7 +51,7 @@ flowchart LR
 | **Skill**      | A folder with a `SKILL.md` and supporting files that agents load when relevant.             |
 | **MCP server** | A connection to an MCP server. It names the secrets it needs but never stores their values. |
 | **Hook**       | A command that runs on an agent lifecycle event, such as after a file edit.                 |
-| **Knowledge**  | Company policies and context that agents can look up when a task needs it.                  |
+| **Knowledge**  | Policies and context that agents can look up when a task needs it (Git and Cloud).          |
 
 ## Install
 
@@ -52,27 +64,17 @@ npm install -g barndog
 ## Quick start
 
 ```sh
-barndog init                       # connect, optionally sign in, choose tools and sets
-barndog status                     # what's installed on this machine, and where
-barndog skills search review       # browse the shared catalog
-barndog skills install code-review # add one asset on top of your sets
-barndog sync                       # apply changes now
-barndog doctor                     # check everything and print a fix for each problem
+barndog init                                     # choose a workspace and your coding tools
+barndog status                                   # what's installed on this machine, and where
+barndog skills install https://github.com/...    # add one asset
+barndog skills search review                     # browse what the workspace offers
+barndog sync                                     # apply changes now
+barndog doctor                                   # check everything and print a fix for each problem
 ```
 
 Run `barndog` on its own to see every command, or `barndog <command> --help` for its options.
 
-### No BarnDog server? Use Git
-
-You can share assets through any Git repository, using your own Git credentials. This requires the [GitHub CLI](https://cli.github.com) (`gh`) to be installed:
-
-```sh
-barndog init --repo git@github.com:acme/ai-setup.git
-```
-
-Or keep them in a folder on your machine with `barndog init --local`. See [Git workspaces](https://barndog.dev/docs/cli/git-workspaces#local-workspaces) for the layout.
-
-### Suggest a change
+### Suggest a change (Git and Cloud)
 
 ```sh
 barndog skills pull code-review --origin team/engineering
@@ -82,7 +84,7 @@ barndog diff
 barndog push --title "Add a security checklist"
 ```
 
-Reviewers use `barndog skills changes list`, `changes diff`, and `changes approve` (or the same under `barndog hooks`) from the terminal, or GitHub repo, or the BarnDog web workspace.
+In a Git workspace this opens a pull request on your Git host. In BarnDog Cloud it creates a Suggested Change that reviewers handle with `barndog skills changes list`, `changes diff`, and `changes approve` (or the same under `barndog hooks`), or in the web workspace.
 
 ## What it changes on your machine
 
