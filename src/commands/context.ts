@@ -57,7 +57,7 @@ import type {
   McpServer,
   PublishedAsset,
 } from "../features/asset-kinds/index.js";
-import type { AssetKind } from "../config/selection.js";
+import type { AssetKind, PackageKind } from "../config/selection.js";
 import type { Harness, HookHarness } from "../harnesses/types.js";
 import type { Check } from "../features/doctor/index.js";
 import type { RepositoryStatus } from "../features/inspection/index.js";
@@ -69,6 +69,7 @@ import type {
   MigrateOptions,
   MigrationReport,
 } from "../features/migration/migrate.js";
+import type { PackageDetails } from "../features/inventory/show.js";
 import type {
   LocalAssets,
   MoveOptions,
@@ -144,6 +145,8 @@ export type CommandContext = {
   }) => Promise<void>;
   logout: () => Promise<void>;
   authStatus: () => Promise<void>;
+  /** Whether `~/.barndog/config.yaml` exists, so bare `barndog` can start setup instead of help. */
+  isSetUp: () => Promise<boolean>;
   setup: (
     restart: boolean,
     server?: string,
@@ -211,6 +214,11 @@ type FeatureFunctions = {
     options: { force?: boolean; dryRun?: boolean },
   ) => Promise<ImportUpdate[]>;
 
+  showPackage: (
+    kind: PackageKind,
+    name: string,
+    origin: string,
+  ) => Promise<PackageDetails>;
   showMcp: (
     name: string,
     origin: string,

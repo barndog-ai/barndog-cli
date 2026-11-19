@@ -10,7 +10,7 @@ import { basename, dirname, join } from "node:path";
 import { stringify } from "yaml";
 
 import { barndogPaths } from "../../config/paths.js";
-import type { LocalWorkspace } from "../../config/settings.js";
+import { readSettings, type LocalWorkspace } from "../../config/settings.js";
 import { readState } from "../../config/state.js";
 import { CliError, friendlyMessage } from "../../errors.js";
 import type { RuntimeContext } from "../../runtime.js";
@@ -27,7 +27,12 @@ import { localRepoSource } from "../workspace/repo-source.js";
 import { copyFingerprint, installed } from "./copies.js";
 import { takeOut } from "./originals.js";
 import { restore } from "./restore.js";
-import { readAdoptions, writeAdoption, type Adoption } from "./record.js";
+import {
+  readAdoptions,
+  writeAdoption,
+  type Adoption,
+  type NativeAssetKind,
+} from "./record.js";
 import {
   findNativeAssets,
   type AssetRef,
@@ -93,15 +98,47 @@ export function adoptionPlan(
   return [...planned.values()];
 }
 
+/** Something to do for one adopted asset. */
+type AdoptionNote = {
+  kind: NativeAssetKind;
+  name: string;
+  text: string;
+};
+
 /** What `barndog adopt` did. */
 export type AdoptionResult = {
   id: string;
   adopted: PlannedAsset[];
   /** Where the originals wait until undo. */
   backup: string;
-  notes: string[];
+  /** What to do before an adopted asset works, such as a variable to set. */
+  notes: AdoptionNote[];
   events: SyncEvent[];
+  /** A Git or Cloud workspace runs beside the local folder, so `local move` can share what was adopted. */
+  canShare: boolean;
 };
+
+async function hasSharedWorkspace(home: string) {
+  const settings = await readSettings(home);
+
+  return Boolean(settings?.connection ?? settings?.gitWorkspace);
+}
+
+/** Same-named copies share one source, so each source's notes appear once. */
+function adoptionNotes(
+  plan: PlannedAsset[],
+  sourceOf: (asset: PlannedAsset) => FoundAsset,
+): AdoptionNote[] {
+  const sources = new Map(plan.map((asset) => [asset.source.key, asset]));
+
+  return [...sources.values()].flatMap((asset) =>
+    sourceOf(asset).notes.map((text) => ({
+      kind: asset.kind,
+      name: asset.name,
+      text,
+    })),
+  );
+}
 
 /** Takes over the chosen assets; on any failure, puts back what it changed. */
 export async function adoptNative(
@@ -190,8 +227,9 @@ export async function adoptNative(
         id,
         adopted: plan,
         backup: paths.folder,
-        notes: [...new Set(plan.flatMap((asset) => sourceOf(asset).notes))],
+        notes: adoptionNotes(plan, sourceOf),
         events,
+        canShare: await hasSharedWorkspace(home),
       };
     } catch (error) {
       await restore(record, record.items, runtime).catch(

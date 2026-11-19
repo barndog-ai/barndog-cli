@@ -13,6 +13,10 @@ import {
   knowledgeIndexText,
 } from "../features/knowledge/index.js";
 import { hookCompatibility } from "../features/hooks/compatibility.js";
+import { showPackage } from "../features/inventory/show.js";
+import { renderPackageDetails } from "../ui/package-details.js";
+import { stripVTControlCharacters } from "node:util";
+import type { Harness } from "../harnesses/registry.js";
 
 /** A Cloud workspace with a local folder holding two valid documents and a broken one. */
 async function knowledgeFixture(t: TestContext, enabled: boolean) {
@@ -130,11 +134,15 @@ test("the session-start knowledge index lists each document on one line", async 
   );
 });
 
-async function hookFixture(t: TestContext, manifest?: string) {
+async function hookFixture(
+  t: TestContext,
+  manifest?: string,
+  harnesses: Harness[] = ["claude", "codex", "cursor"],
+) {
   const server = await cloud(t);
   const runtime = testRuntime(server.home);
   const local = await localWorkspace(runtime);
-  await saveSettings({ harnesses: [], localWorkspace: local }, server.home);
+  await saveSettings({ harnesses, localWorkspace: local }, server.home);
   for (const file of packages.hook) {
     const path = join(local.path, "org/hooks/release-notes", file.path);
     await mkdir(dirname(path), { recursive: true });
@@ -222,4 +230,56 @@ test("a hook that only implements Claude Code is unsupported for Codex and Curso
       "No implementation for this harness",
     );
   }
+});
+
+test("hook compatibility lists only the coding tools BarnDog manages", async (t) => {
+  const runtime = await hookFixture(t, BOTH_HARNESSES, [
+    "claude",
+    "codex",
+    "opencode",
+  ]);
+
+  const result = await hookCompatibility("release-notes", "org", runtime);
+
+  expect(result.compatibility.map((row) => row.harness)).toStrictEqual([
+    "claude",
+    "codex",
+  ]);
+});
+
+test("hooks show describes a local Hook and the events each tool runs it on", async (t) => {
+  const runtime = await hookFixture(t, BOTH_HARNESSES);
+  const details = await showPackage("hook", "release-notes", "local", runtime);
+
+  expect(details).toMatchObject({
+    kind: "hook",
+    name: "release-notes",
+    description: "Checks release notes",
+    events: { claude: ["SessionStart"], codex: ["SessionStart"] },
+  });
+
+  const text = stripVTControlCharacters(
+    renderPackageDetails({
+      ...details,
+      installed: {
+        state: "installed",
+        harnesses: ["claude"],
+        paths: ["/home/dev/.claude/settings.json"],
+      },
+    }).join("\n"),
+  );
+
+  expect(text).toMatch(
+    /Events\n {2}Claude Code: SessionStart\n {2}Codex: SessionStart/,
+  );
+
+  expect(text).toMatch(/Installed in\s+Claude Code/);
+  expect(text).toMatch(/Paths\n {2}\/home\/dev\/\.claude\/settings\.json/);
+  expect(
+    stripVTControlCharacters(
+      renderPackageDetails({ ...details, events: {}, installed: null }).join(
+        "\n",
+      ),
+    ),
+  ).toMatch(/State\s+not installed[\s\S]*No coding tool runs it/);
 });

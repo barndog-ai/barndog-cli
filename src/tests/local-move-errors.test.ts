@@ -11,6 +11,7 @@ import { localWorkspace } from "../features/workspace/setup.js";
 import { readSettings, saveSettings } from "../config/settings.js";
 import { CliError } from "../shared/cli-error.js";
 import { synchronize } from "../features/environment/sync.js";
+import { readMoved } from "../features/workspace/overlay.js";
 import {
   moveLocalAssets,
   listLocalAssets,
@@ -239,10 +240,13 @@ for (const mode of ["clash", "denied", "failure", "publish"] as const) {
       }
     }
 
+    const moved = await readMoved(local.path);
     const states = Object.fromEntries(
       (await listLocalAssets(runtime)).assets.map((asset) => [
         keyOf(asset),
-        asset.state,
+        moved.some((entry) => entry.path === asset.path)
+          ? "moved"
+          : asset.state,
       ]),
     );
 
@@ -484,7 +488,7 @@ test("renaming a Skill uploads it under the new name and rewrites its SKILL.md",
 
 test("renaming a knowledge document publishes it under the new name and marks the local file moved", async (t) => {
   const server = await cloud(t);
-  const { runtime } = await localFixture(server);
+  const { runtime, local: folder } = await localFixture(server);
   const result = await moveLocalAssets(
     { to: "org", names: ["context"], as: "renamed" },
     runtime,
@@ -506,6 +510,10 @@ test("renaming a knowledge document publishes it under the new name and marks th
     (asset) => asset.kind === "knowledge",
   );
 
-  expect(local).toMatchObject({ name: "context", state: "moved" });
+  expect(local).toMatchObject({ name: "context", state: "active" });
+  expect(await readMoved(folder.path)).toEqual([
+    expect.objectContaining({ kind: "knowledge", path: local?.path }),
+  ]);
+
   expect(vi.mocked(synchronize)).toHaveBeenCalledOnce();
 });

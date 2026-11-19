@@ -133,6 +133,8 @@ import { primary } from "./ui/theme.js";
 import { versionReport } from "./version.js";
 import { defined } from "./shared/lookup.js";
 import { barndogPaths } from "./config/paths.js";
+import { showPackage } from "./features/inventory/show.js";
+import { readSettings } from "./config/settings.js";
 
 /** Keep command help readable at the conventional eighty-column terminal width. */
 const HELP_WIDTH = 80;
@@ -434,6 +436,10 @@ export function createProgram(options: ProgramOptions = {}): Command {
     authStatus:
       options.authStatus ??
       (() => showAuthStatus({ write, json: mode.json }, runtime)),
+    isSetUp:
+      options.isSetUp ??
+      // A damaged file counts as set up: the command that reads it explains what's wrong.
+      (async () => (await readSettings(home).catch(() => true)) !== null),
     setup:
       options.setup ??
       ((restart, server, setupOptions) =>
@@ -499,6 +505,9 @@ export function createProgram(options: ProgramOptions = {}): Command {
     updateImported:
       options.updateImported ??
       ((kind, name, options) => updateImported(kind, name, options, runtime)),
+    showPackage:
+      options.showPackage ??
+      ((kind, name, origin) => showPackage(kind, name, origin, runtime)),
     showMcp:
       options.showMcp ?? ((name, origin) => showMcp(name, origin, runtime)),
     createMcp: options.createMcp ?? ((input) => createMcp(input, runtime)),
@@ -632,9 +641,14 @@ export function createProgram(options: ProgramOptions = {}): Command {
     .addHelpText("afterAll", ({ command }) =>
       options.setupMode ? unavailableHint(command, options.setupMode) : "",
     )
-    .action((_, command: Command) => {
+    .action(async (_, command: Command) => {
       if (command.args.length) {
         program.error(`error: unknown command '${command.args[0]}'`);
+      }
+
+      // Setup needs a terminal; without one, help says to run `barndog init`.
+      if (mode.interactive && !(await context.isSetUp())) {
+        return context.setup(true);
       }
 
       program.help();

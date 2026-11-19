@@ -1,21 +1,24 @@
 import { expect, test } from "vitest";
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { built } from "./built.js";
 import { stripVTControlCharacters } from "node:util";
 import { CommanderError } from "commander";
 import { createProgram } from "../program.js";
-import { SetupRequiredError } from "../config/settings.js";
+import { saveSettings, SetupRequiredError } from "../config/settings.js";
 import { renderError } from "../ui/output.js";
 import { CliError } from "../errors.js";
 
-function setup() {
+function setup(machine: { interactive?: boolean; isSetUp?: boolean } = {}) {
   const output: string[] = [];
   const errors: string[] = [];
   const setups: boolean[] = [];
   const syncs: (string | undefined)[] = [];
   const program = createProgram({
+    interactive: machine.interactive ?? false,
+    isSetUp: async () => machine.isSetUp ?? true,
     write: (text) => output.push(text),
     writeError: (text) => errors.push(text),
     setup: async (restart) => {
@@ -31,8 +34,28 @@ function setup() {
   return { program, output, errors, setups, syncs };
 }
 
+test("bare command on a machine that isn't set up runs setup in a terminal", async () => {
+  const fresh = setup({ interactive: true, isSetUp: false });
+  await fresh.program.parseAsync([], { from: "user" });
+  expect(fresh.setups).toStrictEqual([true]);
+  expect(fresh.output).toStrictEqual([]);
+
+  for (const machine of [
+    { interactive: false, isSetUp: false },
+    { interactive: true, isSetUp: true },
+  ]) {
+    const f = setup(machine);
+    await expect(f.program.parseAsync([], { from: "user" })).rejects.toSatisfy(
+      (error) => error instanceof CommanderError && error.exitCode === 0,
+    );
+
+    expect(f.setups, JSON.stringify(machine)).toStrictEqual([]);
+    expect(f.output.join("\n")).toContain("Get started:");
+  }
+});
+
 test("bare command prints grouped help without running setup; init requests confirmed re-entry", async () => {
-  const bare = setup();
+  const bare = setup({ interactive: true });
   await expect(bare.program.parseAsync([], { from: "user" })).rejects.toSatisfy(
     (error) => error instanceof CommanderError && error.exitCode === 0,
   );
@@ -659,4 +682,29 @@ test("Hook compatibility shows support and readiness with a short version", asyn
   const local = await run("ac93c0ce639c89b0f4871900b90039c17fd7ffe3");
   expect(local).toMatch(/Version\s+ac93c0c\n/);
   expect(local).not.toMatch(/ac93c0ce/);
+});
+
+test("a machine counts as set up once config.yaml exists", async () => {
+  const home = await mkdtemp(join(tmpdir(), "barndog-bare-"));
+  const setups: boolean[] = [];
+  const bare = () =>
+    createProgram({
+      home,
+      interactive: true,
+      write: () => {},
+      setup: async (restart) => {
+        setups.push(restart);
+      },
+    }).parseAsync([], { from: "user" });
+
+  try {
+    await bare();
+    expect(setups).toStrictEqual([true]);
+
+    await saveSettings({ harnesses: ["claude"] }, home);
+    await expect(bare()).rejects.toBeInstanceOf(CommanderError);
+    expect(setups).toStrictEqual([true]);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
 });

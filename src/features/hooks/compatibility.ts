@@ -10,8 +10,8 @@ import type { RepoAsset } from "../workspace/format.js";
 import type { HookCompatibility } from "./types.js";
 
 /**
- * What a Hook's current version declares for each coding tool, and whether
- * this machine has what each implementation needs to run.
+ * What a Hook's current version declares for each coding tool BarnDog manages
+ * here, and whether this machine has what each implementation needs to run.
  */
 export async function hookCompatibility(
   name: string,
@@ -21,18 +21,30 @@ export async function hookCompatibility(
   const { home } = runtime;
 
   const settings = await readSettings(home);
+  const managed = (result: HookCompatibility): HookCompatibility =>
+    settings
+      ? {
+          ...result,
+          compatibility: result.compatibility.filter((row) =>
+            settings.harnesses.includes(row.harness),
+          ),
+        }
+      : result;
+
   const repo = settings && repoForOrigin(settings, runtime, origin);
   if (repo) {
-    return repoHookCompatibility(
-      selectRepoAsset(await repo.model(), "hook", name, origin),
-      runtime,
+    return managed(
+      await repoHookCompatibility(
+        selectRepoAsset(await repo.model(), "hook", name, origin),
+        runtime,
+      ),
     );
   }
 
   const selected = await selectAsset("hook", name, origin, runtime);
   const asset = hookSchema.parse(selected.asset);
 
-  return {
+  return managed({
     version: asset.version.number,
     compatibility: await Promise.all(
       asset.compatibility.map(async (row) => ({
@@ -46,7 +58,7 @@ export async function hookCompatibility(
           : "No implementation for this harness",
       })),
     ),
-  };
+  });
 }
 
 /** What a Git or local workspace Hook declares for each coding tool, and what this machine lacks. */

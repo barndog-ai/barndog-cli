@@ -165,13 +165,18 @@ export function renderAdoption(
   ];
 
   for (const note of result.notes) {
-    output.push(`${warn("!")} ${note}`);
+    output.push(
+      `${warn("!")} ${kindLabels[note.kind]} ${bold(note.name)}: ${note.text}`,
+    );
   }
 
   output.push(
     "",
-    hint(`barndog adopt undo ${result.id}`, "Tip") +
-      dim("  put everything back"),
+    result.canShare
+      ? hint("barndog local move", "Tip") +
+          dim("  share them through your workspace")
+      : hint("barndog local list", "Tip") +
+          dim("  see everything in your local workspace"),
   );
 
   return output;

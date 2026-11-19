@@ -523,7 +523,14 @@ test("adopt passes its options to the adoption functions", async () => {
       adoptNative: async (keys) => {
         calls.push(["adopt", keys]);
 
-        return { id: "i", adopted: [], backup: "/b", notes: [], events: [] };
+        return {
+          id: "i",
+          adopted: [],
+          backup: "/b",
+          notes: [],
+          events: [],
+          canShare: false,
+        };
       },
       undoAdoption: async (target) => {
         calls.push(["undo", target]);
@@ -762,7 +769,11 @@ test("adopt list leaves out the settings an asset came from", async (t) => {
   );
 
   const result = await adoptNative(["claude/mcp/keyed"], runtime);
-  expect(result.notes.join(" ")).toMatch(/API_KEY/);
+  expect(result.notes).toStrictEqual([
+    expect.objectContaining({ kind: "mcp", name: "keyed" }),
+  ]);
+
+  expect(result.notes[0]?.text).toMatch(/API_KEY/);
   const [listed] = await listAdoptions(home);
   expect(listed?.items[0]).toMatchObject({
     key: "claude/mcp/keyed",

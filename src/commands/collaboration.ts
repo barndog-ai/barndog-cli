@@ -23,6 +23,7 @@ import type {
 import { assetKinds } from "../features/asset-kinds/index.js";
 import { packageKindList, type PackageKind } from "../config/selection.js";
 import { pickOne } from "../ui/pick.js";
+import { renderPackageDetails } from "../ui/package-details.js";
 import { resolveOrigin } from "./origin.js";
 import { clean, json, ORIGIN_HELP, originLabel, warn } from "../ui/format.js";
 import { defined } from "../shared/lookup.js";
@@ -187,6 +188,17 @@ export function registerCollaboration(
     `Command group ${group} isn't registered`,
   );
 
+  const describe = async (name: string, origin: string) => {
+    const details = await context.showPackage(kind, name, origin);
+    if (context.mode.json) {
+      return context.write(json(details));
+    }
+
+    for (const line of renderPackageDetails(details)) {
+      context.write(line);
+    }
+  };
+
   /** Fills a missing name and origin from a searchable catalog list. */
   const choose = async (
     name: string | undefined,
@@ -258,7 +270,10 @@ export function registerCollaboration(
       "versions",
       `List ${noun === "Skill" ? "a Skill's" : "a Hook's"} published versions`,
     ],
-    ["show", "Print the files of a published version"],
+    [
+      "show",
+      `Describe ${noun === "Skill" ? "a Skill" : "a Hook"}: origin, version, where it's installed`,
+    ],
     ["diff", "Compare two published versions"],
   ] as const) {
     const command = kindCommand
@@ -267,11 +282,13 @@ export function registerCollaboration(
       .option("--origin <origin>", ORIGIN_HELP);
 
     if (name === "show") {
-      command.option(
-        "--version <number>",
-        "Published version",
-        positiveInteger,
-      );
+      command
+        .option("--files", "Print the files of the published version")
+        .option(
+          "--version <number>",
+          "Print the files of this published version",
+          positiveInteger,
+        );
     }
 
     if (name === "diff") {
@@ -285,6 +302,7 @@ export function registerCollaboration(
         asset: string | undefined,
         options: {
           origin?: string;
+          files?: boolean;
           version?: number;
           from: number;
           to: number;
@@ -301,6 +319,12 @@ export function registerCollaboration(
 
         if (name === "versions") {
           await run(context.packageVersions(target));
+        } else if (
+          name === "show" &&
+          !options.files &&
+          options.version === undefined
+        ) {
+          await describe(target.name, target.origin);
         } else if (name === "show") {
           await run(context.versionFiles(target));
         } else {

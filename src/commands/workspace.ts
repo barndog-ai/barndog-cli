@@ -49,7 +49,7 @@ export function registerWorkspace(program: Command, context: CommandContext) {
 
   local
     .command("list")
-    .description("List local assets and whether they've been moved")
+    .description("List the assets kept in this machine's folder")
     .action(async () => {
       const result = await context.listLocalAssets();
       if (context.mode.json) {

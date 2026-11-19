@@ -286,6 +286,9 @@ test("--file and --config add their servers without asking where the configurati
 
   expect(JSON.stringify(servers)).not.toContain('"value"');
   expect(context.prompts.chooseOne).not.toHaveBeenCalled();
+  expect(context.write).toHaveBeenCalledWith(
+    expect.stringMatching(/^! http-server: X-Key held a literal value/),
+  );
 });
 
 test("--file with a server name the file doesn't have adds nothing and lists its names", async (t) => {

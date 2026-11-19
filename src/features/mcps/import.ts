@@ -23,6 +23,7 @@ import {
 } from "../../harnesses/registry.js";
 import { locked } from "../environment/transaction.js";
 import { fileText, ifExists, writeAtomic } from "../../shared/files.js";
+import type { SyncEvent } from "../environment/events.js";
 import { synchronize } from "../environment/sync.js";
 import { patchNative } from "../native/configuration.js";
 import { NAME_RULE } from "../workspace/format.js";
@@ -455,6 +456,18 @@ export async function conflictingEntries(
     }));
 }
 
+/** Something to do before an added server works, and which server it's for. */
+type ServerNote = { server: string; text: string };
+
+/** What `mcp add` added, and what the developer still has to do. */
+export type AddedServers = {
+  added: string[];
+  notes: ServerNote[];
+  /** Copies of the tool settings files it changed. */
+  backups: string[];
+  events: SyncEvent[];
+};
+
 /**
  * Writes converted MCP servers and synchronizes them. Existing local workspace
  * names are always rejected; replace permits backing up and removing
@@ -464,7 +477,7 @@ export async function addMcpServers(
   servers: ConvertedServer[],
   options: { replace?: boolean },
   runtime: RuntimeContext,
-) {
+): Promise<AddedServers> {
   const { home } = runtime;
 
   const invalid = servers.filter(({ name }) => !validAssetName(name));
@@ -547,7 +560,9 @@ export async function addMcpServers(
 
     return {
       added: servers.map((s) => s.name),
-      notes: servers.flatMap((s) => s.notes),
+      notes: servers.flatMap((s) =>
+        s.notes.map((text) => ({ server: s.name, text })),
+      ),
       backups,
       events,
     };

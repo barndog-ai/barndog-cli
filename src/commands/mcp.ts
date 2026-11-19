@@ -61,15 +61,15 @@ export function registerMcp(program: Command, context: CommandContext) {
   }
 
   mcp
-    .command("show <name>")
+    .command("show [name]")
     .option("--origin <origin>", ORIGIN_HELP)
     .description("Inspect a connection definition")
-    .action(async (name: string, options: { origin?: string }) => {
+    .action(async (name: string | undefined, options: { origin?: string }) => {
       const located = await locate(
         "mcp",
         name,
         options,
-        `barndog mcp show ${name}`,
+        "barndog mcp show <name>",
       );
 
       const result = await context.showMcp(located.name, located.origin);

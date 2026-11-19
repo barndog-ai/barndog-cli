@@ -2,6 +2,7 @@
 import { GIT_MODE } from "../features/workspace/snapshot.js";
 import { basename } from "node:path";
 import { CliError } from "../errors.js";
+import { readSettings } from "../config/settings.js";
 import {
   adapters,
   hookHarnesses,
@@ -44,10 +45,15 @@ async function pickHookPlan(
   const { prompts } = context;
   // Choices made for one coding tool start out selected for the next.
   const carried = new Map<string, DraftEvent>();
+  const managed = (await readSettings(context.runtime.home))?.harnesses ?? [];
   const chosen = (
     await prompts.chooseMany(
       "Which coding tools should this Hook support?",
-      hookHarnesses.map((h) => ({ name: adapters[h].name, value: h })),
+      hookHarnesses.map((h) => ({
+        name: adapters[h].name,
+        value: h,
+        checked: managed.includes(h),
+      })),
     )
   ).filter(isHookHarness);
 

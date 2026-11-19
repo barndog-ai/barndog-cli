@@ -591,7 +591,11 @@ export function moveLocalAssets(
   });
 }
 
-type LocalAssetState = "active" | "moved" | "invalid";
+/**
+ * A moved asset is still "active": sync installs the shared copy once it
+ * exists, and the local one until then, so either way the asset is in use.
+ */
+type LocalAssetState = "active" | "invalid";
 
 /** The local folder and every asset and knowledge document in it. */
 export type LocalAssets = {
@@ -619,14 +623,8 @@ export async function listLocalAssets(
 
   const source = localRepoSource(settings.localWorkspace, runtime);
   const model = await source.model();
-  const moved = await readMoved(source.label);
-  const state = (path: string, invalid?: string): LocalAssetState => {
-    if (invalid) {
-      return "invalid";
-    }
-
-    return moved.some((m) => m.path === path) ? "moved" : "active";
-  };
+  const state = (invalid?: string): LocalAssetState =>
+    invalid ? "invalid" : "active";
 
   return {
     folder: settings.localWorkspace.path,
@@ -635,13 +633,13 @@ export async function listLocalAssets(
         kind: asset.kind,
         name: asset.name,
         path: asset.path,
-        state: state(asset.path, asset.invalid),
+        state: state(asset.invalid),
       })),
       ...model.knowledge.map((doc) => ({
         kind: "knowledge" as const,
         name: doc.content.name,
         path: doc.path,
-        state: state(doc.path),
+        state: state(),
       })),
     ],
   };

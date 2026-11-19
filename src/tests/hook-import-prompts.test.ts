@@ -49,7 +49,7 @@ async function context(t: {
 }): Promise<AddContext> {
   const home = await mkdtemp(join(tmpdir(), "barndog-hook-prompts-"));
   t.onTestFinished(() => rm(home, { recursive: true, force: true }));
-  await saveSettings({ harnesses: [] }, home);
+  await saveSettings({ harnesses: ["claude", "opencode"] }, home);
 
   return {
     runtime: testRuntime(home),
@@ -374,4 +374,29 @@ test("--only can't choose from loose scripts, which have no Hook names yet", asy
   });
 
   expect(await addedHooks(ctx)).toEqual([]);
+});
+
+test("a Hook written from loose scripts starts with the tools BarnDog manages ticked", async (t) => {
+  const ctx = await context(t);
+  const source = remote([{ path: "scripts/one.sh", text: "echo one\n" }]);
+  vi.mocked(fetchRemote).mockImplementation(async (_, __, use) => use(source));
+  vi.mocked(ctx.prompts.chooseMany)
+    .mockResolvedValueOnce(["claude"])
+    .mockResolvedValueOnce(["SessionStart"]);
+
+  await addHook(
+    source.url,
+    { updates: "fork", as: "imported-hook", description: "Imported" },
+    ctx,
+  );
+
+  const [message, choices] = vi.mocked(ctx.prompts.chooseMany).mock.calls[0]!;
+  expect(message).toBe("Which coding tools should this Hook support?");
+  expect(choices.map((choice) => [choice.value, choice.checked])).toStrictEqual(
+    [
+      ["claude", true],
+      ["codex", false],
+      ["cursor", false],
+    ],
+  );
 });

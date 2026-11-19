@@ -8,6 +8,7 @@ import { createProgram } from "../program.js";
 import {
   offerAdoption,
   offerAdoptionAtSetup,
+  renderAdoption,
   renderAdoptions,
   renderScan,
   renderUndo,
@@ -72,8 +73,11 @@ const result: AdoptionResult = {
   id: "a1",
   adopted: [],
   backup: "/home/dev/.barndog/adoptions/a1",
-  notes: ["Set TOKEN in your environment."],
+  notes: [
+    { kind: "mcp", name: "github", text: "Set TOKEN in your environment." },
+  ],
   events: [],
+  canShare: false,
 };
 
 test("the picker groups assets by tool and adopts only what's picked", async () => {
@@ -112,8 +116,17 @@ test("the picker groups assets by tool and adopts only what's picked", async () 
   expect(text).toMatch(/same as OpenCode/);
   expect(text).toMatch(/replaced by Claude Code's/);
   expect(text).toMatch(/It runs a prompt hook/);
-  expect(text).toMatch(/Set TOKEN/);
-  expect(text).toMatch(/barndog adopt undo a1/);
+  expect(text).toMatch(/MCP github: Set TOKEN/);
+  expect(text).toMatch(/Tip: barndog local list/);
+  expect(text).not.toMatch(/adopt undo/);
+});
+
+test("after adopting beside a shared workspace, the next step is sharing", () => {
+  const text = renderAdoption({ ...result, canShare: true }, runtime).join(
+    "\n",
+  );
+
+  expect(text).toMatch(/Tip: barndog local move/);
 });
 
 test("nothing is adopted when nothing is picked or the plan is declined", async () => {

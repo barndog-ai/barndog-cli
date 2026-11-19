@@ -29,7 +29,7 @@ export const cloudOnlyCommands = [
 /** Commands that need published versions and reviews, which a local folder lacks. */
 const reviewCommands = [
   /^(?:pull|push|resolve)$/,
-  /^(?:skills|hooks) (?:pull|push|create|versions|show|diff)$/,
+  /^(?:skills|hooks) (?:pull|push|create|versions|diff)$/,
   /^mcp versions$/,
 ];
 
@@ -91,6 +91,22 @@ export function commandNeeds(
   }
 
   return undefined;
+}
+
+/** Like `commandNeeds()`, for a command line whose options can change what it needs. */
+function setupNeeds(
+  command: string,
+  options: Record<string, unknown>,
+  mode: SetupMode,
+): CommandNeed | undefined {
+  // `show` describes any asset; only a published version's files need shared versions.
+  const showsFiles =
+    ["skills show", "hooks show"].includes(command) &&
+    (options.files === true || options.version !== undefined);
+
+  return mode === "local" && showsFiles
+    ? "shared"
+    : commandNeeds(command, mode);
 }
 
 export const needText = (need: CommandNeed) =>
@@ -169,7 +185,8 @@ export async function assertCommandAvailable(
     return;
   }
 
-  const needs = commandNeeds(command, git ? "git" : "local");
+  const needs = setupNeeds(command, options, git ? "git" : "local");
+
   if (needs === "cloud") {
     const action = why[command] ?? "needs a BarnDog Cloud Workspace";
     throw new CliError(

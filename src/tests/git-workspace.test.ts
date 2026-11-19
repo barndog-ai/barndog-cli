@@ -1705,6 +1705,12 @@ test("commands the setup can't run explain why before doing anything", async (t)
     ).rejects.toThrow(/Edit them directly/);
   }
 
+  for (const options of [{ files: true }, { version: 2 }]) {
+    await expect(
+      assertCommandAvailable(["hooks", "show"], options, testRuntime(home)),
+    ).rejects.toThrow(/Edit them directly/);
+  }
+
   await expect(
     assertCommandAvailable(["logout"], {}, testRuntime(home)),
   ).rejects.toThrow(/aren't signed in/);
@@ -1713,6 +1719,8 @@ test("commands the setup can't run explain why before doing anything", async (t)
     ["sync"],
     ["status"],
     ["skills", "list"],
+    ["skills", "show"],
+    ["hooks", "show"],
     ["local", "list"],
     ["init"],
   ]) {
@@ -2738,11 +2746,11 @@ test("a Hook that covers this machine's coding tools needs no prompt", async (t)
   expect(output).not.toMatch(/Adapt the BarnDog Hook/);
   // Each tool has its own script, so changing one leaves the other behind.
   expect(output).toMatch(
-    /Claude Code and Cursor run different scripts in this Hook/,
+    /Claude Code and Cursor each run their own scripts in this Hook/,
   );
 
   expect(await folderDivergence(join(folder, "org/hooks/both"))).toBe(
-    "Claude Code and Cursor run different scripts in this Hook. When you change it for one, check whether the others need the same change.",
+    "Claude Code and Cursor each run their own scripts in this Hook. When you change one, check whether the other needs the same change.",
   );
 
   expect(

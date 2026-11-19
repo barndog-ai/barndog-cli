@@ -11,16 +11,24 @@ const reads: [string[], string][] = [
     `GET /v1/skills/${ID}/versions`,
   ],
   [
-    ["skills", "show", "release-notes", "--origin", "org"],
+    ["skills", "show", "release-notes", "--origin", "org", "--files"],
     `GET /v1/skills/${ID}/content?version=1`,
+  ],
+  [
+    ["skills", "show", "release-notes", "--origin", "org"],
+    `GET /v1/skills/${ID}`,
   ],
   [
     ["hooks", "versions", "release-notes", "--origin", "org"],
     `GET /v1/hooks/${ID}/versions`,
   ],
   [
-    ["hooks", "show", "release-notes", "--origin", "org"],
+    ["hooks", "show", "release-notes", "--origin", "org", "--files"],
     `GET /v1/hooks/${ID}/content?version=1`,
+  ],
+  [
+    ["hooks", "show", "release-notes", "--origin", "org"],
+    `GET /v1/hooks/${HOOK_ID}`,
   ],
   [
     ["hooks", "compatibility", "release-notes", "--origin", "org"],
@@ -130,10 +138,19 @@ test.for(reads)(
           ]);
         }
 
-        if (
-          (args[0] === "skills" || args[0] === "hooks") &&
-          args[1] === "show"
-        ) {
+        const packageShow =
+          (args[0] === "skills" || args[0] === "hooks") && args[1] === "show";
+
+        if (packageShow && !args.includes("--files")) {
+          expect(result).toMatchObject({
+            name: "release-notes",
+            origin: "org",
+            version: 1,
+            installed: null,
+          });
+        }
+
+        if (packageShow && args.includes("--files")) {
           expect(result).toMatchObject({
             files: expect.arrayContaining([
               expect.objectContaining({

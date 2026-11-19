@@ -175,7 +175,7 @@ export async function addMcp(
   }
 
   for (const note of result.notes) {
-    context.write(`${warn("!")} ${note}`);
+    context.write(`${warn("!")} ${bold(note.server)}: ${note.text}`);
   }
 
   for (const backup of result.backups) {
