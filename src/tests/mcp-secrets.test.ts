@@ -42,7 +42,15 @@ async function machine(t: TestContext, keep: string[]) {
     home,
   );
 
-  const runtime = testRuntime(home, { env: {} });
+  // No variables, so none of the entry's values come from this process. The
+  // PowerShell that sets Windows ACLs can't start without SystemRoot.
+  const runtime = testRuntime(home, {
+    env:
+      process.platform === "win32"
+        ? { SystemRoot: process.env.SystemRoot, Path: process.env.Path }
+        : {},
+  });
+
   const lines: string[] = [];
   const context: AddContext = {
     runtime,

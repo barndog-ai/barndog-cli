@@ -134,6 +134,23 @@ test("Windows credentials get a user-only ACL on write and no per-read PowerShel
   expect(script).toContain("Set-Acl");
 });
 
+test("Windows PowerShell doesn't inherit PowerShell 7's module path", async () => {
+  await protectPrivate("C:\\private", {
+    ...windows,
+    env: {
+      ...windows.env,
+      PSModulePath: "C:\\Program Files\\PowerShell\\7\\Modules",
+      psmodulepath: "C:\\other",
+    },
+  });
+
+  const options = fakes.execute.mock.calls.at(-1)![2] as {
+    env: Record<string, string>;
+  };
+
+  expect(options.env).toEqual(windows.env);
+});
+
 test.for(["linux", "darwin"] as const)(
   "%s credential checks enforce private mode bits",
   async (platform) => {

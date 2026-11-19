@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parse as parseJson } from "jsonc-parser";
 import { assert, expect, test } from "vitest";
@@ -55,8 +55,9 @@ const stdio = {
 };
 
 test("OpenCode gets Skills, MCP servers and BarnDog's plugin under ~/.config/opencode", () => {
+  // skillDirectory() resolves, which adds the drive letter on Windows.
   expect(skillDirectory("opencode", "/fixture")).toBe(
-    join("/fixture", ".config/opencode/skills"),
+    resolve("/fixture", ".config/opencode/skills"),
   );
 
   expect(nativeFile("opencode", "mcp", "/fixture")).toBe(

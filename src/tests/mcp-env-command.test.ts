@@ -13,6 +13,7 @@ beforeEach(() => {
   vi.mocked(readStdin).mockReset();
 });
 
+// Paths print with the platform's separator, so the patterns accept either.
 function program(interactive: boolean, extra: string[] = []) {
   const kept: [string, string][] = [];
   const output: string[] = [];
@@ -65,7 +66,7 @@ test("set reads the value from standard input or a masked prompt, and says where
   expect(askSecret).toHaveBeenCalledWith("TOKEN");
   const text = typed.output.join("\n");
   expect(text).toMatch(
-    /Saved TOKEN in ~\/\.barndog\/secrets\.json, readable only by you\. It stays on this machine and is never uploaded\./,
+    /Saved TOKEN in ~[\\/]\.barndog[\\/]secrets\.json, readable only by you\. It stays on this machine and is never uploaded\./,
   );
 
   expect(text).not.toContain("typed");
@@ -86,9 +87,9 @@ test("list names variables and where they're written, never values; unset report
   await f.run("unset", "A");
   const text = f.output.join("\n");
   expect(text).toMatch(/Values aren't shown/);
-  expect(text).toMatch(/API_KEY\s+~\/\.claude\.json \(tickets\)/);
+  expect(text).toMatch(/API_KEY\s+~[\\/]\.claude\.json \(tickets\)/);
   expect(text).toMatch(/UNUSED\s+not written anywhere yet/);
-  expect(text).toMatch(/Removed A from ~\/\.barndog\/secrets\.json/);
+  expect(text).toMatch(/Removed A from ~[\\/]\.barndog[\\/]secrets\.json/);
   expect(text).toMatch(/Removed the kept value of A/);
 
   const json = program(false, ["--json"]);

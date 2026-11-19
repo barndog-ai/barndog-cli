@@ -24,7 +24,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { promisify } from "node:util";
 
 import { defaultServer } from "../config/build.js";
@@ -451,8 +451,8 @@ for (const newcomer of ["org", "teams/web"]) {
       await readFile(join(member, ".barndog/state.json"), "utf8"),
     );
 
-    const id = state.links.find((entry: { target: string }) =>
-      entry.target.endsWith("/code-review"),
+    const id = state.links.find(
+      (entry: { target: string }) => basename(entry.target) === "code-review",
     ).id;
 
     await saveSettings(
@@ -569,8 +569,8 @@ test("an invalid Skill renamed since it broke still holds its installed name", a
     await readFile(join(member, ".barndog/state.json"), "utf8"),
   );
 
-  const id = state.links.find((entry: { target: string }) =>
-    entry.target.endsWith("/code-review"),
+  const id = state.links.find(
+    (entry: { target: string }) => basename(entry.target) === "code-review",
   ).id;
 
   await write(clone, "org/skills/code-review/SKILL.md", "not valid");
@@ -2737,9 +2737,7 @@ test("a Hook is added only for the coding tools it was written for", async (t) =
   expect(output).toMatch(/written for Claude Code\. It won't run in Cursor/);
   expect(output.match(/Adapt the BarnDog Hook "guard"/g)?.length).toBe(1);
   expect(output).toMatch(/so it also runs in Cursor\./);
-  expect(output).toMatch(
-    new RegExp(`Files: ${join(folder, "org/hooks/guard")}`),
-  );
+  expect(output).toContain(`Files: ${join(folder, "org/hooks/guard")}.`);
 
   expect(output).toMatch(/still follows it/);
   expect(output).toMatch(

@@ -317,7 +317,7 @@ test("a credentials path that isn't a file is refused with a command that clears
     await expect(readCredentials(testRuntime(home))).rejects.toSatisfy(
       (error: CliError) =>
         /isn't a regular file/.test(error.message) &&
-        error.command?.endsWith("barndog login") === true,
+        error.command?.includes("barndog login") === true,
     );
   } finally {
     await rm(home, { recursive: true, force: true });

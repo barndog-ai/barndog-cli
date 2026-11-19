@@ -30,7 +30,13 @@ delete process.env.XDG_CONFIG_HOME;
 delete process.env.CI;
 
 afterAll(() => {
-  const written = existsSync(defaultHome) ? readdirSync(defaultHome) : [];
+  // Windows resolves a process's AppData folder from USERPROFILE, so the
+  // PowerShell that sets credential ACLs keeps its caches here. BarnDog itself
+  // never writes AppData.
+  const written = (
+    existsSync(defaultHome) ? readdirSync(defaultHome) : []
+  ).filter((entry) => !(process.platform === "win32" && entry === "AppData"));
+
   rmSync(defaultHome, { recursive: true, force: true });
 
   if (written.length) {
