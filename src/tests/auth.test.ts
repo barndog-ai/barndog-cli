@@ -1,4 +1,3 @@
-import type { CliError } from "../errors.js";
 import { testRuntime } from "./runtime.js";
 import { HTTP_STATUS, POSIX_MODE } from "../shared/constants.js";
 
@@ -20,6 +19,7 @@ import {
 } from "../features/auth/transport.js";
 import { saveSettings } from "../config/settings.js";
 import { createProgram } from "../program.js";
+import { fixSteps, removeCommand } from "../platform.js";
 
 async function fixture(t: TestContext) {
   const home = await mkdtemp(join(tmpdir(), "barndog-login-"));
@@ -314,11 +314,14 @@ test("a credentials path that isn't a file is refused with a command that clears
       recursive: true,
     });
 
-    await expect(readCredentials(testRuntime(home))).rejects.toSatisfy(
-      (error: CliError) =>
-        /isn't a regular file/.test(error.message) &&
-        error.command?.includes("barndog login") === true,
-    );
+    const path = join(home, ".barndog", "credentials.json");
+    await expect(readCredentials(testRuntime(home))).rejects.toMatchObject({
+      message: expect.stringMatching(/isn't a regular file/),
+      command: fixSteps(
+        [removeCommand(path, process.platform), "barndog login"],
+        process.platform,
+      ),
+    });
   } finally {
     await rm(home, { recursive: true, force: true });
   }

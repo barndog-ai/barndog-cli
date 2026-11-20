@@ -1,7 +1,7 @@
-import { resolve } from "node:path";
 import type { RuntimeContext } from "./runtime.js";
 import { Command, Help, Option } from "commander";
 import { homedir } from "node:os";
+import { pathsFor } from "./platform.js";
 import { styleText } from "node:util";
 import {
   registerCollaboration,
@@ -374,13 +374,16 @@ function guardRequiredOptions(parent: Command, guard: Guard) {
 export function captureRuntime(
   options: Partial<RuntimeContext> = {},
 ): RuntimeContext {
-  const cwd = resolve(options.cwd ?? process.cwd());
+  // Resolved by the platform's own rules, so a test can run as another OS.
+  const platform = options.platform ?? process.platform;
+  const paths = pathsFor(platform);
+  const cwd = paths.resolve(options.cwd ?? process.cwd());
 
   return {
-    home: resolve(cwd, options.home ?? homedir()),
+    home: paths.resolve(cwd, options.home ?? homedir()),
     cwd,
     env: { ...(options.env ?? process.env) },
-    platform: options.platform ?? process.platform,
+    platform,
   };
 }
 

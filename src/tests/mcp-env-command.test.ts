@@ -13,32 +13,52 @@ beforeEach(() => {
   vi.mocked(readStdin).mockReset();
 });
 
-// Paths print with the platform's separator, so the patterns accept either.
-function program(interactive: boolean, extra: string[] = []) {
+type Machine = { platform: NodeJS.Platform; home: string; sep: string };
+
+const linux: Machine = { platform: "linux", home: "/home/dev", sep: "/" };
+const windows: Machine = {
+  platform: "win32",
+  home: "C:\\Users\\dev",
+  sep: "\\",
+};
+
+/** A file in the machine's home, written with its separator. */
+const inHome = (machine: Machine, ...parts: string[]) =>
+  [machine.home, ...parts].join(machine.sep);
+
+function program(
+  interactive: boolean,
+  extra: string[] = [],
+  machine: Machine = linux,
+) {
   const kept: [string, string][] = [];
   const output: string[] = [];
+  const secrets = inHome(machine, ".barndog", "secrets.json");
   const cli = createProgram({
     interactive,
-    home: "/home/dev",
+    home: machine.home,
+    platform: machine.platform,
     write: (line) => output.push(line),
     keepMcpValue: async (variable, value) => {
       kept.push([variable, value]);
 
-      return { file: "/home/dev/.barndog/secrets.json", events: [] };
+      return { file: secrets, events: [] };
     },
     forgetMcpValue: async () => ({
-      file: "/home/dev/.barndog/secrets.json",
+      file: secrets,
       events: [
         {
           type: "notice",
-          message: "Removed the kept value of A from /home/dev/.claude.json.",
+          message: "Removed the kept value of A from ~/.claude.json.",
         },
       ],
     }),
     listKeptValues: async () => [
       {
         variable: "API_KEY",
-        writtenTo: [{ file: "/home/dev/.claude.json", server: "tickets" }],
+        writtenTo: [
+          { file: inHome(machine, ".claude.json"), server: "tickets" },
+        ],
       },
       { variable: "UNUSED", writtenTo: [] },
     ],
@@ -66,7 +86,7 @@ test("set reads the value from standard input or a masked prompt, and says where
   expect(askSecret).toHaveBeenCalledWith("TOKEN");
   const text = typed.output.join("\n");
   expect(text).toMatch(
-    /Saved TOKEN in ~[\\/]\.barndog[\\/]secrets\.json, readable only by you\. It stays on this machine and is never uploaded\./,
+    /Saved TOKEN in ~\/\.barndog\/secrets\.json, readable only by you\. It stays on this machine and is never uploaded\./,
   );
 
   expect(text).not.toContain("typed");
@@ -86,10 +106,13 @@ test("list names variables and where they're written, never values; unset report
   await f.run("list");
   await f.run("unset", "A");
   const text = f.output.join("\n");
-  expect(text).toMatch(/Values aren't shown/);
-  expect(text).toMatch(/API_KEY\s+~[\\/]\.claude\.json \(tickets\)/);
+  expect(text).toContain(
+    "Kept in ~/.barndog/secrets.json on this machine only. Values aren't shown.",
+  );
+
+  expect(text).toMatch(/API_KEY\s+~\/\.claude\.json \(tickets\)/);
   expect(text).toMatch(/UNUSED\s+not written anywhere yet/);
-  expect(text).toMatch(/Removed A from ~[\\/]\.barndog[\\/]secrets\.json/);
+  expect(text).toMatch(/Removed A from ~\/\.barndog\/secrets\.json/);
   expect(text).toMatch(/Removed the kept value of A/);
 
   const json = program(false, ["--json"]);
@@ -101,6 +124,18 @@ test("list names variables and where they're written, never values; unset report
   });
 
   expect(JSON.parse(json.output[1]!)[0].variable).toBe("API_KEY");
+});
+
+test("Windows paths print with backslashes, the header's too", async () => {
+  vi.mocked(readStdin).mockResolvedValue("value");
+  const f = program(false, [], windows);
+  await f.run("set", "API_KEY", "--stdin");
+  await f.run("list");
+  const text = f.output.join("\n");
+
+  expect(text).toContain("Saved API_KEY in ~\\.barndog\\secrets.json,");
+  expect(text).toContain("Kept in ~\\.barndog\\secrets.json on this machine");
+  expect(text).toMatch(/API_KEY\s+~\\\.claude\.json \(tickets\)/);
 });
 
 test("list says when nothing is kept", async () => {

@@ -1,7 +1,7 @@
 // Loaded before every test file (see `setupFiles` in `vitest.config.ts`).
 import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative, sep } from "node:path";
 import { afterAll } from "vitest";
 
 // Tests compare plain text, so output must not depend on the terminal running
@@ -29,13 +29,33 @@ delete process.env.XDG_CONFIG_HOME;
 // only on a CI runner. A test of noninteractive behavior sets it itself.
 delete process.env.CI;
 
+// Windows resolves a process's AppData folder from USERPROFILE, so the
+// PowerShell that sets credential ACLs keeps its caches in this folder of the
+// default home. Only that folder is allowed; BarnDog itself never writes AppData.
+const powershellCache = join(
+  "AppData",
+  "Local",
+  "Microsoft",
+  "Windows",
+  "PowerShell",
+);
+
+/** Files under the default home, as paths relative to it. */
+function writtenFiles() {
+  if (!existsSync(defaultHome)) {
+    return [];
+  }
+
+  return readdirSync(defaultHome, { recursive: true, withFileTypes: true })
+    .filter((entry) => !entry.isDirectory())
+    .map((entry) => relative(defaultHome, join(entry.parentPath, entry.name)));
+}
+
 afterAll(() => {
-  // Windows resolves a process's AppData folder from USERPROFILE, so the
-  // PowerShell that sets credential ACLs keeps its caches here. BarnDog itself
-  // never writes AppData.
-  const written = (
-    existsSync(defaultHome) ? readdirSync(defaultHome) : []
-  ).filter((entry) => !(process.platform === "win32" && entry === "AppData"));
+  const written = writtenFiles().filter(
+    (path) =>
+      !(process.platform === "win32" && path.startsWith(powershellCache + sep)),
+  );
 
   rmSync(defaultHome, { recursive: true, force: true });
 
