@@ -13,6 +13,7 @@ import {
 import { find } from "../features/collaboration/workspace-store.js";
 import { CliError } from "../shared/cli-error.js";
 import { HTTP_STATUS } from "../shared/constants.js";
+import { fixSteps } from "../platform.js";
 
 async function fixture(t: TestContext) {
   const server = await cloud(t);
@@ -91,7 +92,7 @@ const refusals: Record<
 
     return {
       message: "pull request is closed",
-      hint: "barndog pull && barndog push --new",
+      hint: fixSteps(["barndog pull", "barndog push --new"], process.platform),
     };
   },
   revised: async ({ server, pull }) => {

@@ -374,7 +374,6 @@ async function replaceFiles(
   entries: PackageEntry[],
   runtime: RuntimeContext,
 ) {
-  assertPackagePaths(entries, runtime.platform);
   // Validate paths and directory topology before touching local files.
   const paths = new Set(entries.map((e) => e.path));
   for (const path of paths) {
@@ -402,6 +401,9 @@ async function replaceFiles(
       }
     }
   }
+
+  // After the safety check, so an unsafe path is reported as unsafe.
+  assertPackagePaths(entries, runtime.platform);
 
   const old = await readDirectory(root, runtime);
   for (const entry of old) {

@@ -33,6 +33,14 @@ import { POSIX_MODE } from "../shared/constants.js";
 
 const secret = "sk-very-private";
 
+const entryVariables = new Set([
+  "API_KEY",
+  "HOME",
+  "REGION",
+  "TOKEN",
+  "WEB_X_KEY",
+]);
+
 /** A machine managing every tool, with an MCP server whose entry held literal values. */
 async function machine(t: TestContext, keep: string[]) {
   const home = await mkdtemp(join(tmpdir(), "barndog-secrets-"));
@@ -42,12 +50,16 @@ async function machine(t: TestContext, keep: string[]) {
     home,
   );
 
-  // No variables, so none of the entry's values come from this process. The
-  // PowerShell that sets Windows ACLs can't start without SystemRoot.
+  // None of the entry's variables may come from this process. Windows keeps
+  // the rest, since the PowerShell that sets ACLs needs its system variables.
   const runtime = testRuntime(home, {
     env:
       process.platform === "win32"
-        ? { SystemRoot: process.env.SystemRoot, Path: process.env.Path }
+        ? Object.fromEntries(
+            Object.entries(process.env).filter(
+              ([name]) => !entryVariables.has(name.toUpperCase()),
+            ),
+          )
         : {},
   });
 
@@ -257,12 +269,15 @@ test("the store refuses bad names and files others can read or that are damaged"
   await updateSecrets({ A: null }, runtime);
   expect(await readSecrets(runtime)).toStrictEqual({ B: "2" });
 
-  await chmod(path, POSIX_MODE.regularFile);
-  await expect(readSecrets(runtime)).rejects.toSatisfy(
-    (error: CliError) =>
-      /can be read by other users/.test(error.message) &&
-      error.command === `chmod 600 '${path}'`,
-  );
+  // Windows relies on the ACL set on every write, not a check on read.
+  if (process.platform !== "win32") {
+    await chmod(path, POSIX_MODE.regularFile);
+    await expect(readSecrets(runtime)).rejects.toSatisfy(
+      (error: CliError) =>
+        /can be read by other users/.test(error.message) &&
+        error.command === `chmod 600 '${path}'`,
+    );
+  }
 
   await writeFile(path, "{", { mode: 0o600 });
   await chmod(path, 0o600);
