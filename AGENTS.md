@@ -2,7 +2,7 @@
 
 Working notes for agents and contributors. `README.md` is for people deciding whether to use the CLI; user documentation lives at [barndog.dev/docs](https://barndog.dev/docs). This file covers how the code is organized and how its behavior is specified.
 
-BarnDog supports macOS, Linux, and Windows, and CI runs the same checks and tests on all three; coverage thresholds are enforced on Linux only, since each OS runs only its own platform branches. On Windows, Skill links are directory junctions and credentials get a user-only ACL. Windows files have no executable bit, so a package file's flag there comes from what BarnDog last wrote at that path, else from a `#!` first line (`fileExecutable()` in `src/platform.ts`).
+BarnDog supports macOS, Linux, and Windows, and CI runs the same checks and tests on all three; coverage thresholds are enforced on macOS only, since each OS runs only its own platform branches. On Windows, Skill links are directory junctions and credentials get a user-only ACL. Windows files have no executable bit, so a package file's flag there comes from what BarnDog last wrote at that path, else from a `#!` first line (`fileExecutable()` in `src/platform.ts`).
 
 ## Commands
 
@@ -25,7 +25,7 @@ This repository uses pnpm (pinned in `packageManager`); don't commit a `package-
 
 Server integration checks are maintained separately and are not included in this repository. Keep the public surface (commands, options, `--json` output, and the files under `~/.barndog/`) stable or change it deliberately.
 
-`pnpm test:coverage` (what CI runs on Linux) measures V8 coverage of `src/`, tests excluded, and writes an HTML report to `coverage/`. `coverage.thresholds` in `vitest.config.ts` sit just below the measured totals, so a change that lowers coverage fails. When you fill a gap, raise the thresholds to just below the new numbers; never lower them to make a change pass. Code that only runs inside the built CLI started as a child process (such as `src/cli.ts`) isn't counted.
+`pnpm test:coverage` (what CI runs on macOS) measures V8 coverage of `src/`, tests excluded, and writes an HTML report to `coverage/`. `coverage.thresholds` in `vitest.config.ts` sit just below the measured totals, so a change that lowers coverage fails. When you fill a gap, raise the thresholds to just below the new numbers; never lower them to make a change pass. Code that only runs inside the built CLI started as a child process (such as `src/cli.ts`) isn't counted.
 
 The command reference at [barndog.dev/docs/cli](https://barndog.dev/docs/cli) is checked against `createProgram()`: every runnable command needs documentation, and every long option must be mentioned in its command's section. Adding, renaming, or removing a command or option needs a matching docs update. The docs aren't open source, so it's maintainers' job to keep them up to date.
 

@@ -29,8 +29,9 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm knip
       # Each OS runs only its own platform branches, so the thresholds are
-      # measured and enforced on Linux; the others run the same tests.
-      - if: runner.os == 'Linux'
+      # measured and enforced on macOS, where BarnDog ships first; the others
+      # run the same tests.
+      - if: runner.os == 'macOS'
         run: pnpm test:coverage
-      - if: runner.os != 'Linux'
+      - if: runner.os != 'macOS'
         run: pnpm test
