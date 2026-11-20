@@ -624,6 +624,9 @@ test("a scan explains what it can't adopt and keeps Hook names apart", async (t)
   // two different scripts with one name, and settings a Hook can't hold.
   await write(home, "one/check.sh", "#!/bin/sh\necho one\n");
   await write(home, "two/check.sh", "#!/bin/sh\necho two\n");
+  // A script, so Windows (which adopts only hooks that run one) reaches the
+  // settings check too.
+  await write(home, "three/extra.sh", "#!/bin/sh\necho extra\n");
   const settingsFile = join(home, ".claude/settings.json");
   const existing = JSON.parse(await readFile(settingsFile, "utf8")) as {
     hooks: Record<string, unknown[]>;
@@ -651,7 +654,15 @@ test("a scan explains what it can't adopt and keeps Hook names apart", async (t)
           },
         ],
         SubagentStop: [
-          { hooks: [{ type: "command", command: "echo x", extra: true }] },
+          {
+            hooks: [
+              {
+                type: "command",
+                command: `${home}/three/extra.sh`,
+                extra: true,
+              },
+            ],
+          },
         ],
         Odd: "not a list",
       },

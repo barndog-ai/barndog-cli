@@ -28,4 +28,10 @@ jobs:
       - run: pnpm format:check
       - run: pnpm typecheck
       - run: pnpm knip
-      - run: pnpm test:coverage
+      # Each OS runs only its own platform branches, so the thresholds are
+      # measured and enforced on macOS, where BarnDog ships first; the others
+      # run the same tests.
+      - if: runner.os == 'macOS'
+        run: pnpm test:coverage
+      - if: runner.os != 'macOS'
+        run: pnpm test

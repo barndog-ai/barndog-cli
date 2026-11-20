@@ -352,6 +352,22 @@ export function stopProcessTree(
   }
 }
 
+/**
+ * The environment for a Windows PowerShell (5.1) that BarnDog runs itself.
+ * PowerShell 7 puts its own module folders first in `PSModulePath`, and a
+ * Windows PowerShell started from it inherits them, then fails to load
+ * PowerShell 7's `Microsoft.PowerShell.Security` (`Get-Acl`). Without the
+ * variable, Windows PowerShell builds its default module path. Windows
+ * environment names ignore case.
+ */
+function windowsPowerShellEnvironment(env: NodeJS.ProcessEnv) {
+  return Object.fromEntries(
+    Object.entries(env).filter(
+      ([name]) => name.toUpperCase() !== "PSMODULEPATH",
+    ),
+  );
+}
+
 /** Windows DACLs replace POSIX modes: only the current user receives access. */
 export async function protectPrivate(path: string, runtime: RuntimeContext) {
   if (!isWindows(runtime.platform)) {
@@ -361,7 +377,7 @@ export async function protectPrivate(path: string, runtime: RuntimeContext) {
   const script = `$ErrorActionPreference='Stop'; $path=${shellQuote(path, runtime.platform)}; $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User; $acl=Get-Acl -LiteralPath $path; $acl.SetOwner($sid); $acl.SetAccessRuleProtection($true,$false); foreach($rule in @($acl.Access)){$acl.RemoveAccessRuleSpecific($rule)}; $inherit=if((Get-Item -LiteralPath $path).PSIsContainer){[Security.AccessControl.InheritanceFlags]'ContainerInherit,ObjectInherit'}else{[Security.AccessControl.InheritanceFlags]::None}; $rule=New-Object Security.AccessControl.FileSystemAccessRule($sid,'FullControl',$inherit,'None','Allow'); $acl.AddAccessRule($rule); Set-Acl -LiteralPath $path -AclObject $acl`;
   const invocation = encodedPowerShell(script);
   await execute(invocation.command, invocation.args, {
-    env: { ...runtime.env },
+    env: windowsPowerShellEnvironment(runtime.env),
     cwd: runtime.cwd,
     windowsHide: true,
   });

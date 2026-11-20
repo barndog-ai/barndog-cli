@@ -1,5 +1,6 @@
 import type { Command } from "commander";
 
+import { barndogPaths } from "../config/paths.js";
 import { CliError } from "../errors.js";
 import { bold, dim, json, ok, table } from "../ui/format.js";
 import { displayPath, renderSyncOutput } from "../ui/output.js";
@@ -81,7 +82,7 @@ tools store values they're given; shared definitions keep only the variable's na
 
       context.write(
         dim(
-          "Kept in ~/.barndog/secrets.json on this machine only. Values aren't shown.",
+          `Kept in ${where(barndogPaths(context.runtime.home).secrets)} on this machine only. Values aren't shown.`,
         ),
       );
 

@@ -24,9 +24,11 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { promisify } from "node:util";
 
+import { existsSync } from "node:fs";
+import { barndogPaths } from "../config/paths.js";
 import { defaultServer } from "../config/build.js";
 import { readSettings, saveSettings } from "../config/settings.js";
 import { z } from "zod";
@@ -451,8 +453,8 @@ for (const newcomer of ["org", "teams/web"]) {
       await readFile(join(member, ".barndog/state.json"), "utf8"),
     );
 
-    const id = state.links.find((entry: { target: string }) =>
-      entry.target.endsWith("/code-review"),
+    const id = state.links.find(
+      (entry: { target: string }) => basename(entry.target) === "code-review",
     ).id;
 
     await saveSettings(
@@ -569,8 +571,8 @@ test("an invalid Skill renamed since it broke still holds its installed name", a
     await readFile(join(member, ".barndog/state.json"), "utf8"),
   );
 
-  const id = state.links.find((entry: { target: string }) =>
-    entry.target.endsWith("/code-review"),
+  const id = state.links.find(
+    (entry: { target: string }) => basename(entry.target) === "code-review",
   ).id;
 
   await write(clone, "org/skills/code-review/SKILL.md", "not valid");
@@ -792,9 +794,14 @@ test("the session-start entry syncs in a detached process", async (t) => {
 
   const shell = await bashShell(testRuntime(member));
   await execute(shell.command, [...shell.args, command]);
+  // Wait for the sync to finish too: the files change before it releases its
+  // lock, and a sync still writing would stop the test's cleanup.
   for (let attempt = 0; attempt < 100; attempt++) {
     const text = await installed(member, "skills/code-review/SKILL.md");
-    if (text.includes("Background.")) {
+    if (
+      text.includes("Background.") &&
+      !existsSync(barndogPaths(member).syncLock)
+    ) {
       return;
     }
 
@@ -2737,9 +2744,7 @@ test("a Hook is added only for the coding tools it was written for", async (t) =
   expect(output).toMatch(/written for Claude Code\. It won't run in Cursor/);
   expect(output.match(/Adapt the BarnDog Hook "guard"/g)?.length).toBe(1);
   expect(output).toMatch(/so it also runs in Cursor\./);
-  expect(output).toMatch(
-    new RegExp(`Files: ${join(folder, "org/hooks/guard")}`),
-  );
+  expect(output).toContain(`Files: ${join(folder, "org/hooks/guard")}.`);
 
   expect(output).toMatch(/still follows it/);
   expect(output).toMatch(

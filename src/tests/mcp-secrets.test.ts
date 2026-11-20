@@ -33,6 +33,14 @@ import { POSIX_MODE } from "../shared/constants.js";
 
 const secret = "sk-very-private";
 
+const entryVariables = new Set([
+  "API_KEY",
+  "HOME",
+  "REGION",
+  "TOKEN",
+  "WEB_X_KEY",
+]);
+
 /** A machine managing every tool, with an MCP server whose entry held literal values. */
 async function machine(t: TestContext, keep: string[]) {
   const home = await mkdtemp(join(tmpdir(), "barndog-secrets-"));
@@ -42,7 +50,19 @@ async function machine(t: TestContext, keep: string[]) {
     home,
   );
 
-  const runtime = testRuntime(home, { env: {} });
+  // None of the entry's variables may come from this process. Windows keeps
+  // the rest, since the PowerShell that sets ACLs needs its system variables.
+  const runtime = testRuntime(home, {
+    env:
+      process.platform === "win32"
+        ? Object.fromEntries(
+            Object.entries(process.env).filter(
+              ([name]) => !entryVariables.has(name.toUpperCase()),
+            ),
+          )
+        : {},
+  });
+
   const lines: string[] = [];
   const context: AddContext = {
     runtime,
@@ -152,10 +172,13 @@ test("kept values are written into every tool, and state.json records only their
     WEB_X_KEY: secret,
   });
 
-  expect(
-    (await stat(barndogPaths(m.home).secrets)).mode &
-      POSIX_MODE.groupAndOtherBits,
-  ).toBe(0);
+  // Windows has no mode bits; the ACL set on every write keeps it private.
+  if (process.platform !== "win32") {
+    expect(
+      (await stat(barndogPaths(m.home).secrets)).mode &
+        POSIX_MODE.groupAndOtherBits,
+    ).toBe(0);
+  }
 
   // Nothing changed, so a second sync leaves every entry as it is.
   const again = await synchronize(undefined, m.runtime);
@@ -249,12 +272,15 @@ test("the store refuses bad names and files others can read or that are damaged"
   await updateSecrets({ A: null }, runtime);
   expect(await readSecrets(runtime)).toStrictEqual({ B: "2" });
 
-  await chmod(path, POSIX_MODE.regularFile);
-  await expect(readSecrets(runtime)).rejects.toSatisfy(
-    (error: CliError) =>
-      /can be read by other users/.test(error.message) &&
-      error.command === `chmod 600 '${path}'`,
-  );
+  // Windows relies on the ACL set on every write, not a check on read.
+  if (process.platform !== "win32") {
+    await chmod(path, POSIX_MODE.regularFile);
+    await expect(readSecrets(runtime)).rejects.toSatisfy(
+      (error: CliError) =>
+        /can be read by other users/.test(error.message) &&
+        error.command === `chmod 600 '${path}'`,
+    );
+  }
 
   await writeFile(path, "{", { mode: 0o600 });
   await chmod(path, 0o600);
