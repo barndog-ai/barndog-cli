@@ -28,4 +28,9 @@ jobs:
       - run: pnpm format:check
       - run: pnpm typecheck
       - run: pnpm knip
-      - run: pnpm test:coverage
+      # Each OS runs only its own platform branches, so the thresholds are
+      # measured and enforced on Linux; the others run the same tests.
+      - if: runner.os == 'Linux'
+        run: pnpm test:coverage
+      - if: runner.os != 'Linux'
+        run: pnpm test
