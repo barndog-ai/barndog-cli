@@ -27,6 +27,8 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { promisify } from "node:util";
 
+import { existsSync } from "node:fs";
+import { barndogPaths } from "../config/paths.js";
 import { defaultServer } from "../config/build.js";
 import { readSettings, saveSettings } from "../config/settings.js";
 import { z } from "zod";
@@ -792,9 +794,14 @@ test("the session-start entry syncs in a detached process", async (t) => {
 
   const shell = await bashShell(testRuntime(member));
   await execute(shell.command, [...shell.args, command]);
+  // Wait for the sync to finish too: the files change before it releases its
+  // lock, and a sync still writing would stop the test's cleanup.
   for (let attempt = 0; attempt < 100; attempt++) {
     const text = await installed(member, "skills/code-review/SKILL.md");
-    if (text.includes("Background.")) {
+    if (
+      text.includes("Background.") &&
+      !existsSync(barndogPaths(member).syncLock)
+    ) {
       return;
     }
 
