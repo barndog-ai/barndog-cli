@@ -172,10 +172,13 @@ test("kept values are written into every tool, and state.json records only their
     WEB_X_KEY: secret,
   });
 
-  expect(
-    (await stat(barndogPaths(m.home).secrets)).mode &
-      POSIX_MODE.groupAndOtherBits,
-  ).toBe(0);
+  // Windows has no mode bits; the ACL set on every write keeps it private.
+  if (process.platform !== "win32") {
+    expect(
+      (await stat(barndogPaths(m.home).secrets)).mode &
+        POSIX_MODE.groupAndOtherBits,
+    ).toBe(0);
+  }
 
   // Nothing changed, so a second sync leaves every entry as it is.
   const again = await synchronize(undefined, m.runtime);
