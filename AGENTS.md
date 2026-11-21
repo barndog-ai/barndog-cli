@@ -42,7 +42,7 @@ npm version patch      # or minor, or prerelease --preid rc; commits and tags
 git push --follow-tags
 ```
 
-The workflow checks that the tag matches `package.json`, runs the full checks, publishes with npm trusted publishing and provenance, and creates a GitHub release with generated notes. A version with a prerelease suffix (`0.2.0-rc.0`) goes to the `next` dist-tag and is marked as a prerelease; everything else goes to `latest`. While the version is 0.x, a breaking change to the public surface (commands, options, `--json` output, files under `~/.barndog/`) bumps the minor version; anything else bumps the patch version. Docs describe the latest `main` and don't name a version.
+The workflow checks that the tag matches `package.json`, runs the full checks, publishes with npm trusted publishing and provenance, and creates a GitHub release with generated notes. A version with a prerelease suffix (`0.2.0-rc.0`) goes to the `next` dist-tag and is marked as a prerelease; everything else goes to `latest`. While the version is 0.x, a minor version marks a large batch of features; everything else, breaking changes included, may go in a patch. Whatever the bump, state every breaking change to the public surface (commands, options, `--json` output, files under `~/.barndog/`): when you finish a change, and in the release notes. Docs describe the latest `main` and don't name a version.
 
 Publishing has no npm token. The `barndog` package trusts `release.yml` in `barndog-ai/barndog-cli`, running in the `npm` GitHub environment (npmjs.com → `barndog` → Settings → Trusted publishing); renaming the workflow file or environment breaks publishing until that setting is updated.
 

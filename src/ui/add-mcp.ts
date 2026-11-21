@@ -5,6 +5,7 @@ import { only } from "../shared/lookup.js";
 import { inputFile } from "../shared/files.js";
 import {
   addMcpServers,
+  type AddedServers,
   conflictingEntries,
   convertServer,
   harnessServers,
@@ -17,6 +18,7 @@ import { assetKinds } from "../features/asset-kinds/index.js";
 import { validMcpName } from "../shared/patterns.js";
 import { bold, dim, ok, warn } from "./format.js";
 import { type AddContext, type AddOptions } from "./add-asset.js";
+import { renderMcpValues } from "./mcp.js";
 
 async function serversToAdd(
   name: string | undefined,
@@ -277,22 +279,23 @@ export async function addMcp(
     context.runtime,
   );
 
-  for (const added of result.added) {
-    context.write(`${ok("✔")} Added ${bold(added)}`);
+  for (const line of renderAddedServers(result)) {
+    context.write(line);
   }
+}
 
-  for (const note of result.notes) {
-    context.write(`${warn("!")} ${bold(note.server)}: ${note.text}`);
-  }
-
-  // Sync says where each kept value was written.
-  result.events.forEach((event) => {
-    if (event.type === "notice") {
-      context.write(dim(event.message));
-    }
-  });
-
-  for (const backup of result.backups) {
-    context.write(dim(`Backup: ${backup}`));
-  }
+/** What `mcp add` added, what's left to do, and where it backed up settings. */
+function renderAddedServers(result: AddedServers): string[] {
+  return [
+    ...result.added.map((added) => `${ok("✔")} Added ${bold(added)}`),
+    ...result.notes.map(
+      (note) => `${warn("!")} ${bold(note.server)}: ${note.text}`,
+    ),
+    ...renderMcpValues(result.values),
+    // Sync says where each kept value was written.
+    ...result.events.flatMap((event) =>
+      event.type === "notice" ? [dim(event.message)] : [],
+    ),
+    ...result.backups.map((backup) => dim(`Backup: ${backup}`)),
+  ];
 }

@@ -534,6 +534,7 @@ test("adopt passes its options to the adoption functions", async () => {
           adopted: [],
           backup: "/b",
           notes: [],
+          values: [],
           events: [],
           canShare: false,
         };
@@ -801,11 +802,10 @@ test("adopt list leaves out the settings an asset came from", async (t) => {
   );
 
   const result = await adoptNative(["claude/mcp/keyed"], [], runtime);
-  expect(result.notes).toStrictEqual([
-    expect.objectContaining({ kind: "mcp", name: "keyed" }),
+  expect(result.values).toStrictEqual([
+    { server: "keyed", variable: "API_KEY", kept: false },
   ]);
 
-  expect(result.notes[0]?.text).toMatch(/API_KEY/);
   const [listed] = await listAdoptions(home);
   expect(listed?.items[0]).toMatchObject({
     key: "claude/mcp/keyed",
@@ -964,11 +964,10 @@ test("adopting can keep an MCP server's values on this machine, and says where",
   expect(JSON.stringify(scan)).not.toContain("sk-secret");
   const result = await adoptNative(["claude/mcp/keyed"], ["API_KEY"], runtime);
   expect(await readSecrets(runtime)).toStrictEqual({ API_KEY: "sk-secret" });
-  expect(result.notes.map((note) => note.text)).toStrictEqual([
-    expect.stringMatching(
-      /keeps the value of API_KEY in ~\/\.barndog\/secrets\.json/,
-    ),
-    expect.stringMatching(/Set OTHER in your environment/),
+  expect(result.notes).toStrictEqual([]);
+  expect(result.values).toStrictEqual([
+    { server: "keyed", variable: "API_KEY", kept: true },
+    { server: "keyed", variable: "OTHER", kept: false },
   ]);
 
   const claude = await json(join(home, ".claude.json"));

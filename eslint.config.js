@@ -29,12 +29,25 @@ const ownedLiterals = {
   ],
 };
 
+// Inquirer lists wrap from the last row back to the first unless told not to,
+// which reads as a list that never ends.
+const everywhere = [
+  {
+    selector:
+      "CallExpression[callee.name=/^(checkbox|select|search)$/] > ObjectExpression:not(:has(> Property[key.name='loop']))",
+    message: "Pass loop: false so the list stops at its last row.",
+  },
+];
+
 // A later config block replaces a rule's options rather than merging them, so
 // each owner gets the full list minus its own literals.
 function restrictLiterals(owner) {
-  const restrictions = Object.entries(ownedLiterals)
-    .filter(([module]) => module !== owner)
-    .flatMap(([, literals]) => literals);
+  const restrictions = [
+    ...everywhere,
+    ...Object.entries(ownedLiterals)
+      .filter(([module]) => module !== owner)
+      .flatMap(([, literals]) => literals),
+  ];
 
   return { "no-restricted-syntax": ["error", ...restrictions] };
 }

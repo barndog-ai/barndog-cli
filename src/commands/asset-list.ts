@@ -19,6 +19,7 @@ import {
 import { dim, hint, json } from "../ui/format.js";
 import { assetKinds } from "../features/asset-kinds/index.js";
 import { addArguments } from "./arguments.js";
+import { unsetVariableNotes } from "../ui/mcp.js";
 
 type ListCommandOptions = ListFilter & {
   paths?: boolean;
@@ -50,7 +51,7 @@ export function registerList(
       const onlyAvailable = options.available && !narrowed;
       let catalogProblem: string | undefined;
       const [inventory, rows] = await Promise.all([
-        context.inventory(),
+        context.inventory({ checkVariables: kind === "mcp" }),
         options.available || !narrowed
           ? context.searchCatalog(kind).catch((error: unknown) => {
               // JSON has nowhere to say the list is partial, so it fails;
@@ -142,6 +143,10 @@ export function registerList(
       const onThisMachine = page.filter(
         (item): item is InventoryItem => item.state !== "available",
       );
+
+      for (const line of unsetVariableNotes(onThisMachine)) {
+        context.write(line);
+      }
 
       const hints = inventoryHints(onThisMachine);
       if (hints.length) {

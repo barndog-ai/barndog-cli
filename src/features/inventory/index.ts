@@ -16,11 +16,17 @@ import {
   mergeLocalCatalog,
   moveDestination,
   readMoved,
+  withOverlay,
 } from "../workspace/overlay.js";
+import { cloudSource } from "../workspace/cloud-source.js";
+import type { RepoSource } from "../workspace/repo-source.js";
+import type { AssetReference } from "../asset-selection/types.js";
+import { unsetVariables } from "../../harnesses/formats.js";
+import { readSecrets } from "../secrets/index.js";
 import { resolveAssets } from "../asset-selection/index.js";
 import { installedName, resolveClashes } from "../environment/names.js";
 import { originLabel, scopes } from "../server/origin.js";
-import type { Harness } from "../../harnesses/types.js";
+import type { Harness, KeptValues } from "../../harnesses/types.js";
 import type { AssetKind } from "../../config/selection.js";
 import { isAssetKind } from "../asset-kinds/index.js";
 import { isHarness } from "../../harnesses/registry.js";
@@ -44,6 +50,16 @@ export type InventoryItem = {
   state: InventoryState;
   harnesses: Harness[];
   paths: string[];
+  /**
+   * MCP servers only, when `inventory()` was asked to check them: the local
+   * variables the server refers to that have no value on this machine.
+   */
+  unsetVariables?: string[];
+};
+
+export type InventoryOptions = {
+  /** Read each selected MCP server's definition to find variables with no value here. */
+  checkVariables?: boolean;
 };
 
 /**
@@ -113,10 +129,50 @@ function leftoverState(modified: boolean, offline: boolean): InventoryState {
 }
 
 /**
+ * Finds an MCP server's variables with no value here, reading its definition
+ * from the same sources the inventory's catalog came from.
+ */
+function variableCheck(input: {
+  /** False when the caller didn't ask; every item then has no field. */
+  wanted: boolean;
+  settings: Settings;
+  repo: RepoSource | undefined;
+  overlay: RepoSource | undefined;
+  runtime: RuntimeContext;
+}): (entry: {
+  asset: AssetReference;
+  enabled: boolean;
+}) => Promise<Pick<InventoryItem, "unsetVariables">> {
+  const { settings, repo, overlay, runtime } = input;
+  const conn = settings.connection;
+  const primary = repo ?? (conn ? cloudSource(conn, runtime) : undefined);
+  const source = primary && overlay ? withOverlay(primary, overlay) : primary;
+  let kept: Promise<KeptValues> | undefined;
+
+  return async ({ asset, enabled }) => {
+    if (!input.wanted || !source || asset.kind !== "mcp" || !enabled) {
+      return {};
+    }
+
+    // Read once, and only when some server needs checking.
+    kept ??= readSecrets(runtime);
+    const values = await kept;
+    const definition = await source.mcpDefinition(asset);
+
+    return {
+      unsetVariables: unsetVariables(definition, values, runtime.env),
+    };
+  };
+}
+
+/**
  * Compares configured selections, catalog and installed files to report status;
  * unreachable sources fall back to local state.
  */
-export async function inventory(runtime: RuntimeContext): Promise<Inventory> {
+export async function inventory(
+  runtime: RuntimeContext,
+  options: InventoryOptions = {},
+): Promise<Inventory> {
   const { home } = runtime;
 
   const settings = await readSettings(home);
@@ -176,6 +232,14 @@ export async function inventory(runtime: RuntimeContext): Promise<Inventory> {
       const catalog = overlay
         ? await mergeLocalCatalog(primaryCatalog, overlay)
         : primaryCatalog;
+
+      const variablesOf = variableCheck({
+        wanted: Boolean(options.checkVariables),
+        settings,
+        repo,
+        overlay,
+        runtime,
+      });
 
       const selection = selectionState(settings);
       const effective = resolveAssets(catalog, selection);
@@ -241,6 +305,7 @@ export async function inventory(runtime: RuntimeContext): Promise<Inventory> {
             ...links.map((l) => l.target),
             ...new Set(entries.map((n) => `${n.file} (${n.key})`)),
           ],
+          ...(await variablesOf(entry)),
         });
       }
 

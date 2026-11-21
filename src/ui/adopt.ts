@@ -19,6 +19,7 @@ import { harnesses, adapters, type Harness } from "../harnesses/registry.js";
 import type { RuntimeContext } from "../runtime.js";
 import { bold, dim, heading, hint, ok, plural, table, warn } from "./format.js";
 import { displayPath } from "./output.js";
+import { renderMcpValues } from "./mcp.js";
 import { checkboxTheme, promptTheme } from "./theme.js";
 
 /** Asks which scanned assets to adopt and returns their keys; tests pass their own answer. */
@@ -62,15 +63,19 @@ export function renderScan(
   scan: NativeScan,
   runtime: RuntimeContext,
 ): string[] {
-  if (!scan.assets.length && !scan.skipped.length) {
-    return [
-      dim(
-        "Your coding tools have no Skills, MCP servers or Hooks that BarnDog doesn't manage.",
-      ),
-    ];
+  const output: string[] = [];
+  if (!scan.assets.length) {
+    output.push(
+      `${ok("✔")} Nothing left to adopt: BarnDog manages every Skill, MCP server and Hook it can take over from your coding tools.`,
+    );
+
+    if (!scan.skipped.length) {
+      return output;
+    }
+
+    output.push("");
   }
 
-  const output: string[] = [];
   for (const { harness, items } of byTool(scan.assets)) {
     output.push(bold(adapters[harness].name));
     output.push(
@@ -170,6 +175,8 @@ export function renderAdoption(
     );
   }
 
+  output.push(...renderMcpValues(result.values));
+
   output.push(
     "",
     result.canShare
@@ -244,6 +251,7 @@ type ChooseKeptValues = (
 
 const chooseKeptValues: ChooseKeptValues = (values) =>
   checkbox({
+    loop: false,
     message: "Which values should BarnDog keep on this machine?",
     choices: values.map((value) => ({
       name: `${value.variable}  ${dim(`${value.server}: ${value.key}`)}`,

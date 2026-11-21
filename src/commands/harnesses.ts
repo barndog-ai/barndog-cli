@@ -4,6 +4,7 @@ import { CliError } from "../errors.js";
 import { harnesses, type Harness } from "../harnesses/registry.js";
 import { toolNames } from "../features/hooks/adapt.js";
 import type {
+  HarnessChange,
   HarnessesApplied,
   HarnessStatus,
 } from "../features/environment/harnesses.js";
@@ -17,6 +18,21 @@ function managedLine(managed: readonly Harness[]) {
     ? `${ok("✔")} BarnDog now manages ${toolNames(managed)}.`
     : `${ok("✔")} BarnDog no longer manages any coding tool. Add one with ${styleText("bold", "barndog harnesses enable <harness>")}.`;
 }
+
+const pickMessage: Record<HarnessChange, string> = {
+  enable: "Which coding tools should BarnDog start managing?",
+  disable: "Which coding tools should BarnDog stop managing?",
+};
+
+const nothingTo: Record<HarnessChange, string> = {
+  enable: "BarnDog already manages every coding tool it supports.",
+  disable: "BarnDog doesn't manage any coding tool.",
+};
+
+const nothingToHint: Record<HarnessChange, string> = {
+  enable: "barndog harnesses list",
+  disable: "barndog harnesses enable <harness>",
+};
 
 function harnessTable(rows: readonly HarnessStatus[]) {
   return table(
@@ -63,6 +79,32 @@ export function registerHarnesses(program: Command, context: CommandContext) {
     context.write(managedLine(result.harnesses));
   };
 
+  // With no tools named, a terminal picks from the ones the change applies to.
+  const pickTargets = async (change: HarnessChange): Promise<Harness[]> => {
+    const usage = `barndog harnesses ${change} <harness>`;
+    if (!context.mode.interactive) {
+      throw new CliError(`Name the coding tools to ${change}.`, usage);
+    }
+
+    const offered = (await context.listHarnesses()).filter(
+      (row) => row.enabled === (change === "disable"),
+    );
+
+    if (offered.length === 0) {
+      throw new CliError(nothingTo[change], nothingToHint[change]);
+    }
+
+    return chooseHarnesses(
+      offered.map((row) => ({
+        value: row.id,
+        name: row.name,
+        evidence: row.evidence,
+        checked: false,
+      })),
+      { message: pickMessage[change], required: true },
+    );
+  };
+
   for (const change of ["enable", "disable"] as const) {
     group
       .command(change)
@@ -72,9 +114,10 @@ export function registerHarnesses(program: Command, context: CommandContext) {
           : "Remove everything BarnDog installed in these coding tools and stop installing there",
       )
       .addArgument(
-        new Argument("<harnesses...>", "Coding tools").choices(harnesses),
+        new Argument("[harnesses...]", "Coding tools").choices(harnesses),
       )
-      .action(async (targets: Harness[]) => {
+      .action(async (named: Harness[]) => {
+        const targets = named.length ? named : await pickTargets(change);
         report(await context.changeHarnesses(change, targets));
       });
   }

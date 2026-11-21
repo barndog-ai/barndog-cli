@@ -22,7 +22,11 @@ import type { SyncEvent } from "../environment/events.js";
 import { synchronize } from "../environment/sync.js";
 import { locked } from "../environment/transaction.js";
 import { ensureLocalWorkspace } from "../imports/local.js";
-import { literalNotes, type LiteralValue } from "../mcps/import.js";
+import {
+  literalValues,
+  type LiteralValue,
+  type McpValue,
+} from "../mcps/import.js";
 import { readSecrets, updateSecrets } from "../secrets/index.js";
 import { writePackage } from "../workspace/directory.js";
 import { localRepoSource } from "../workspace/repo-source.js";
@@ -113,8 +117,10 @@ export type AdoptionResult = {
   adopted: PlannedAsset[];
   /** Where the originals wait until undo. */
   backup: string;
-  /** What to do before an adopted asset works, such as a variable to set. */
+  /** What to do before an adopted asset works. */
   notes: AdoptionNote[];
+  /** The literal values adopted MCP servers held, and which of them BarnDog keeps. */
+  values: McpValue[];
   events: SyncEvent[];
   /** A Git or Cloud workspace runs beside the local folder, so `local move` can share what was adopted. */
   canShare: boolean;
@@ -131,16 +137,23 @@ function adoptionNotes(
   plan: PlannedAsset[],
   sourceOf: (asset: PlannedAsset) => FoundAsset,
   keep: readonly string[],
-): AdoptionNote[] {
-  const sources = new Map(plan.map((asset) => [asset.source.key, asset]));
+): Pick<AdoptionResult, "notes" | "values"> {
+  const sources = [
+    ...new Map(plan.map((asset) => [asset.source.key, asset])).values(),
+  ];
 
-  return [...sources.values()].flatMap((asset) => {
-    const source = sourceOf(asset);
-
-    return [...source.notes, ...literalNotes(source.literals, keep)].map(
-      (text) => ({ kind: asset.kind, name: asset.name, text }),
-    );
-  });
+  return {
+    notes: sources.flatMap((asset) =>
+      sourceOf(asset).notes.map((text) => ({
+        kind: asset.kind,
+        name: asset.name,
+        text,
+      })),
+    ),
+    values: sources.flatMap((asset) =>
+      literalValues(asset.name, sourceOf(asset).literals, keep),
+    ),
+  };
 }
 
 /**
@@ -273,7 +286,7 @@ export async function adoptNative(
         id,
         adopted: plan,
         backup: paths.folder,
-        notes: adoptionNotes(plan, sourceOf, keep),
+        ...adoptionNotes(plan, sourceOf, keep),
         events,
         canShare: await hasSharedWorkspace(home),
       };

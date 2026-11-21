@@ -23,7 +23,7 @@ import {
   skillDirectory,
 } from "../../harnesses/registry.js";
 import type { Harness, KeptValues } from "../../harnesses/types.js";
-import { secretRefs } from "../../harnesses/formats.js";
+import { unsetVariables } from "../../harnesses/formats.js";
 import { isInside } from "../../shared/files.js";
 import { defined } from "../../shared/lookup.js";
 import type { SelectionResult } from "../asset-selection/types.js";
@@ -46,17 +46,15 @@ export type StagedAssets = {
  * One event per variable that installed MCP servers refer to but that has no
  * value here: BarnDog doesn't keep it and this environment doesn't set it.
  */
-function unsetVariables(
+function unsetVariableEvents(
   servers: readonly { name: string; definition: McpDefinition }[],
   kept: KeptValues,
   env: NodeJS.ProcessEnv,
 ): SyncEvent[] {
   const unset = new Map<string, string[]>();
   for (const { name, definition } of servers) {
-    for (const { secretRef } of Object.values(secretRefs(definition))) {
-      if (kept[secretRef] === undefined && !env[secretRef]) {
-        unset.set(secretRef, [...(unset.get(secretRef) ?? []), name]);
-      }
+    for (const variable of unsetVariables(definition, kept, env)) {
+      unset.set(variable, [...(unset.get(variable) ?? []), name]);
     }
   }
 
@@ -292,7 +290,7 @@ export async function stageAssets(input: {
     }
   }
 
-  events.push(...unsetVariables(servers, input.kept, input.runtime.env));
+  events.push(...unsetVariableEvents(servers, input.kept, input.runtime.env));
 
   return { links: desired, native, trees, events };
 }

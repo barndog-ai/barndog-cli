@@ -29,6 +29,9 @@ import { doctor } from "../features/doctor/index.js";
 import { addMcp } from "../ui/add-mcp.js";
 import type { AddContext } from "../ui/add-asset.js";
 import { testRuntime } from "./runtime.js";
+import { inventory, type InventoryItem } from "../features/inventory/index.js";
+import { createProgram } from "../program.js";
+import { stripVTControlCharacters } from "node:util";
 import { POSIX_MODE } from "../shared/constants.js";
 
 const secret = "sk-very-private";
@@ -114,8 +117,18 @@ test("kept values are written into every tool, and state.json records only their
     /Wrote the kept value of API_KEY into .*\.claude\.json for tickets/,
   );
 
+  // One sentence per outcome, then a column of variables under each server.
+  const plain = stripVTControlCharacters(output);
+  expect(plain).toMatch(
+    /BarnDog keeps these values in ~\/\.barndog\/secrets\.json[^\n]*\n {2}tickets {2}API_KEY\n {2}web {6}WEB_X_KEY\n/,
+  );
+
   // REGION was left unticked, so the tools refer to the variable.
-  expect(output).toMatch(/Set REGION in your environment/);
+  expect(plain).toMatch(
+    /! BarnDog doesn't keep these values\. Set each in your environment[^\n]*\n {2}tickets {2}REGION/,
+  );
+
+  expect(plain.match(/keeps these values/g)).toHaveLength(1);
 
   const claude = JSON.parse(await m.file(".claude.json"));
   expect(claude.mcpServers.tickets.env).toStrictEqual({
@@ -256,6 +269,57 @@ test("without a terminal nothing is kept, and doctor names each variable with no
   expect(variables.find((c) => c.fix?.endsWith("TOKEN"))?.detail).toMatch(
     /TOKEN has no value here, so other can't use it/,
   );
+});
+
+test("mcp list and mcp show name the variables with no value here, and how to set them", async (t) => {
+  const m = await machine(t, ["API_KEY"]);
+  const unsetOf = (items: InventoryItem[]) =>
+    Object.fromEntries(items.map((item) => [item.name, item.unsetVariables]));
+
+  // Only asked for: reading every definition costs a request per server.
+  expect(unsetOf((await inventory(m.runtime)).items)).toStrictEqual({
+    tickets: undefined,
+    web: undefined,
+  });
+
+  expect(
+    unsetOf((await inventory(m.runtime, { checkVariables: true })).items),
+  ).toStrictEqual({ tickets: ["REGION", "HOME"], web: ["WEB_X_KEY"] });
+
+  const output: string[] = [];
+  const run = (args: string[], json = false) =>
+    createProgram({
+      home: m.home,
+      env: m.runtime.env,
+      write: (line) => output.push(line),
+    }).parseAsync([...args, ...(json ? ["--json"] : [])], { from: "user" });
+
+  await run(["mcp", "list", "--installed"]);
+  const listed = stripVTControlCharacters(output.join("\n"));
+  expect(listed).toMatch(
+    /! tickets can't use REGION, HOME: no value here\.\n\s+Fix: barndog mcp show tickets/,
+  );
+
+  expect(listed).toMatch(
+    /! web can't use WEB_X_KEY: no value here\.\n\s+Fix: barndog mcp env set WEB_X_KEY/,
+  );
+
+  output.length = 0;
+  await run(["mcp", "show", "tickets", "--origin", "local"]);
+  const shown = stripVTControlCharacters(output.join("\n"));
+  expect(shown).toMatch(
+    /API_KEY from \$API_KEY, REGION from \$REGION \(not set\)/,
+  );
+
+  expect(shown).toMatch(
+    /! HOME has no value here, so tickets can't use it\.\n\s+Fix: barndog mcp env set HOME/,
+  );
+
+  output.length = 0;
+  await run(["mcp", "show", "tickets", "--origin", "local"], true);
+  expect(JSON.parse(output.join("\n"))).toMatchObject({
+    unsetVariables: ["REGION", "HOME"],
+  });
 });
 
 test("the store refuses bad names and files others can read or that are damaged", async (t) => {

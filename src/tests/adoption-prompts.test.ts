@@ -1,3 +1,4 @@
+import { stripVTControlCharacters } from "node:util";
 import checkbox from "@inquirer/checkbox";
 import confirm from "@inquirer/confirm";
 import { beforeEach, expect, test, vi } from "vitest";
@@ -77,6 +78,7 @@ const result: AdoptionResult = {
   notes: [
     { kind: "mcp", name: "github", text: "Set TOKEN in your environment." },
   ],
+  values: [],
   events: [],
   canShare: false,
 };
@@ -156,8 +158,21 @@ test("a problem while adopting at setup is reported, not raised", async () => {
 });
 
 test("adoption output covers empty and partial results", () => {
-  expect(renderScan({ assets: [], skipped: [] }, runtime).join("\n")).toMatch(
-    /no Skills, MCP servers or Hooks/,
+  expect(
+    stripVTControlCharacters(
+      renderScan({ assets: [], skipped: [] }, runtime).join("\n"),
+    ),
+  ).toBe(
+    "✔ Nothing left to adopt: BarnDog manages every Skill, MCP server and Hook it can take over from your coding tools.",
+  );
+
+  // What's left is only what can't be adopted, so that follows the explanation.
+  const leftovers = stripVTControlCharacters(
+    renderScan({ assets: [], skipped: scan.skipped }, runtime).join("\n"),
+  );
+
+  expect(leftovers).toMatch(
+    /^✔ Nothing left to adopt[^\n]*\n\nCan't be adopted\n {2}Claude Code Hook Stop hook[^\n]*\n {4}It runs a prompt hook\./,
   );
 
   expect(renderAdoptions([]).join("\n")).toMatch(/Nothing has been adopted/);
@@ -217,7 +232,7 @@ test("adopt in a terminal opens the picker, and reports when there's nothing", a
 
   expect(lines).toContain("Nothing to adopt.");
   expect(lines.some((line) => line.includes('"adopted": []'))).toBe(true);
-  expect(lines.join("\n")).toMatch(/no Skills, MCP servers or Hooks/);
+  expect(lines.join("\n")).toMatch(/Nothing left to adopt/);
 });
 
 test("adopting asks once per value which ones BarnDog keeps, and passes the answer on", async () => {

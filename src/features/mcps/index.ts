@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto";
 import crossSpawn from "cross-spawn";
 import { z } from "zod";
 import {
+  type McpDefinition,
   mcpDefinitionSchema,
   mcpSchema,
   mcpVersionSchema,
@@ -26,6 +27,8 @@ import {
 import { gitVersions } from "../collaboration/workspace-git.js";
 import type { PackageVersion } from "../collaboration/results.js";
 import { adapters } from "../../harnesses/registry.js";
+import { unsetVariables } from "../../harnesses/formats.js";
+import { readSecrets } from "../secrets/index.js";
 import type { Harness } from "../../harnesses/types.js";
 import { patchNative, type NativeEntry } from "../native/configuration.js";
 import { fileText, inputJson } from "../../shared/files.js";
@@ -119,23 +122,45 @@ export async function updateMcp(
   );
 }
 
+/**
+ * An MCP configuration as `mcp show` prints it, with the variables it refers to
+ * that have no value on this machine.
+ */
+export type ShownMcp = (RepoAssetView | PublishedAsset) & {
+  unsetVariables: string[];
+};
+
 /** One MCP configuration with its definition, from the repo or the server. */
 export async function showMcp(
   name: string,
   origin: string,
   runtime: RuntimeContext,
-): Promise<RepoAssetView | PublishedAsset> {
+): Promise<ShownMcp> {
   const { home } = runtime;
 
   const settings = await readSettings(home);
   const repo = settings && repoForOrigin(settings, runtime, origin);
+  const withUnset = async (
+    asset: RepoAssetView | PublishedAsset,
+    definition: McpDefinition | undefined,
+  ): Promise<ShownMcp> => ({
+    ...asset,
+    unsetVariables: definition
+      ? unsetVariables(definition, await readSecrets(runtime), runtime.env)
+      : [],
+  });
+
   if (repo) {
-    return showRepoAsset(
+    const view = showRepoAsset(
       selectRepoAsset(await repo.model(), "mcp", name, origin),
     );
+
+    return withUnset(view, view.definition);
   }
 
-  return (await selectAsset("mcp", name, origin, runtime)).asset;
+  const { asset } = await selectAsset("mcp", name, origin, runtime);
+
+  return withUnset(asset, mcpSchema.parse(asset).version.definition);
 }
 
 export async function mcpVersions(

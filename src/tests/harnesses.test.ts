@@ -188,6 +188,81 @@ test("harnesses enable rejects unknown tools and needs at least one", async () =
   expect(changeHarnesses).not.toHaveBeenCalled();
 });
 
+test("harnesses disable with no tools named picks from the managed ones, and enable from the rest", async () => {
+  const changeHarnesses = vi.fn(async () => ({
+    status: "applied" as const,
+    events: [],
+    harnesses: [],
+  }));
+
+  const listHarnesses = vi.fn(async () => [
+    {
+      id: "claude" as const,
+      name: "Claude Code",
+      evidence: null,
+      enabled: true,
+    },
+    { id: "codex" as const, name: "Codex", evidence: null, enabled: false },
+    {
+      id: "opencode" as const,
+      name: "OpenCode",
+      evidence: null,
+      enabled: true,
+    },
+  ]);
+
+  await expect(
+    program({ changeHarnesses, listHarnesses }).instance.parseAsync(
+      ["harnesses", "disable"],
+      { from: "user" },
+    ),
+  ).rejects.toThrow(/Name the coding tools to disable/);
+
+  for (const [change, offered] of [
+    ["disable", ["claude", "opencode"]],
+    ["enable", ["codex"]],
+  ] as const) {
+    vi.mocked(chooseHarnesses).mockClear();
+    vi.mocked(chooseHarnesses).mockResolvedValue(["opencode"]);
+    const { instance } = program({
+      changeHarnesses,
+      listHarnesses,
+      interactive: true,
+    });
+
+    await instance.parseAsync(["harnesses", change], { from: "user" });
+    const [choices, question] = vi.mocked(chooseHarnesses).mock.calls[0]!;
+    expect(choices.map((choice) => [choice.value, choice.checked])).toEqual(
+      offered.map((id) => [id, false]),
+    );
+
+    expect(question).toMatchObject({ required: true });
+    expect(changeHarnesses).toHaveBeenLastCalledWith(change, ["opencode"]);
+  }
+});
+
+test("harnesses disable with nothing managed says so instead of opening an empty picker", async () => {
+  vi.mocked(chooseHarnesses).mockClear();
+  const { instance } = program({
+    changeHarnesses: vi.fn(),
+    listHarnesses: vi.fn(async () => [
+      {
+        id: "claude" as const,
+        name: "Claude Code",
+        evidence: null,
+        enabled: false,
+      },
+    ]),
+    interactive: true,
+  });
+
+  await expect(
+    instance.parseAsync(["harnesses", "disable"], { from: "user" }),
+  ).rejects.toThrow(/doesn't manage any coding tool/);
+
+  expect(chooseHarnesses).not.toHaveBeenCalled();
+});
+
 test("harnesses select needs a terminal, then saves exactly the checked tools", async () => {
   const selectHarnesses = vi.fn(async () => ({
     status: "applied" as const,

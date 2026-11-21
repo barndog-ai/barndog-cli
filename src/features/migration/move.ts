@@ -659,10 +659,11 @@ export function moveLocalAssets(
 }
 
 /**
- * `moving` while a full move waits for its shared copy, such as a pull request
- * to merge; the local copy stays in use until then.
+ * `available` is valid and can be installed or moved; whether it is installed
+ * is up to the selection. `moving` while a full move waits for its shared copy,
+ * such as a pull request to merge; the local copy stays in use until then.
  */
-type LocalAssetState = "active" | "moving" | "invalid";
+type LocalAssetState = "available" | "moving" | "invalid";
 
 /** The local folder and every asset and knowledge document in it. */
 export type LocalAssets = {
@@ -710,7 +711,7 @@ export async function listLocalAssets(
           state: "moving" as const,
           movingTo: moveDestination(entry),
         }
-      : { state: "active" as const };
+      : { state: "available" as const };
   };
 
   return {

@@ -1,4 +1,5 @@
 import { expect, test, vi } from "vitest";
+import { stripVTControlCharacters } from "node:util";
 import { createProgram } from "../program.js";
 import { pickOne } from "../ui/pick.js";
 import type { SetsList, Applied } from "../features/environment/operations.js";
@@ -166,6 +167,53 @@ test("sets list shows subscriptions, including ones you can no longer see, with 
   const output = write.mock.calls.flat().join("\n");
   expect(output).toMatch(/team\/missing\s+unavailable\s+all\s+disabled/);
   expect(output).toMatch(/org\s+Acme\s+recommended\s+enabled/);
+});
+
+test("sets list with only the local folder says why there's nothing else, and how to get more", async () => {
+  const write = vi.fn();
+  // How a local folder's model describes its one scope.
+  const local = {
+    type: "org" as const,
+    id: "w1",
+    slug: "local",
+    name: "My workspace",
+    canPublish: true,
+    localOnly: true,
+  };
+
+  await createProgram({
+    write,
+    listSets: async () => ({
+      available: [local],
+      subscriptions: [
+        { scope: { type: "org", id: "w1" }, mode: "all", enabled: true },
+      ],
+      diagnostics: [],
+    }),
+  }).parseAsync(["sets", "list"], { from: "user" });
+
+  const output = stripVTControlCharacters(write.mock.calls.flat().join("\n"));
+  expect(output).toMatch(/local\s+My workspace\s+all\s+enabled/);
+  expect(output).toMatch(
+    /the only set a local workspace has[\s\S]*Tip: barndog init/,
+  );
+
+  expect(output).not.toMatch(/Available|barndog sets install/);
+});
+
+test("sets list offers sets install only when there is something to subscribe to", async () => {
+  const output = async (search: string) => {
+    const write = vi.fn();
+    await createProgram({ write, listSets: async () => listed }).parseAsync(
+      ["sets", "list", "--search", search],
+      { from: "user" },
+    );
+
+    return write.mock.calls.flat().join("\n");
+  };
+
+  expect(await output("app")).toContain("barndog sets install");
+  expect(await output("missing")).not.toContain("barndog sets install");
 });
 
 test("sets list points at the next page only while there is one", async () => {

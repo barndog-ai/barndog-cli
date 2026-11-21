@@ -1,3 +1,4 @@
+import { stripVTControlCharacters } from "node:util";
 import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -286,8 +287,10 @@ test("--file and --config add their servers without asking where the configurati
 
   expect(JSON.stringify(servers)).not.toContain('"value"');
   expect(context.prompts.chooseOne).not.toHaveBeenCalled();
-  expect(context.write).toHaveBeenCalledWith(
-    expect.stringMatching(/^! http-server: X-Key held a literal value/),
+  // Without a terminal nothing is kept, so the variable is listed to set.
+  const written = vi.mocked(context.write).mock.calls.flat().join("\n");
+  expect(stripVTControlCharacters(written)).toMatch(
+    /! BarnDog doesn't keep these values\.[^\n]*\n {2}http-server {2}\S+/,
   );
 });
 

@@ -134,11 +134,11 @@ test("local list shows the folder and each asset with its state", async (t) => {
 
   expect(output).toEqual([
     folder,
-    "  Name     Kind       State    Path",
-    "  broken   skill      invalid  org/skills/broken",
-    "  notes    skill      active   org/skills/notes",
-    "  review   skill      active   org/skills/review",
-    "  context  knowledge  active   org/knowledge/context.md",
+    "  Name     Kind       State      Path",
+    "  broken   skill      invalid    org/skills/broken",
+    "  notes    skill      available  org/skills/notes",
+    "  review   skill      available  org/skills/review",
+    "  context  knowledge  available  org/knowledge/context.md",
   ]);
 });
 
@@ -153,19 +153,19 @@ test("local list --json prints the folder and assets", async (t) => {
         kind: "skill",
         name: "notes",
         path: "org/skills/notes",
-        state: "active",
+        state: "available",
       },
       {
         kind: "skill",
         name: "review",
         path: "org/skills/review",
-        state: "active",
+        state: "available",
       },
       {
         kind: "knowledge",
         name: "context",
         path: "org/knowledge/context.md",
-        state: "active",
+        state: "available",
       },
     ],
   });

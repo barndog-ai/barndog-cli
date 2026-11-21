@@ -185,6 +185,27 @@ test("failed git access is reported while installation checks still run", async 
   expect(branchProtected).not.toHaveBeenCalled();
 });
 
+test("a selected coding tool that isn't on this machine is fixed by installing it or disabling it", async (t) => {
+  const server = await cloud(t, { harnesses: ["claude", "opencode"] });
+  vi.mocked(detectHarnesses).mockResolvedValue([
+    { id: "claude", name: "Claude Code", evidence: "claude on PATH" },
+  ]);
+
+  const checks = await doctor(testRuntime(server.home));
+  expect(checks).toEqual(
+    expect.arrayContaining([
+      { name: "Claude Code", status: "ok", detail: "claude on PATH" },
+      {
+        name: "OpenCode",
+        status: "warn",
+        detail: "Not found on this machine; assets are still installed for it.",
+        fix: "Install OpenCode, or stop BarnDog installing for it.",
+        command: "barndog harnesses disable opencode",
+      },
+    ]),
+  );
+});
+
 const installation = async (home: string) =>
   (await doctor(testRuntime(home))).find(
     (check) => check.name === "Installation",

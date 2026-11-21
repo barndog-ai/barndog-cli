@@ -8,6 +8,27 @@ export const secretRefs = (definition: McpDefinition) =>
     : definition.headers;
 
 /**
+ * The local variables a definition refers to that have no value on this
+ * machine: BarnDog doesn't keep them and `env` doesn't set them. Each once, in
+ * the order the definition names them.
+ */
+export function unsetVariables(
+  definition: McpDefinition,
+  kept: KeptValues,
+  env: NodeJS.ProcessEnv,
+): string[] {
+  const variables = Object.values(secretRefs(definition)).map(
+    (ref) => ref.secretRef,
+  );
+
+  return [
+    ...new Set(
+      variables.filter((name) => kept[name] === undefined && !env[name]),
+    ),
+  ];
+}
+
+/**
  * Each environment variable or header of a definition: the kept value when
  * BarnDog keeps one, else the tool's reference to the local variable.
  */

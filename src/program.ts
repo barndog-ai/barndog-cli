@@ -605,7 +605,7 @@ export function createProgram(options: ProgramOptions = {}): Command {
       options.synchronize ??
       ((path, syncOptions) =>
         synchronize(path, runtime, undefined, syncOptions)),
-    inventory: options.inventory ?? (() => inventory(runtime)),
+    inventory: options.inventory ?? ((choice) => inventory(runtime, choice)),
     searchCatalog:
       options.searchCatalog ?? ((kind) => searchCatalog(kind, runtime)),
     write,

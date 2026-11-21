@@ -9,7 +9,7 @@ export function pickLocalAssets(local: LocalAssets): Promise<string[]> {
   return pickMany(
     "Which local assets should move?",
     local.assets
-      .filter((asset) => asset.state === "active")
+      .filter((asset) => asset.state === "available")
       .map((asset) => ({
         value: asset.name,
         name: asset.name,
@@ -24,6 +24,7 @@ export function chooseKeepLocal(count: number): Promise<boolean> {
   const them = count === 1 ? "it" : "them";
 
   return select<boolean>({
+    loop: false,
     message: `Move ${them}, or share a copy and keep ${them} here too?`,
     choices: [
       {

@@ -128,14 +128,20 @@ export async function doctor(runtime: RuntimeContext): Promise<Check[]> {
 
   const detected = await detectHarnesses(runtime);
   for (const harness of settings.harnesses) {
+    const { name } = adapters[harness];
     const found = detected.find((d) => d.id === harness)?.evidence;
+    if (found) {
+      checks.push({ name, status: "ok", detail: found });
+      continue;
+    }
+
+    // Disabling removes what BarnDog installed there, so it goes in `command`.
     checks.push({
-      name: adapters[harness].name,
-      status: found ? "ok" : "warn",
-      detail:
-        found ??
-        "Not found on this machine; assets are still installed for it.",
-      fix: found ? undefined : "barndog init",
+      name,
+      status: "warn",
+      detail: "Not found on this machine; assets are still installed for it.",
+      fix: `Install ${name}, or stop BarnDog installing for it.`,
+      command: `barndog harnesses disable ${harness}`,
     });
   }
 

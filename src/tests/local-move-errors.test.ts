@@ -69,7 +69,7 @@ const refuse = () =>
 type Outcome = {
   rows: Record<string, { status: string; detail?: string }>;
   /** "removed" when the local copy is already gone. */
-  states: Record<string, "active" | "moving" | "invalid" | "removed">;
+  states: Record<string, "available" | "moving" | "invalid" | "removed">;
   posted: string[];
   synced: boolean;
 };
@@ -83,9 +83,9 @@ const modes: Record<"clash" | "denied" | "failure" | "publish", Outcome> = {
       "skill:broken": { status: "skipped" },
     },
     states: {
-      "skill:release-notes": "active",
+      "skill:release-notes": "available",
       "hook:release-notes": "moving",
-      "knowledge:context": "active",
+      "knowledge:context": "available",
       "skill:broken": "invalid",
     },
     posted: ["POST /v1/hook-changes"],
@@ -104,7 +104,7 @@ const modes: Record<"clash" | "denied" | "failure" | "publish", Outcome> = {
     states: {
       "skill:release-notes": "moving",
       "hook:release-notes": "moving",
-      "knowledge:context": "active",
+      "knowledge:context": "available",
       "skill:broken": "invalid",
     },
     posted: ["POST /v1/skill-changes", "POST /v1/hook-changes"],
@@ -118,9 +118,9 @@ const modes: Record<"clash" | "denied" | "failure" | "publish", Outcome> = {
       "skill:broken": { status: "skipped" },
     },
     states: {
-      "skill:release-notes": "active",
-      "hook:release-notes": "active",
-      "knowledge:context": "active",
+      "skill:release-notes": "available",
+      "hook:release-notes": "available",
+      "knowledge:context": "available",
       "skill:broken": "invalid",
     },
     posted: [
@@ -315,7 +315,7 @@ test("local move uploads each asset under its own name to the chosen personal sc
   ).toMatchObject({ content: { name: "context" } });
 });
 
-test("failed moves stay active, so running the move again retries only them", async (t) => {
+test("failed moves stay available, so running the move again retries only them", async (t) => {
   const server = await cloud(t);
   const { runtime } = await localFixture(server);
   arrange(server, "failure");

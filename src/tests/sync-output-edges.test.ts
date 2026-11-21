@@ -90,7 +90,7 @@ describe("a sync with every kind of event", () => {
       ...changedRows,
       "",
       `! Sync complete · ${SUMMARY}`,
-      "Restart your coding tools to pick up the changes.",
+      "A restart of your coding tools may be required to pick up the changes.",
       "",
       "! Using cached content",
       "",
@@ -104,7 +104,7 @@ describe("a sync with every kind of event", () => {
       "    unchanged    mcp    untouched    Claude Code",
       "",
       `! Sync complete · ${SUMMARY}`,
-      "Restart your coding tools to pick up the changes.",
+      "A restart of your coding tools may be required to pick up the changes.",
       "",
       "! Using cached content",
       "",
@@ -213,7 +213,7 @@ describe("internal entries", () => {
     ).toEqual([
       TITLE,
       "✔ Sync complete",
-      "Restart your coding tools to pick up the changes.",
+      "A restart of your coding tools may be required to pick up the changes.",
       "",
     ]);
   });
@@ -274,6 +274,26 @@ describe("notices", () => {
     ]);
   });
 
+  test("a variable with no value names the servers that need it and how to set it", () => {
+    expect(
+      renderSyncOutput([
+        {
+          type: "unset-variable",
+          variable: "RESOLVE_SCRIPT_API",
+          servers: ["davinci-resolve", "render"],
+        },
+      ]),
+    ).toEqual([
+      TITLE,
+      "✔ Sync complete",
+      "Everything is up to date.",
+      "",
+      "! RESOLVE_SCRIPT_API has no value here, so davinci-resolve, render can't use it.",
+      "  Fix: barndog mcp env set RESOLVE_SCRIPT_API",
+      "",
+    ]);
+  });
+
   test("a notice does not hide changes that were made", () => {
     expect(
       renderSyncOutput([
@@ -291,7 +311,7 @@ describe("notices", () => {
       "  + installed  mcp  server  Claude Code",
       "",
       "! Sync complete · 1 installed",
-      "Restart your coding tools to pick up the changes.",
+      "A restart of your coding tools may be required to pick up the changes.",
       "",
       "! Cached",
       "",

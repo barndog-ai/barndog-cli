@@ -231,7 +231,9 @@ export function renderSyncOutput(
   } else {
     output.push(
       changed
-        ? dim("Restart your coding tools to pick up the changes.")
+        ? dim(
+            "A restart of your coding tools may be required to pick up the changes.",
+          )
         : quiet,
     );
   }
@@ -239,6 +241,12 @@ export function renderSyncOutput(
   for (const event of events) {
     if (event.type === "notice") {
       output.push("", `${warn("!")} ${event.message}`);
+    } else if (event.type === "unset-variable") {
+      output.push(
+        "",
+        `${warn("!")} ${bold(event.variable)} has no value here, so ${event.servers.map((name) => bold(name)).join(", ")} can't use it.`,
+        `  ${hint(`barndog mcp env set ${event.variable}`, "Fix")}`,
+      );
     } else if (event.type === "clash") {
       output.push(
         "",

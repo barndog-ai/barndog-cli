@@ -23,7 +23,7 @@ const local: LocalAssets = {
       kind: "skill",
       name: "review",
       path: "org/skills/review",
-      state: "active",
+      state: "available",
     },
     {
       kind: "skill",

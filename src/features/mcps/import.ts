@@ -164,18 +164,23 @@ export type ConvertedServer = {
 export type LiteralValue = { key: string; variable: string; value: string };
 
 /**
- * What to tell the developer about each literal: where BarnDog keeps it, or
- * which variable to set. `kept` holds the variables BarnDog keeps.
+ * A value a tool's entry held as written, now a variable the definition names:
+ * either BarnDog keeps it in `~/.barndog/secrets.json`, or the developer has to
+ * set it.
  */
-export function literalNotes(
+export type McpValue = { server: string; variable: string; kept: boolean };
+
+/** Each literal of one server, and whether BarnDog keeps it. `keep` holds the variables it keeps. */
+export function literalValues(
+  server: string,
   literals: readonly LiteralValue[],
-  kept: readonly string[],
-): string[] {
-  return literals.map((literal) =>
-    kept.includes(literal.variable)
-      ? `BarnDog keeps the value of ${literal.variable} in ~/.barndog/secrets.json on this machine, never uploaded, and writes it into your coding tools.`
-      : `${literal.key} held a literal value, which BarnDog doesn't keep. Set ${literal.variable} in your environment, or keep it with barndog mcp env set ${literal.variable}.`,
-  );
+  keep: readonly string[],
+): McpValue[] {
+  return literals.map((literal) => ({
+    server,
+    variable: literal.variable,
+    kept: keep.includes(literal.variable),
+  }));
 }
 
 /** Secrets are named, never shared: every literal becomes a variable the definition refers to. */
@@ -511,6 +516,8 @@ type ServerNote = { server: string; text: string };
 export type AddedServers = {
   added: string[];
   notes: ServerNote[];
+  /** The literal values the servers held, and which of them BarnDog keeps. */
+  values: McpValue[];
   /** Copies of the tool settings files it changed. */
   backups: string[];
   events: SyncEvent[];
@@ -627,10 +634,10 @@ export async function addMcpServers(
     return {
       added: servers.map((s) => s.name),
       notes: servers.flatMap((s) =>
-        [...s.notes, ...literalNotes(s.literals, options.keep)].map((text) => ({
-          server: s.name,
-          text,
-        })),
+        s.notes.map((text) => ({ server: s.name, text })),
+      ),
+      values: servers.flatMap((s) =>
+        literalValues(s.name, s.literals, options.keep),
       ),
       backups,
       events,

@@ -3,6 +3,7 @@ import { type CommandContext } from "./context.js";
 import { assetListOptions, type ListOptions } from "../ui/asset-list.js";
 import { runSetInstall } from "../ui/scope-install.js";
 import { type SetsList } from "../features/environment/operations.js";
+import { LOCAL_ORIGIN } from "../features/workspace/overlay.js";
 import { runSelection } from "../ui/selection.js";
 import { pickOne } from "../ui/pick.js";
 import {
@@ -136,6 +137,23 @@ export function registerSets(program: Command, context: CommandContext) {
       )
       .sort((a, b) => label(a).localeCompare(label(b)));
 
+    // A local folder is one set of its own; others come from Git or a server.
+    if (result.available.every((scope) => label(scope) === LOCAL_ORIGIN)) {
+      context.write("");
+      context.write(
+        "Your local folder is the only set a local workspace has, so there's nothing else to subscribe to.",
+      );
+
+      context.write(
+        hint("barndog init", "Tip") +
+          dim(
+            "  connect a Git repository or BarnDog server to subscribe to what your organization and teams share",
+          ),
+      );
+
+      return;
+    }
+
     const start = (options.page - 1) * options.limit;
     const page = available.slice(start, start + options.limit);
     context.write("");
@@ -153,8 +171,12 @@ export function registerSets(program: Command, context: CommandContext) {
       context.write(hint(`barndog sets list --page ${options.page + 1}`));
     }
 
-    context.write("");
-    context.write(hint("barndog sets install", "Tip") + dim("  to subscribe"));
+    if (available.length) {
+      context.write("");
+      context.write(
+        hint("barndog sets install", "Tip") + dim("  to subscribe"),
+      );
+    }
   });
 
   const chooseScope = async (

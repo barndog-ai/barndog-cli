@@ -51,20 +51,16 @@ import type {
   HarnessesApplied,
   HarnessStatus,
 } from "../features/environment/harnesses.js";
-import type { Inventory } from "../features/inventory/index.js";
 import type {
-  CatalogAsset,
-  McpServer,
-  PublishedAsset,
-} from "../features/asset-kinds/index.js";
+  Inventory,
+  InventoryOptions,
+} from "../features/inventory/index.js";
+import type { CatalogAsset, McpServer } from "../features/asset-kinds/index.js";
 import type { AssetKind, PackageKind } from "../config/selection.js";
 import type { Harness, HookHarness } from "../harnesses/types.js";
 import type { Check } from "../features/doctor/index.js";
 import type { RepositoryStatus } from "../features/inspection/index.js";
-import type {
-  FolderSummary,
-  RepoAssetView,
-} from "../features/workspace/assets.js";
+import type { FolderSummary } from "../features/workspace/assets.js";
 import type {
   MigrateOptions,
   MigrationReport,
@@ -86,6 +82,7 @@ import type {
   McpUpdateInput,
   McpVersion,
   McpWriteInput,
+  ShownMcp,
 } from "../features/mcps/index.js";
 import type { Adaptation } from "../features/hooks/adapt.js";
 import type { HookCompatibility } from "../features/hooks/types.js";
@@ -157,7 +154,7 @@ export type CommandContext = {
     configPath?: string,
     options?: Pick<SyncOptions, "dryRun" | "refresh" | "prompt">,
   ) => Promise<SyncEvent[]>;
-  inventory: () => Promise<Inventory>;
+  inventory: (options?: InventoryOptions) => Promise<Inventory>;
   searchCatalog: (kind: AssetKind) => Promise<CatalogAsset[]>;
   write: (message: string) => void;
   mode: Mode;
@@ -226,10 +223,7 @@ type FeatureFunctions = {
     name: string,
     origin: string,
   ) => Promise<PackageDetails>;
-  showMcp: (
-    name: string,
-    origin: string,
-  ) => Promise<RepoAssetView | PublishedAsset>;
+  showMcp: (name: string, origin: string) => Promise<ShownMcp>;
   createMcp: (input: McpWriteInput) => Promise<McpServer>;
   updateMcp: (input: McpUpdateInput) => Promise<McpServer>;
   mcpVersions: (

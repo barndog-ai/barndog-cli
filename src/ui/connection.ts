@@ -107,6 +107,7 @@ export type LocalAssetChoice = "keep" | "copy" | "move" | "leave";
 
 export function chooseLocalAssets(count: number): Promise<LocalAssetChoice> {
   return select<LocalAssetChoice>({
+    loop: false,
     message: `You have ${count} local asset${count === 1 ? "" : "s"}. What should happen to ${count === 1 ? "it" : "them"}?`,
     choices: [
       {
@@ -142,6 +143,7 @@ export function chooseMoveTarget(
   targets: { value: string; name: string }[],
 ): Promise<string> {
   return select<string>({
+    loop: false,
     message: "Where should they go?",
     choices: targets,
     theme: promptTheme,

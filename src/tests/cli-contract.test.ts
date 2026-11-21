@@ -460,7 +460,7 @@ test("sync keeps BarnDog's own entries out of the summary", () => {
   );
 
   expect(installed).not.toMatch(/workspace sync|1 installed/);
-  expect(installed).toMatch(/Restart your coding tools/);
+  expect(installed).toMatch(/restart of your coding tools may be required/);
 });
 
 test("review output uses names and hides noise about new files", () => {
