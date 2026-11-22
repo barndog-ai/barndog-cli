@@ -20,7 +20,7 @@ import { posixQuote, powershellQuote } from "../shared/shell.js";
 export type RenamedVariable = { name: string; from: string };
 
 /** The POSIX shell, at the path POSIX systems (NixOS and Guix included) keep it. */
-const POSIX_SHELL = "/bin/sh";
+export const POSIX_SHELL = "/bin/sh";
 
 /**
  * `env`, which sets every variable from values the shell expanded before it

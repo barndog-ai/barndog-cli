@@ -36,6 +36,11 @@ import { commandPaths } from "../features/adoption/scan.js";
 import { bracedReferences } from "../harnesses/opencode.js";
 import { hookSettingsOwner } from "../harnesses/registry.js";
 import {
+  POSIX_RENAME,
+  POWERSHELL_READ,
+  POWERSHELL_WRITE,
+} from "../harnesses/read-renamed-variables.js";
+import {
   CONSTANT_CASE,
   GIT_OBJECT_ID,
   MCP_NAME,
@@ -567,6 +572,46 @@ describe("MCP import", () => {
     ["{env:}", "{env:}"],
   ])("bracedReferences %j → %s", (value, expected) => {
     expect(bracedReferences(value)).toBe(expected);
+  });
+
+  const captures = (pattern: RegExp, text: string) =>
+    [...text.matchAll(pattern)].map((match) => match.slice(1));
+
+  test.each([
+    [`'TOKEN='"$GITHUB_TOKEN"`, [["TOKEN", "GITHUB_TOKEN"]]],
+    [
+      `'A='"$B" 'B='"$A"`,
+      [
+        ["A", "B"],
+        ["B", "A"],
+      ],
+    ],
+    [`': "\${B:?B is not set}"; exec`, []],
+    [`'A='"\${B}"`, []],
+    [`'1A='"$B"`, []],
+    [`TOKEN="$GITHUB_TOKEN"`, []],
+  ])("POSIX_RENAME %j → %j", (text, expected) => {
+    expect(captures(POSIX_RENAME, text)).toStrictEqual(expected);
+  });
+
+  test.each([
+    ["$v0 = $env:GITHUB_TOKEN; $v1 = $env:A", [["GITHUB_TOKEN"], ["A"]]],
+    ["if (-not $env:A) { exit 1 }", []],
+    ["$v = $env:A", []],
+  ])("POWERSHELL_READ %j → %j", (text, expected) => {
+    expect(captures(POWERSHELL_READ, text)).toStrictEqual(expected);
+  });
+
+  test.each([
+    ["[Environment]::SetEnvironmentVariable('TOKEN', $v0)", [["TOKEN"]]],
+    [
+      "SetEnvironmentVariable('A', $v0); SetEnvironmentVariable('B', $v12)",
+      [["A"], ["B"]],
+    ],
+    ["SetEnvironmentVariable('A', 'x')", []],
+    ['SetEnvironmentVariable("A", $v0)', []],
+  ])("POWERSHELL_WRITE %j → %j", (text, expected) => {
+    expect(captures(POWERSHELL_WRITE, text)).toStrictEqual(expected);
   });
 
   test.each([

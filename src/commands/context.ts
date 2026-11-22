@@ -59,6 +59,11 @@ import type { CatalogAsset, McpServer } from "../features/asset-kinds/index.js";
 import type { AssetKind, PackageKind } from "../config/selection.js";
 import type { Harness, HookHarness } from "../harnesses/types.js";
 import type { Check } from "../features/doctor/index.js";
+import type {
+  UninstallOptions,
+  UninstallResult,
+} from "../features/uninstall/index.js";
+import type { UninstallSurvey } from "../features/uninstall/survey.js";
 import type { RepositoryStatus } from "../features/inspection/index.js";
 import type { FolderSummary } from "../features/workspace/assets.js";
 import type {
@@ -206,6 +211,9 @@ type FeatureFunctions = {
   ) => Promise<AdoptionResult>;
   listAdoptions: () => Promise<AdoptionSummary[]>;
   undoAdoption: (target: UndoTarget) => Promise<UndoResult>;
+
+  uninstallSurvey: () => Promise<UninstallSurvey>;
+  uninstall: (options: UninstallOptions) => Promise<UninstallResult>;
 
   listLocalAssets: () => Promise<LocalAssets>;
   moveLocalAssets: (options: MoveOptions) => Promise<MoveResult>;

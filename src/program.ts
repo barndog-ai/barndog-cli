@@ -117,6 +117,9 @@ import { registerEnvironment } from "./commands/environment.js";
 import { registerCapabilities } from "./commands/capabilities.js";
 import { registerWorkspace } from "./commands/workspace.js";
 import { registerAdopt } from "./commands/adopt.js";
+import { registerUninstall } from "./commands/uninstall.js";
+import { uninstall } from "./features/uninstall/index.js";
+import { uninstallSurvey } from "./features/uninstall/survey.js";
 import { registerAdd } from "./commands/add.js";
 import {
   commandNeeds,
@@ -174,6 +177,7 @@ const groups: [string, string[]][] = [
       "doctor",
       "harnesses",
       "adopt",
+      "uninstall",
     ],
   ],
   ["Assets:", ["skills", "mcp", "hooks", "sets", "knowledge"]],
@@ -491,6 +495,9 @@ export function createProgram(options: ProgramOptions = {}): Command {
     workspaceUrl: options.workspaceUrl ?? (() => workspaceUrl(runtime)),
     repoStatus: options.repoStatus ?? (() => repoStatus(runtime)),
     scanNative: options.scanNative ?? (() => scanNative(runtime)),
+    uninstallSurvey:
+      options.uninstallSurvey ?? (() => uninstallSurvey(runtime)),
+    uninstall: options.uninstall ?? ((choices) => uninstall(choices, runtime)),
     adoptNative:
       options.adoptNative ?? ((keys, keep) => adoptNative(keys, keep, runtime)),
     listAdoptions: options.listAdoptions ?? (() => listAdoptions(home)),
@@ -702,6 +709,7 @@ export function createProgram(options: ProgramOptions = {}): Command {
   registerSync(program, context);
   registerHarnesses(program, context);
   registerAdopt(program, context);
+  registerUninstall(program, context);
   registerStatus(program, context);
   registerEnvironment(program, context);
   registerCapabilities(program, context);

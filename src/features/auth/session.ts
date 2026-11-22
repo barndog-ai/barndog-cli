@@ -196,6 +196,36 @@ export async function logout(runtime: RuntimeContext) {
   return { server, revoked };
 }
 
+/** One server `signOutEverywhere()` signed out of. */
+export type SignedOut = { server: string; revoked: boolean };
+
+/**
+ * Ends every saved session: revokes each on its server where it can, and
+ * removes every local credential even where revocation failed.
+ */
+export async function signOutEverywhere(
+  runtime: RuntimeContext,
+): Promise<SignedOut[]> {
+  const { servers } = await readCredentials(runtime);
+
+  const results: SignedOut[] = [];
+  for (const [server, credential] of Object.entries(servers)) {
+    try {
+      await revokeSession(signInClient(server, runtime), credential.token);
+      results.push({ server, revoked: true });
+    } catch {
+      results.push({ server, revoked: false });
+    }
+  }
+
+  await updateCredentials(runtime, (credentials) => {
+    credentials.servers = {};
+    delete credentials.selectedServer;
+  });
+
+  return results;
+}
+
 /** Who this machine is signed in as, and on which server. */
 export type AuthStatus = { server: string; context: ActorContext };
 

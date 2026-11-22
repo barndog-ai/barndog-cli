@@ -61,6 +61,16 @@ Runs on **macOS, Linux, and Windows** with [Node.js](https://nodejs.org) 24 or n
 npm install -g barndog
 ```
 
+### Update
+
+```sh
+npm install -g barndog@latest
+barndog sync
+barndog --version
+```
+
+Run `barndog sync` after every update: it brings the session-start and Hook registrations in your coding tools in line with the new version.
+
 ## Quick start
 
 ```sh
@@ -95,6 +105,15 @@ BarnDog is careful with your existing setup:
 - Its own files live in `~/.barndog/`. Skills appear as links in each tool's skills folder, such as `~/.claude/skills/`.
 - Changes are journaled before they're applied, so an interrupted sync is finished safely on the next run.
 - Hook scripts run only inside your coding tools, after their own trust checks. Installing or syncing never runs them.
+
+## Uninstall
+
+```sh
+barndog uninstall
+npm uninstall -g barndog
+```
+
+Run `barndog uninstall` first. It asks whether to leave your Skills, MCP servers, and Hooks in your coding tools or remove them.
 
 ## Documentation
 

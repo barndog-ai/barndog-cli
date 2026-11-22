@@ -116,6 +116,11 @@ function defaultRoutes(home: string): Route[] {
 
   const routes: [string, string, Reply][] = [
     ["GET", "/v1/context", sample(contract.contextSchema)],
+    [
+      "DELETE",
+      "/v1/auth/cli/session",
+      () => new Response(null, { status: 204 }),
+    ],
     ["GET", "/v1/scopes", [sample(contract.scopeSchema)]],
     ["GET", "/v1/organization/members", [sample(contract.memberSchema)]],
     ["GET", "/v1/teams", [sample(contract.teamSchema)]],

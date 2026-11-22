@@ -1,7 +1,9 @@
 import type { McpDefinition } from "@barndog-ai/api-contract";
 import { hookSpecificContext, nestedHookEntry, secretRefs } from "./formats.js";
 import type { HookAdapter, KeptValues } from "./types.js";
+import { renamedVariablesOf } from "./read-renamed-variables.js";
 import { withRenamedVariables } from "./renamed-variables.js";
+import { asRecord, asStrings } from "../shared/values.js";
 
 /**
  * Codex forwards variables by name (`env_vars`, `env_http_headers`) instead of
@@ -50,6 +52,44 @@ function mcpServer(
       : server),
     ...(literal.length ? { env: values } : {}),
     env_vars: variables,
+  };
+}
+
+/**
+ * A Codex entry for `mcp add --from` and `adopt`, with a renaming wrapper
+ * (which sync wrote, and `uninstall --keep-setup` left behind) read back as
+ * the server it starts and a reference per renamed variable. The wrapper
+ * lists each source variable in `env_vars` to rename it, so those are
+ * dropped. A definition that also passed a source on under its own name
+ * can't be told apart from the entry, and comes back without that variable.
+ */
+function importedServer(
+  entry: Record<string, unknown>,
+): Record<string, unknown> {
+  const wrapped =
+    typeof entry.command === "string"
+      ? renamedVariablesOf({
+          command: entry.command,
+          args: asStrings(entry.args),
+        })
+      : undefined;
+
+  if (!wrapped) {
+    return entry;
+  }
+
+  const sources = new Set(wrapped.renamed.map(({ from }) => from));
+
+  return {
+    ...entry,
+    ...wrapped.server,
+    env: {
+      ...asRecord(entry.env),
+      ...Object.fromEntries(
+        wrapped.renamed.map(({ name, from }) => [name, `\${${from}}`]),
+      ),
+    },
+    env_vars: asStrings(entry.env_vars).filter((name) => !sources.has(name)),
   };
 }
 
@@ -113,6 +153,7 @@ export const codex: HookAdapter = {
     files: [".codex/config.toml"],
     path: ["mcp_servers"],
     server: mcpServer,
+    imported: importedServer,
     login: { command: ["codex", "mcp", "login"] },
   },
   configHome: {

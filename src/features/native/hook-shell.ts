@@ -86,6 +86,24 @@ export const hookCommand = (
   platform: NodeJS.Platform,
 ) => lineFor(harness, hookLine(root, command, harness, platform), platform);
 
+/**
+ * A command `hookCommand()` wrote for the folder `from`, rewritten to set the
+ * root variables to `to` instead; the Hook author's own command is kept as
+ * is. Undefined when the command doesn't start the way BarnDog writes it.
+ */
+export function movedHookCommand(
+  command: string,
+  folders: { from: string; to: string },
+  harness: HookHarness,
+  platform: NodeJS.Platform,
+): string | undefined {
+  const prefix = hookCommand(folders.from, "", harness, platform);
+
+  return command.startsWith(prefix)
+    ? hookCommand(folders.to, command.slice(prefix.length), harness, platform)
+    : undefined;
+}
+
 /** How `hooks test` runs a Hook: in the shell its tool would use. */
 export async function hookInvocation(
   root: string,

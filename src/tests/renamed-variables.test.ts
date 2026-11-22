@@ -6,10 +6,12 @@ import { expect, test } from "vitest";
 
 import type { McpDefinition } from "@barndog-ai/api-contract";
 import { adapters } from "../harnesses/registry.js";
+import { renamedVariablesOf } from "../harnesses/read-renamed-variables.js";
 import {
   withRenamedVariables,
   type RenamedVariable,
 } from "../harnesses/renamed-variables.js";
+import { convertServer } from "../features/mcps/import.js";
 
 /** A stand-in MCP server: prints what it received, then exits with `EXIT_CODE`. */
 const SERVER = `
@@ -248,3 +250,73 @@ test("Codex starts a server without renamed variables directly", () => {
     env_vars: ["GITHUB_HOST"],
   });
 });
+
+test.each(["linux", "win32"] as const)(
+  "on %s, a wrapper reads back as the exact server and variables it starts",
+  (platform) => {
+    const server = { command: "npx", args: ["-y", "pkg", ...awkward] };
+    const renamed = [
+      { name: "A", from: "B" },
+      { name: "B", from: "A" },
+      { name: "GITHUB_PERSONAL_ACCESS_TOKEN", from: "GITHUB_TOKEN" },
+    ];
+
+    expect(
+      renamedVariablesOf(withRenamedVariables(server, renamed, platform)),
+    ).toStrictEqual({ server, renamed });
+  },
+);
+
+test("only a wrapper exactly as BarnDog writes it reads back", () => {
+  const wrapper = withRenamedVariables(
+    { command: "npx", args: ["pkg"] },
+    [{ name: "A", from: "B" }],
+    "linux",
+  );
+
+  expect(renamedVariablesOf({ command: "npx", args: ["pkg"] })).toBeUndefined();
+  expect(
+    renamedVariablesOf({ command: "/bin/sh", args: ["-c", "exec npx"] }),
+  ).toBeUndefined();
+
+  expect(
+    renamedVariablesOf({
+      ...wrapper,
+      args: wrapper.args.map((arg) => arg.replace("exec", "echo hi; exec")),
+    }),
+  ).toBeUndefined();
+
+  expect(
+    renamedVariablesOf({
+      command: "powershell.exe",
+      args: ["-EncodedCommand", "aGk="],
+    }),
+  ).toBeUndefined();
+});
+
+test.each(["linux", "win32"] as const)(
+  "on %s, a Codex entry sync wrote imports as the definition it came from",
+  (platform) => {
+    const entry = adapters.codex.mcp.server(
+      mixed,
+      { SAVED_KEY: "sk-saved" },
+      platform,
+    );
+
+    const imported = adapters.codex.mcp.imported?.(entry);
+    const { definition, literals } = convertServer({
+      name: "github",
+      server: imported ?? {},
+    });
+
+    expect(definition).toStrictEqual({
+      ...mixed,
+      description: "github MCP server",
+      environment: { ...mixed.environment, API_KEY: { secretRef: "API_KEY" } },
+    });
+
+    expect(literals).toStrictEqual([
+      { key: "API_KEY", variable: "API_KEY", value: "sk-saved" },
+    ]);
+  },
+);

@@ -15,10 +15,10 @@ export default defineConfig({
       // Just below the measured numbers so coverage can't drop. Raise them as
       // gaps are filled. Code run only in child processes isn't counted.
       thresholds: {
-        statements: 94.8,
+        statements: 94.9,
         branches: 90.5,
-        functions: 95.1,
-        lines: 94.9,
+        functions: 95.2,
+        lines: 95.0,
       },
     },
   },
