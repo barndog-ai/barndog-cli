@@ -1,5 +1,4 @@
 import type { RuntimeContext } from "../../runtime.js";
-import { fileURLToPath } from "node:url";
 import { coerce, satisfies, validRange } from "semver";
 import {
   programOutput,
@@ -119,8 +118,8 @@ export function mcpEntry(
     key: server.name,
     value: adapters[harness].mcp.server(
       server.definition,
-      fileURLToPath(new URL("../../entry/mcp-launch.js", import.meta.url)),
       used,
+      runtime.platform,
     ),
     ...(Object.keys(used).length
       ? {

@@ -11,7 +11,6 @@ import type { KeptValues, PluginAdapter } from "./types.js";
  */
 function mcpServer(
   definition: McpDefinition,
-  _launcher: string,
   kept: KeptValues,
 ): Record<string, unknown> {
   const references = valuesOrReferences(

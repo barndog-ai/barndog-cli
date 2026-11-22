@@ -193,11 +193,19 @@ test("MCP adapters retain secret references and support Codex environment aliase
       harness,
       { id, name: "docs" },
       definition,
-      testRuntime("/fixture"),
+      testRuntime("/fixture", { platform: "linux" }),
     );
 
     if (harness === "codex") {
-      expect(result.value.command).toBe(process.execPath);
+      // Codex can't rename, so the system shell does; nothing points into BarnDog.
+      expect(result.value.command).toBe("/bin/sh");
+      expect(result.value.args).toStrictEqual([
+        "-c",
+        ': "${COMPANY_DOCS_TOKEN:?COMPANY_DOCS_TOKEN is not set}"; exec /usr/bin/env \'API_KEY=\'"$COMPANY_DOCS_TOKEN" "$0" "$@"',
+        "node",
+        "server.js",
+      ]);
+
       expect(result.value.env_vars).toStrictEqual(["COMPANY_DOCS_TOKEN"]);
     } else {
       expect(result.value.env).toStrictEqual({

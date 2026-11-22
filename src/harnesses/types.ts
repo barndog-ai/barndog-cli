@@ -112,13 +112,13 @@ type McpProfile = {
    * One server entry in the tool's own format. A variable in `kept` (the
    * values BarnDog keeps on this machine) is written as its value, the way the
    * tool stores values it's given; every other one stays a reference to a
-   * local environment variable. `launcher` is BarnDog's script that starts a
-   * stdio server with renamed variables, for a tool that can't rename them.
+   * local environment variable. `platform` picks the shell for a tool that
+   * starts renamed variables through one.
    */
   server: (
     definition: McpDefinition,
-    launcher: string,
     kept: KeptValues,
+    platform: NodeJS.Platform,
   ) => Record<string, unknown>;
   login: McpLogin;
 };

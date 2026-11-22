@@ -157,18 +157,15 @@ test("kept values are written into every tool, and state.json records only their
     env_vars: ["REGION", "HOME"],
   });
 
-  // HOME_DIR is renamed, so Codex starts the launcher; it forwards only what isn't kept.
-  const launched = JSON.parse(
-    Buffer.from(
-      String((codex.mcp_servers.tickets!.args as string[])[1]),
-      "base64url",
-    ).toString(),
-  );
-
-  expect(Object.keys(launched.environment).sort()).toStrictEqual([
-    "HOME_DIR",
-    "REGION",
-  ]);
+  // HOME_DIR is renamed, so Codex starts the server through the system shell,
+  // which renames only that one; the kept API_KEY stays in `env`.
+  if (process.platform !== "win32") {
+    const [, script, ...server] = codex.mcp_servers.tickets!.args as string[];
+    expect(codex.mcp_servers.tickets!.command).toBe("/bin/sh");
+    expect(script).toContain(`'HOME_DIR='"$HOME"`);
+    expect(script).not.toMatch(/REGION|API_KEY/);
+    expect(server).toStrictEqual(["tickets"]);
+  }
 
   expect(codex.mcp_servers.web).toMatchObject({
     http_headers: { "X-Key": secret },
