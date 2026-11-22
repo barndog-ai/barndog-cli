@@ -71,7 +71,13 @@ import type {
   MigrationReport,
 } from "../features/migration/migrate.js";
 import type { PackageDetails } from "../features/inventory/show.js";
-import type { KeptValueChange, KeptVariable } from "../features/mcps/values.js";
+import type {
+  KeptValueChange,
+  KeptVariable,
+  ServerVariable,
+} from "../features/mcps/values.js";
+import type { KeptValue } from "../features/secrets/index.js";
+import type { KeptChoice } from "../features/mcps/import.js";
 import type {
   LocalAssets,
   MoveOptions,
@@ -207,7 +213,7 @@ type FeatureFunctions = {
   scanNative: () => Promise<NativeScan>;
   adoptNative: (
     keys: readonly string[],
-    keep: readonly string[],
+    keep: readonly KeptChoice[],
   ) => Promise<AdoptionResult>;
   listAdoptions: () => Promise<AdoptionSummary[]>;
   undoAdoption: (target: UndoTarget) => Promise<UndoResult>;
@@ -223,8 +229,13 @@ type FeatureFunctions = {
     options: { force?: boolean; dryRun?: boolean },
   ) => Promise<ImportUpdate[]>;
 
-  keepMcpValue: (variable: string, value: string) => Promise<KeptValueChange>;
-  forgetMcpValue: (variable: string) => Promise<KeptValueChange>;
+  keepMcpValue: (
+    target: ServerVariable,
+    kept: KeptValue,
+  ) => Promise<KeptValueChange>;
+  assignKeptValue: (target: ServerVariable) => Promise<KeptValueChange>;
+  forgetMcpValue: (target: ServerVariable) => Promise<KeptValueChange>;
+  forgetUnassignedValue: (variable: string) => Promise<KeptValueChange>;
   listKeptValues: () => Promise<KeptVariable[]>;
   showPackage: (
     kind: PackageKind,

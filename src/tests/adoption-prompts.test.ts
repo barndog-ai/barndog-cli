@@ -238,7 +238,7 @@ test("adopt in a terminal opens the picker, and reports when there's nothing", a
 test("adopting asks once per value which ones BarnDog keeps, and passes the answer on", async () => {
   vi.mocked(checkbox)
     .mockResolvedValueOnce(["claude/mcp/github"])
-    .mockResolvedValueOnce(["TOKEN"]);
+    .mockResolvedValueOnce([{ server: "github", variable: "TOKEN" }]);
 
   vi.mocked(confirm).mockResolvedValue(true);
   const lines: string[] = [];
@@ -265,9 +265,15 @@ test("adopting asks once per value which ones BarnDog keeps, and passes the answ
   );
 
   expect(asked.choices).toStrictEqual([
-    expect.objectContaining({ value: "TOKEN", checked: true }),
+    expect.objectContaining({
+      value: { server: "github", variable: "TOKEN" },
+      checked: true,
+    }),
   ]);
 
   expect(lines.join("\n")).toMatch(/never uploaded/);
-  expect(adoptNative).toHaveBeenCalledWith(["claude/mcp/github"], ["TOKEN"]);
+  expect(adoptNative).toHaveBeenCalledWith(
+    ["claude/mcp/github"],
+    [{ server: "github", variable: "TOKEN" }],
+  );
 });

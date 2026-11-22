@@ -28,7 +28,16 @@ import { environmentCatalog } from "../server/catalog.js";
 import { parsed } from "../server/client.js";
 import { synchronize } from "../environment/sync.js";
 import { locked } from "../environment/transaction.js";
-import { assetPath, stableId, type RepoAsset } from "../workspace/format.js";
+import {
+  assetPath,
+  repoAssetId,
+  stableId,
+  type RepoAsset,
+} from "../workspace/format.js";
+import {
+  updateKeptValues,
+  withMovedServers,
+} from "../environment/kept-values.js";
 import { checkRepositoryUrl, cloneOrigin, git } from "../workspace/git.js";
 import {
   connectGitWorkspace,
@@ -284,12 +293,25 @@ function candidateFiles(
   }));
 }
 
+/**
+ * Each moved MCP server's local asset ID → its shared copy's, filled in by a
+ * move as it copies them, so kept values can follow a copy that stays local.
+ */
+type SharedIds = Map<string, string>;
+
+/** The assets to copy into a shared workspace, and the scope to copy them to. */
+type CopyRequest = {
+  items: Candidate[];
+  to: string | undefined;
+  sharedIds?: SharedIds;
+};
+
 async function moveToGit(
   workspace: GitWorkspace,
-  items: Candidate[],
-  to: string | undefined,
+  move: CopyRequest,
   runtime: RuntimeContext,
 ): Promise<MoveResult> {
+  const { items, to, sharedIds = new Map<string, string>() } = move;
   const { home } = runtime;
 
   const shared = await gitRepoSource(workspace, runtime).model();
@@ -403,15 +425,24 @@ async function moveToGit(
     })),
   );
 
+  for (const { item } of moving) {
+    if (item.kind === "mcp") {
+      sharedIds.set(
+        item.id,
+        repoAssetId(workspace.workspaceId, "mcp", scope, item.name),
+      );
+    }
+  }
+
   return result;
 }
 
 async function moveToCloud(
   conn: Connection,
-  items: Candidate[],
-  to: string | undefined,
+  move: CopyRequest,
   runtime: RuntimeContext,
 ): Promise<MoveResult> {
+  const { items, to, sharedIds = new Map<string, string>() } = move;
   const scope = await selectOrigin(to ?? "me", conn, runtime);
   if (!scope.canPublish) {
     throw new CliError(
@@ -490,7 +521,10 @@ async function moveToCloud(
       };
 
       if (asset.kind === "mcp") {
-        await publishMcp(asset, scope, conn, runtime);
+        sharedIds.set(
+          item.id,
+          (await publishMcp(asset, scope, conn, runtime)).id,
+        );
       } else {
         await publishPackage(
           { ...asset, kind: asset.kind },
@@ -518,6 +552,23 @@ async function moveToCloud(
     originId: scope.id,
     direct: true,
   };
+}
+
+/**
+ * A shared copy that sits beside its local server starts with the local one's
+ * kept values; after that each keeps its own. A full move carries them over
+ * when sync finishes it (`environment/moves.ts`).
+ */
+async function copyKeptValues(sharedIds: SharedIds, runtime: RuntimeContext) {
+  const copies = [...sharedIds].map(([from, to]) => ({ from, to, copy: true }));
+  if (!copies.length) {
+    return;
+  }
+
+  await updateKeptValues(
+    (secrets) => withMovedServers(secrets, copies),
+    runtime,
+  );
 }
 
 /** A one-off destination (`--repo`, `--server`) leaves this machine as it is, so it only copies. */
@@ -614,12 +665,13 @@ export function moveLocalAssets(
       options.kind,
     );
 
+    // Only this machine's own workspace: a one-off destination isn't installed here.
+    const sharedIds: SharedIds = new Map();
     const moveItems = async () => {
       if (options.repo) {
         return moveToGit(
           await repoDestination(options.repo, runtime),
-          items,
-          options.to,
+          { items, to: options.to },
           runtime,
         );
       }
@@ -627,17 +679,24 @@ export function moveLocalAssets(
       if (options.server) {
         return moveToCloud(
           await serverDestination(options.server, runtime),
-          items,
-          options.to,
+          { items, to: options.to },
           runtime,
         );
       }
 
       if (settings.gitWorkspace) {
-        return moveToGit(settings.gitWorkspace, items, options.to, runtime);
+        return moveToGit(
+          settings.gitWorkspace,
+          { items, to: options.to, sharedIds },
+          runtime,
+        );
       }
 
-      return moveToCloud(await connection(runtime), items, options.to, runtime);
+      return moveToCloud(
+        await connection(runtime),
+        { items, to: options.to, sharedIds },
+        runtime,
+      );
     };
 
     const result = await moveItems();
@@ -648,6 +707,8 @@ export function moveLocalAssets(
     const moved = result.rows.filter((row) => row.status === "moved");
     if (!result.keepLocal) {
       result.removed = await finishMove(overlay.label, result, moved, items);
+    } else {
+      await copyKeptValues(sharedIds, runtime);
     }
 
     if (moved.length) {

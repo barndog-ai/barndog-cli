@@ -27,8 +27,8 @@ import {
 import { gitVersions } from "../collaboration/workspace-git.js";
 import type { PackageVersion } from "../collaboration/results.js";
 import { adapters } from "../../harnesses/registry.js";
-import { unsetVariables } from "../../harnesses/formats.js";
-import { readSecrets } from "../secrets/index.js";
+import { missingValues } from "../secrets/index.js";
+import { keptValues } from "../environment/kept-values.js";
 import type { Harness } from "../../harnesses/types.js";
 import { patchNative, type NativeEntry } from "../native/configuration.js";
 import { fileText, inputJson } from "../../shared/files.js";
@@ -146,7 +146,11 @@ export async function showMcp(
   ): Promise<ShownMcp> => ({
     ...asset,
     unsetVariables: definition
-      ? unsetVariables(definition, await readSecrets(runtime), runtime.env)
+      ? missingValues(
+          definition,
+          (await keptValues(runtime)).servers[asset.id] ?? {},
+          runtime.env,
+        ).map((missing) => missing.variable)
       : [],
   });
 

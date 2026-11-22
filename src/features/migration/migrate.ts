@@ -29,6 +29,11 @@ import { environmentCatalog } from "../server/catalog.js";
 import type { ApiScope } from "../server/origin.js";
 import { parsed } from "../server/client.js";
 import { synchronize } from "../environment/sync.js";
+import {
+  keptValues,
+  updateKeptValues,
+  withMovedServers,
+} from "../environment/kept-values.js";
 import { locked } from "../environment/transaction.js";
 import { openRepoSource } from "../workspace/workspace-source.js";
 import { connectionContext } from "../auth/session.js";
@@ -185,6 +190,29 @@ function carryNames(
   delete next.localNames;
   if (Object.keys(carried).length) {
     next.localNames = carried;
+  }
+}
+
+/** Kept MCP values follow their servers to Cloud; a kept local folder's stay as they are. */
+async function carryKeptValues(
+  cloudId: CloudId,
+  kept: WorkspaceModel | undefined,
+  runtime: RuntimeContext,
+) {
+  const { servers } = await keptValues(runtime);
+  const moves = Object.keys(servers).flatMap((from) => {
+    const to = kept?.assets.some((asset) => asset.id === from)
+      ? undefined
+      : cloudId(from);
+
+    return to ? [{ from, to, copy: false }] : [];
+  });
+
+  if (moves.length) {
+    await updateKeptValues(
+      (secrets) => withMovedServers(secrets, moves),
+      runtime,
+    );
   }
 }
 
@@ -441,6 +469,7 @@ export async function migrate(
     carryNames(next, settings.localNames, cloudId, kept);
 
     await saveSettings(next, home);
+    await carryKeptValues(cloudId, kept, runtime);
     // Not the Cloud catalog fetched above: a kept local folder's assets are
     // selected too, and only the full source (Cloud plus that folder) has them.
     await synchronize(undefined, runtime, next);

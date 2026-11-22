@@ -12,6 +12,7 @@ import {
   localMcpNamed,
   parseMcpText,
   type ImportedServer,
+  type KeptChoice,
   type LiteralValue,
 } from "../features/mcps/import.js";
 import { assetKinds } from "../features/asset-kinds/index.js";
@@ -116,7 +117,7 @@ async function serversToAdd(
 async function chooseKept(
   found: { server: string; literal: LiteralValue }[],
   context: AddContext,
-): Promise<string[]> {
+): Promise<KeptChoice[]> {
   if (!found.length || !context.interactive) {
     return [];
   }
@@ -127,15 +128,23 @@ async function chooseKept(
     ),
   );
 
-  return context.prompts.chooseMany(
+  const picked = await context.prompts.chooseMany(
     "Which values should BarnDog keep on this machine?",
-    found.map(({ server, literal }) => ({
+    found.map(({ server, literal }, index) => ({
       name: `${literal.variable}  ${dim(`${server}: ${literal.key}`)}`,
       short: literal.variable,
-      value: literal.variable,
+      value: String(index),
       checked: true,
     })),
   );
+
+  return picked.flatMap((index) => {
+    const choice = found[Number(index)];
+
+    return choice
+      ? [{ server: choice.server, variable: choice.literal.variable }]
+      : [];
+  });
 }
 
 /** Why a server can't be added under `name` here, or null when it can. */

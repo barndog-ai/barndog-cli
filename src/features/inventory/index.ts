@@ -21,12 +21,13 @@ import {
 import { cloudSource } from "../workspace/cloud-source.js";
 import type { RepoSource } from "../workspace/repo-source.js";
 import type { AssetReference } from "../asset-selection/types.js";
-import { unsetVariables } from "../../harnesses/formats.js";
-import { readSecrets } from "../secrets/index.js";
+import { secretRefs } from "../../harnesses/formats.js";
+import { missingValues, type Secrets } from "../secrets/index.js";
+import { keptValues } from "../environment/kept-values.js";
 import { resolveAssets } from "../asset-selection/index.js";
 import { installedName, resolveClashes } from "../environment/names.js";
 import { originLabel, scopes } from "../server/origin.js";
-import type { Harness, KeptValues } from "../../harnesses/types.js";
+import type { Harness } from "../../harnesses/types.js";
 import type { AssetKind } from "../../config/selection.js";
 import { isAssetKind } from "../asset-kinds/index.js";
 import { isHarness } from "../../harnesses/registry.js";
@@ -55,6 +56,8 @@ export type InventoryItem = {
    * variables the server refers to that have no value on this machine.
    */
   unsetVariables?: string[];
+  /** MCP servers only, when checked: every variable the server refers to. */
+  variables?: string[];
 };
 
 export type InventoryOptions = {
@@ -142,25 +145,37 @@ function variableCheck(input: {
 }): (entry: {
   asset: AssetReference;
   enabled: boolean;
-}) => Promise<Pick<InventoryItem, "unsetVariables">> {
+}) => Promise<Pick<InventoryItem, "unsetVariables" | "variables">> {
   const { settings, repo, overlay, runtime } = input;
   const conn = settings.connection;
   const primary = repo ?? (conn ? cloudSource(conn, runtime) : undefined);
   const source = primary && overlay ? withOverlay(primary, overlay) : primary;
-  let kept: Promise<KeptValues> | undefined;
+  let kept: Promise<Secrets> | undefined;
 
   return async ({ asset, enabled }) => {
-    if (!input.wanted || !source || asset.kind !== "mcp" || !enabled) {
+    if (!input.wanted || !source || asset.kind !== "mcp") {
       return {};
     }
 
     // Read once, and only when some server needs checking.
-    kept ??= readSecrets(runtime);
-    const values = await kept;
+    kept ??= keptValues(runtime);
+    const values = (await kept).servers[asset.id] ?? {};
     const definition = await source.mcpDefinition(asset);
+    const variables = [
+      ...new Set(
+        Object.values(secretRefs(definition)).map((ref) => ref.secretRef),
+      ),
+    ];
 
     return {
-      unsetVariables: unsetVariables(definition, values, runtime.env),
+      variables,
+      ...(enabled
+        ? {
+            unsetVariables: missingValues(definition, values, runtime.env).map(
+              (missing) => missing.variable,
+            ),
+          }
+        : {}),
     };
   };
 }

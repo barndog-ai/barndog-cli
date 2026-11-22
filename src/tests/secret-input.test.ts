@@ -1,8 +1,21 @@
 import { expect, test, vi } from "vitest";
+import confirm from "@inquirer/confirm";
 import input from "@inquirer/input";
-import { askSecret, readStdin } from "../ui/secret-input.js";
+import { askSecret, askUseUnassigned, readStdin } from "../ui/secret-input.js";
 
 vi.mock("@inquirer/input", () => ({ default: vi.fn() }));
+vi.mock("@inquirer/confirm", () => ({ default: vi.fn() }));
+
+test("reusing an unassigned value is asked about by name, yes by default", async () => {
+  vi.mocked(confirm).mockResolvedValue(false);
+
+  expect(await askUseUnassigned("REGION")).toBe(false);
+  expect(vi.mocked(confirm).mock.calls[0]![0]).toMatchObject({
+    message:
+      "BarnDog already keeps a value for REGION that no server has. Use it?",
+    default: true,
+  });
+});
 
 test("the prompt masks every character and names the variable", async () => {
   vi.mocked(input).mockResolvedValue("typed");

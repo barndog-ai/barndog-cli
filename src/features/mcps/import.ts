@@ -30,7 +30,13 @@ import { validMcpName, VARIABLE_NAME } from "../../shared/patterns.js";
 import { assetKinds } from "../asset-kinds/index.js";
 import { LOCAL_ORIGIN } from "../workspace/overlay.js";
 import { ensureLocalWorkspace } from "../imports/local.js";
-import { updateSecrets } from "../secrets/index.js";
+import {
+  keptValues,
+  updateKeptValues,
+  withServerValues,
+} from "../environment/kept-values.js";
+import { localRepoSource } from "../workspace/repo-source.js";
+import { defined } from "../../shared/lookup.js";
 import { asRecord, asStrings, isRecord } from "../../shared/values.js";
 import { barndogPaths } from "../../config/paths.js";
 
@@ -170,17 +176,78 @@ export type LiteralValue = { key: string; variable: string; value: string };
  */
 export type McpValue = { server: string; variable: string; kept: boolean };
 
-/** Each literal of one server, and whether BarnDog keeps it. `keep` holds the variables it keeps. */
+/** A literal value the developer chose to keep: the server it came from and the variable it now is. */
+export type KeptChoice = { server: string; variable: string };
+
+const isKept = (
+  keep: readonly KeptChoice[],
+  server: string,
+  variable: string,
+) =>
+  keep.some(
+    (choice) => choice.server === server && choice.variable === variable,
+  );
+
+/** Each literal of one server, and whether BarnDog keeps it. */
 export function literalValues(
   server: string,
   literals: readonly LiteralValue[],
-  keep: readonly string[],
+  keep: readonly KeptChoice[],
 ): McpValue[] {
   return literals.map((literal) => ({
     server,
     variable: literal.variable,
-    kept: keep.includes(literal.variable),
+    kept: isKept(keep, server, literal.variable),
   }));
+}
+
+/**
+ * Keeps the chosen literal values for the server each came from, by its asset
+ * ID, and returns how to put back the values those servers had before.
+ */
+export async function keepLiteralValues(
+  servers: readonly {
+    id: string;
+    name: string;
+    literals: readonly LiteralValue[];
+  }[],
+  keep: readonly KeptChoice[],
+  runtime: RuntimeContext,
+): Promise<() => Promise<void>> {
+  const chosen = servers.flatMap((server) =>
+    server.literals
+      .filter((literal) => isKept(keep, server.name, literal.variable))
+      .map((literal) => ({ id: server.id, ...literal })),
+  );
+
+  if (!chosen.length) {
+    return async () => {};
+  }
+
+  const before = await keptValues(runtime);
+  await updateKeptValues(
+    (secrets) =>
+      chosen.reduce(
+        (next, { id, variable, value }) =>
+          withServerValues(next, id, { [variable]: { value } }),
+        secrets,
+      ),
+    runtime,
+  );
+
+  return async () => {
+    await updateKeptValues(
+      (secrets) =>
+        chosen.reduce(
+          (next, { id, variable }) =>
+            withServerValues(next, id, {
+              [variable]: before.servers[id]?.[variable] ?? null,
+            }),
+          secrets,
+        ),
+      runtime,
+    );
+  };
 }
 
 /** Secrets are named, never shared: every literal becomes a variable the definition refers to. */
@@ -532,8 +599,8 @@ export async function addMcpServers(
   servers: ConvertedServer[],
   options: {
     replace?: boolean;
-    /** Variables whose literal values BarnDog keeps on this machine. */
-    keep: readonly string[];
+    /** The literal values BarnDog keeps on this machine. */
+    keep: readonly KeptChoice[];
   },
   runtime: RuntimeContext,
 ): Promise<AddedServers> {
@@ -616,16 +683,22 @@ export async function addMcpServers(
     }
 
     // Saved before the sync, which writes them into the tools' settings.
-    const kept = servers.flatMap((s) =>
-      s.literals.filter((literal) => options.keep.includes(literal.variable)),
+    const model = await localRepoSource(workspace, runtime).model();
+    await keepLiteralValues(
+      servers.map((server) => ({
+        ...server,
+        id: defined(
+          model.assets.find(
+            (asset) =>
+              asset.kind === "mcp" &&
+              asset.path === `org/mcp/${server.name}.yaml`,
+          )?.id,
+          `The local folder has no ${server.name} after writing it`,
+        ),
+      })),
+      options.keep,
+      runtime,
     );
-
-    if (kept.length) {
-      await updateSecrets(
-        Object.fromEntries(kept.map((l) => [l.variable, l.value])),
-        runtime,
-      );
-    }
 
     const events = await synchronize(undefined, runtime, undefined, {
       prompt: false,

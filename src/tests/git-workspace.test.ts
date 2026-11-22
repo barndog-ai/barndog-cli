@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { fileExecutable, bashShell, directoryLinkType } from "../platform.js";
 import { inspectNative, registeredHook } from "./native.js";
 import { testRuntime } from "./runtime.js";
+import { changeSecrets, readStoredSecrets } from "../features/secrets/index.js";
 import { HTTP_STATUS, POSIX_MODE } from "../shared/constants.js";
 
 import { assert, expect, test, type TestContext } from "vitest";
@@ -2145,6 +2146,44 @@ test("moving to cloud defaults to personal and keeps knowledge within permission
   ]);
 
   expect(result.rows[1]!.detail!).toMatch(/organization-wide/);
+});
+
+test("a Git copy that stays local starts with the local server's kept values under the ID it gets once merged", async (t) => {
+  const { root, url, clone } = await teamRepo(t);
+  const home = join(root, "dev");
+  const folder = await setupLocal(home);
+  await write(folder, "org/mcp/search.yaml", mcpYaml);
+  await setupGit(url, home, "keep");
+  const runtime = testRuntime(home);
+  const localId = (await inventory(runtime)).items.find(
+    (item) => item.name === "search",
+  )!.id;
+
+  const kept = { DOCS_TOKEN: { value: "sk" } };
+  await changeSecrets(
+    () => ({ servers: { [localId]: kept }, unassigned: {} }),
+    runtime,
+  );
+
+  const result = await moveLocalAssets(
+    { keepLocal: true, names: ["search"] },
+    runtime,
+  );
+
+  await run(clone, "fetch", "origin");
+  await run(clone, "merge", "--no-edit", `origin/${result.branch}`);
+  await run(clone, "push", "origin", "main");
+  await synchronize(undefined, runtime, undefined, { prompt: false });
+
+  const sharedId = (await inventory(runtime)).items.find(
+    (item) => item.name === "search" && item.id !== localId,
+  )!.id;
+
+  expect(await readStoredSecrets(runtime)).toStrictEqual({
+    version: 2,
+    servers: { [localId]: kept, [sharedId]: kept },
+    unassigned: {},
+  });
 });
 
 const noPrompts: AddPrompts = {

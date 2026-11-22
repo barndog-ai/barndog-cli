@@ -26,6 +26,7 @@ import type {
   AssetReference,
 } from "../features/asset-selection/types.js";
 import type { SelectionState } from "../config/selection.js";
+import { changeSecrets, readStoredSecrets } from "../features/secrets/index.js";
 import { testRuntime } from "./runtime.js";
 
 const skill = (name: string, body = "Body.") =>
@@ -114,7 +115,17 @@ async function fixture(t: TestContext) {
   const saved = async () =>
     (await readSettings(home))?.environment?.individualAssetIds ?? [];
 
-  return { local, write, shared, reference, assets, settle, saved, idOf };
+  return {
+    local,
+    write,
+    shared,
+    reference,
+    assets,
+    settle,
+    saved,
+    idOf,
+    runtime,
+  };
 }
 
 test("a move recorded without its version removes a local copy identical to the shared one", async (t) => {
@@ -173,6 +184,38 @@ test("a move recorded without its version removes a local copy identical to the 
   );
 
   expect(await readMoved(f.local.path)).toStrictEqual([]);
+});
+
+test("a moved MCP server's kept values follow it to the shared copy", async (t) => {
+  const f = await fixture(t);
+  await f.write(
+    "org/mcp/docs.yaml",
+    "transport: stdio\ncommand: docs\nargs: []\nenvironment: {}\ndescription: Docs\nauthentication: none\n",
+  );
+
+  const local = (await localRepoSource(f.local, f.runtime).model()).assets.find(
+    (asset) => asset.path === "org/mcp/docs.yaml",
+  )!.id;
+
+  await changeSecrets(
+    () => ({
+      servers: { [local]: { API_KEY: { value: "sk" } } },
+      unassigned: {},
+    }),
+    f.runtime,
+  );
+
+  f.assets.push(f.reference("mcp", "docs"));
+  await recordMoved(f.local.path, [
+    { kind: "mcp", name: "docs", path: "org/mcp/docs.yaml", originId: team },
+  ]);
+
+  await f.settle();
+  expect(await readStoredSecrets(f.runtime)).toStrictEqual({
+    version: 2,
+    servers: { [f.idOf("docs")]: { API_KEY: { value: "sk" } } },
+    unassigned: {},
+  });
 });
 
 test("a move still waiting for its shared copy stays recorded and says so", async (t) => {

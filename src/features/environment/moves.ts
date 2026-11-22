@@ -11,6 +11,11 @@ import { isDeepStrictEqual } from "node:util";
 
 import type { SelectionState } from "../../config/selection.js";
 import { resolveAssets } from "../asset-selection/index.js";
+import {
+  updateKeptValues,
+  withMovedServers,
+  type ServerMove,
+} from "./kept-values.js";
 import type { AssetCatalog, AssetReference } from "../asset-selection/types.js";
 import { forgetImport } from "../imports/local.js";
 import { saveSettings, type Settings } from "../../config/settings.js";
@@ -123,6 +128,19 @@ async function removeLocal(entry: MovedAsset, input: SettleInput) {
   await forgetImport(input.overlay.label, entry.kind, entry.name);
 }
 
+/** Kept MCP values follow each moved server to its shared copy. */
+async function carryKeptValues(
+  servers: readonly ServerMove[],
+  runtime: RuntimeContext,
+) {
+  if (servers.length) {
+    await updateKeptValues(
+      (secrets) => withMovedServers(secrets, servers),
+      runtime,
+    );
+  }
+}
+
 async function settleMoves(input: SettleInput): Promise<SettledMoves> {
   const records = await readMoved(input.overlay.label);
   if (!records.length) {
@@ -141,6 +159,7 @@ async function settleMoves(input: SettleInput): Promise<SettledMoves> {
   const finished: string[] = [];
 
   const removals: MovedAsset[] = [];
+  const servers: (ServerMove & { kind: MovedAsset["kind"] })[] = [];
 
   const finish = (entry: MovedAsset, keep: boolean) => {
     finished.push(entry.path);
@@ -195,7 +214,15 @@ async function settleMoves(input: SettleInput): Promise<SettledMoves> {
       continue;
     }
 
-    finish(entry, !(await unchanged(entry, local, shared, input)));
+    const keep = !(await unchanged(entry, local, shared, input));
+    servers.push({
+      kind: entry.kind,
+      from: local.id,
+      to: shared.id,
+      copy: keep,
+    });
+
+    finish(entry, keep);
   }
 
   const selection =
@@ -206,6 +233,11 @@ async function settleMoves(input: SettleInput): Promise<SettledMoves> {
   if (input.persist && finished.length) {
     // Saved first, so an interrupted sync can't leave an asset with neither copy.
     await input.saveSelection(selection);
+    await carryKeptValues(
+      servers.filter((server) => server.kind === "mcp"),
+      input.runtime,
+    );
+
     for (const entry of removals) {
       await removeLocal(entry, input);
     }

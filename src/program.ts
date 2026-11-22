@@ -138,7 +138,9 @@ import { defined } from "./shared/lookup.js";
 import { barndogPaths } from "./config/paths.js";
 import { showPackage } from "./features/inventory/show.js";
 import {
+  assignKeptValue,
   forgetMcpValue,
+  forgetUnassignedValue,
   keepMcpValue,
   listKeptValues,
 } from "./features/mcps/values.js";
@@ -523,10 +525,14 @@ export function createProgram(options: ProgramOptions = {}): Command {
       ((kind, name, options) => updateImported(kind, name, options, runtime)),
     keepMcpValue:
       options.keepMcpValue ??
-      ((variable, value) => keepMcpValue(variable, value, runtime)),
+      ((target, kept) => keepMcpValue(target, kept, runtime)),
+    assignKeptValue:
+      options.assignKeptValue ?? ((target) => assignKeptValue(target, runtime)),
     forgetMcpValue:
-      options.forgetMcpValue ??
-      ((variable) => forgetMcpValue(variable, runtime)),
+      options.forgetMcpValue ?? ((target) => forgetMcpValue(target, runtime)),
+    forgetUnassignedValue:
+      options.forgetUnassignedValue ??
+      ((variable) => forgetUnassignedValue(variable, runtime)),
     listKeptValues: options.listKeptValues ?? (() => listKeptValues(runtime)),
     showPackage:
       options.showPackage ??

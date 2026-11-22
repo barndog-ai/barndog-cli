@@ -274,22 +274,35 @@ describe("notices", () => {
     ]);
   });
 
-  test("a variable with no value names the servers that need it and how to set it", () => {
+  test("a variable with no value names its server and how to set it", () => {
     expect(
       renderSyncOutput([
         {
           type: "unset-variable",
+          server: "davinci-resolve",
           variable: "RESOLVE_SCRIPT_API",
-          servers: ["davinci-resolve", "render"],
         },
+        {
+          type: "unset-variable",
+          server: "github",
+          variable: "GITHUB_PAT",
+          from: "GITHUB_TOKEN",
+        },
+        { type: "unassigned-value", variable: "STRAY" },
       ]),
     ).toEqual([
       TITLE,
       "✔ Sync complete",
       "Everything is up to date.",
       "",
-      "! RESOLVE_SCRIPT_API has no value here, so davinci-resolve, render can't use it.",
-      "  Fix: barndog mcp env set RESOLVE_SCRIPT_API",
+      "! RESOLVE_SCRIPT_API has no value here, so davinci-resolve can't use it.",
+      "  Fix: barndog mcp env set davinci-resolve RESOLVE_SCRIPT_API",
+      "",
+      "! GITHUB_TOKEN has no value here, so github can't read GITHUB_PAT from it.",
+      "  Fix: barndog mcp env set github GITHUB_PAT",
+      "",
+      "! BarnDog keeps a value for STRAY from before each value belonged to one MCP server, and no server has it yet.",
+      "  Fix: barndog mcp env set <server> STRAY",
       "",
     ]);
   });

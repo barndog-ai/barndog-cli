@@ -76,7 +76,7 @@ export function renderMcpValues(values: readonly McpValue[]): string[] {
   if (unset.length) {
     output.push(
       "",
-      `${warn("!")} BarnDog doesn't keep these values. Set each in your environment, or keep it with ${bold("barndog mcp env set <variable>")}:`,
+      `${warn("!")} BarnDog doesn't keep these values. Set each in your environment, or keep it with ${bold("barndog mcp env set <server> <variable>")}:`,
       ...table(unset),
     );
   }
@@ -100,7 +100,7 @@ export function unsetVariableNotes(
     const [only] = variables;
     const fix =
       variables.length === 1 && only
-        ? `barndog mcp env set ${clean(only)}`
+        ? `barndog mcp env set ${clean(name)} ${clean(only)}`
         : `barndog mcp show ${clean(name)}`;
 
     return [
@@ -144,7 +144,7 @@ export function renderMcp(value: unknown): string[] {
   const problems = unset.flatMap((variable) => [
     "",
     `${warn("!")} ${bold(clean(variable))} has no value here, so ${clean(mcp.name)} can't use it.`,
-    `  ${hint(`barndog mcp env set ${clean(variable)}`, "Fix")}`,
+    `  ${hint(`barndog mcp env set ${clean(mcp.name)} ${clean(variable)}`, "Fix")}`,
   ]);
 
   return [

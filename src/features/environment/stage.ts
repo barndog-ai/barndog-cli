@@ -22,13 +22,18 @@ import {
   isHookHarness,
   skillDirectory,
 } from "../../harnesses/registry.js";
-import type { Harness, KeptValues } from "../../harnesses/types.js";
-import { unsetVariables } from "../../harnesses/formats.js";
+import type { Harness } from "../../harnesses/types.js";
 import { isInside } from "../../shared/files.js";
 import { defined } from "../../shared/lookup.js";
 import type { SelectionResult } from "../asset-selection/types.js";
 import { hookEntries, hookIssue, mcpEntry } from "../native/adapters.js";
 import type { NativeEntry } from "../native/configuration.js";
+import {
+  applyKeptValues,
+  missingValues,
+  type Secrets,
+  type ServerValues,
+} from "../secrets/index.js";
 import { desiredEntries, installedPath } from "../workspace/installed.js";
 import type { WorkspaceSource } from "../workspace/source.js";
 import type { SyncEvent } from "./events.js";
@@ -43,26 +48,31 @@ export type StagedAssets = {
 };
 
 /**
- * One event per variable that installed MCP servers refer to but that has no
- * value here: BarnDog doesn't keep it and this environment doesn't set it.
+ * One event per variable an installed MCP server refers to that has no value
+ * here, and one per value kept from a version 1 file that no server has.
  */
-function unsetVariableEvents(
-  servers: readonly { name: string; definition: McpDefinition }[],
-  kept: KeptValues,
+function valueEvents(
+  servers: readonly {
+    name: string;
+    definition: McpDefinition;
+    values: ServerValues;
+  }[],
+  kept: Secrets,
   env: NodeJS.ProcessEnv,
 ): SyncEvent[] {
-  const unset = new Map<string, string[]>();
-  for (const { name, definition } of servers) {
-    for (const variable of unsetVariables(definition, kept, env)) {
-      unset.set(variable, [...(unset.get(variable) ?? []), name]);
-    }
-  }
-
-  return [...unset].map(([variable, names]) => ({
-    type: "unset-variable",
-    variable,
-    servers: names,
-  }));
+  return [
+    ...servers.flatMap(({ name, definition, values }) =>
+      missingValues(definition, values, env).map((missing): SyncEvent => ({
+        type: "unset-variable",
+        server: name,
+        ...missing,
+      })),
+    ),
+    ...Object.keys(kept.unassigned).map((variable): SyncEvent => ({
+      type: "unassigned-value",
+      variable,
+    })),
+  ];
 }
 
 export async function stageAssets(input: {
@@ -79,7 +89,7 @@ export async function stageAssets(input: {
   source: WorkspaceSource | undefined;
   harnesses: readonly Harness[];
   /** MCP values BarnDog keeps on this machine, written into the tools' settings. */
-  kept: KeptValues;
+  kept: Secrets;
   runtime: RuntimeContext;
 }): Promise<StagedAssets> {
   const { invalid, vanished, skipped, localNames, source, harnesses, runtime } =
@@ -96,7 +106,11 @@ export async function stageAssets(input: {
   const names = new Set<string>();
   const ids = new Set<string>();
   /** Installed MCP servers, to report the variables they find no value for. */
-  const servers: { name: string; definition: McpDefinition }[] = [];
+  const servers: {
+    name: string;
+    definition: McpDefinition;
+    values: ServerValues;
+  }[] = [];
 
   const addSkill = (id: string, source: string, name: string) => {
     if (names.has(name)) {
@@ -249,13 +263,15 @@ export async function stageAssets(input: {
       );
     } else if (ref.kind === "mcp") {
       const definition = await source.mcpDefinition(ref);
-      servers.push({ name, definition });
+      const values = input.kept.servers[ref.id] ?? {};
+      const applied = applyKeptValues(definition, values);
+      servers.push({ name, definition, values });
       for (const harness of harnesses) {
         native.push(
           mcpEntry(
             harness,
-            { id: ref.id, name, definition },
-            input.kept,
+            { id: ref.id, name, definition: applied.definition },
+            applied.kept,
             runtime,
           ),
         );
@@ -290,7 +306,7 @@ export async function stageAssets(input: {
     }
   }
 
-  events.push(...unsetVariableEvents(servers, input.kept, input.runtime.env));
+  events.push(...valueEvents(servers, input.kept, input.runtime.env));
 
   return { links: desired, native, trees, events };
 }

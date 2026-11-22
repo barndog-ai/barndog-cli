@@ -11,7 +11,11 @@ import { LoginRequiredError } from "../auth/transport.js";
 import { synchronize } from "../environment/sync.js";
 import { assetKinds } from "../asset-kinds/index.js";
 import { barndogPaths } from "../../config/paths.js";
-import type { SyncEvent } from "../environment/events.js";
+import {
+  unassignedValueMessage,
+  unsetValueMessage,
+  type SyncEvent,
+} from "../environment/events.js";
 
 export type Check = {
   name: string;
@@ -22,8 +26,19 @@ export type Check = {
   command?: string;
 };
 
-/** An MCP variable installed servers refer to that has no value on this machine. */
+/** An MCP variable with no value on this machine, or a kept value no server has. */
 function variableCheck(event: SyncEvent): Check[] {
+  if (event.type === "unassigned-value") {
+    return [
+      {
+        name: "MCP variable",
+        status: "warn",
+        detail: unassignedValueMessage(event.variable),
+        fix: `barndog mcp env set <server> ${event.variable}`,
+      },
+    ];
+  }
+
   if (event.type !== "unset-variable") {
     return [];
   }
@@ -32,8 +47,8 @@ function variableCheck(event: SyncEvent): Check[] {
     {
       name: "MCP variable",
       status: "warn",
-      detail: `${event.variable} has no value here, so ${event.servers.join(", ")} can't use it: BarnDog doesn't keep it and it isn't set in this shell. Coding tools opened outside a terminal may not see your shell's variables either.`,
-      fix: `barndog mcp env set ${event.variable}`,
+      detail: `${unsetValueMessage(event)} BarnDog doesn't keep it and it isn't set in this shell. Coding tools opened outside a terminal may not see your shell's variables either.`,
+      fix: `barndog mcp env set ${event.server} ${event.variable}`,
     },
   ];
 }

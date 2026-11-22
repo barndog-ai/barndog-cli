@@ -23,6 +23,7 @@ import type {
 import { cloud, ID, packages } from "./cloud.js";
 import { sample } from "./sample.js";
 import { testRuntime } from "./runtime.js";
+import { changeSecrets, readStoredSecrets } from "../features/secrets/index.js";
 
 // There's no Git host here, so the Git workspace is a fixture model. Everything
 // else runs for real: the local folder, the fake Cloud server and the sync that
@@ -338,11 +339,31 @@ test("local renames follow their assets to Cloud, keep the kept folder's, and dr
     distributions: [],
   });
 
-  await migrate({ server: "http://127.0.0.1:9" }, testRuntime(server.home));
+  // Kept MCP values follow the same IDs.
+  const runtime = testRuntime(server.home);
+  const value = (text: string) => ({ API_KEY: { value: text } });
+  await changeSecrets(
+    () => ({
+      servers: {
+        [model.assets[0]!.id]: value("moved"),
+        [keptSkill]: value("local"),
+      },
+      unassigned: {},
+    }),
+    runtime,
+  );
+
+  await migrate({ server: "http://127.0.0.1:9" }, runtime);
 
   expect((await readSettings(server.home))!.localNames).toEqual({
     [ID]: "team-release-notes",
     [keptSkill]: "my-local-notes",
+  });
+
+  expect(await readStoredSecrets(runtime)).toStrictEqual({
+    version: 2,
+    servers: { [ID]: value("moved"), [keptSkill]: value("local") },
+    unassigned: {},
   });
 });
 

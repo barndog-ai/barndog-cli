@@ -7,7 +7,11 @@ import { styleText } from "node:util";
 import { basename } from "node:path";
 import { isInside } from "../shared/files.js";
 import { SetupRequiredError } from "../config/settings.js";
-import type { SyncEvent } from "../features/environment/events.js";
+import {
+  unassignedValueMessage,
+  unsetValueMessage,
+  type SyncEvent,
+} from "../features/environment/events.js";
 import { adapters, isHarness } from "../harnesses/registry.js";
 import { primary, danger } from "./theme.js";
 import {
@@ -102,7 +106,8 @@ function rows(events: SyncEvent[]): Row[] {
     if (
       event.type === "disabled" ||
       event.type === "notice" ||
-      event.type === "unset-variable"
+      event.type === "unset-variable" ||
+      event.type === "unassigned-value"
     ) {
       continue;
     }
@@ -239,26 +244,45 @@ export function renderSyncOutput(
   }
 
   for (const event of events) {
-    if (event.type === "notice") {
-      output.push("", `${warn("!")} ${event.message}`);
-    } else if (event.type === "unset-variable") {
-      output.push(
-        "",
-        `${warn("!")} ${bold(event.variable)} has no value here, so ${event.servers.map((name) => bold(name)).join(", ")} can't use it.`,
-        `  ${hint(`barndog mcp env set ${event.variable}`, "Fix")}`,
-      );
-    } else if (event.type === "clash") {
-      output.push(
-        "",
-        `${warn("!")} ${assetKinds[event.kind].one} ${bold(event.skipped.name)} from ${event.skipped.origin} was skipped: ${event.installed.origin} already installs one with that name.`,
-        `  ${hint(`barndog ${assetKinds[event.kind].command} rename ${event.skipped.name} --origin ${event.skipped.origin} --as ${event.skipped.rename}`, "Fix")}`,
-      );
-    }
+    output.push(...problemLines(event));
   }
 
   output.push("");
 
   return output;
+}
+
+/** What a sync event asks the developer to look at, after the summary; nothing for the rest. */
+function problemLines(event: SyncEvent): string[] {
+  if (event.type === "notice") {
+    return ["", `${warn("!")} ${event.message}`];
+  }
+
+  if (event.type === "unset-variable") {
+    return [
+      "",
+      `${warn("!")} ${unsetValueMessage(event)}`,
+      `  ${hint(`barndog mcp env set ${event.server} ${event.variable}`, "Fix")}`,
+    ];
+  }
+
+  if (event.type === "unassigned-value") {
+    return [
+      "",
+      `${warn("!")} ${unassignedValueMessage(event.variable)}`,
+      `  ${hint(`barndog mcp env set <server> ${event.variable}`, "Fix")}`,
+    ];
+  }
+
+  if (event.type === "clash") {
+    return [
+      "",
+      `${warn("!")} ${assetKinds[event.kind].one} ${bold(event.skipped.name)} from ${event.skipped.origin} was skipped: ${event.installed.origin} already installs one with that name.`,
+      `  ${hint(`barndog ${assetKinds[event.kind].command} rename ${event.skipped.name} --origin ${event.skipped.origin} --as ${event.skipped.rename}`, "Fix")}`,
+    ];
+  }
+
+  return [];
 }
 
 /** A failure as people read it: what happened, how to fix it, and the command that does. */

@@ -265,6 +265,7 @@ test("a server name pasted as the argument is caught as configuration", async (t
 
 test("--file and --config add their servers without asking where the configuration is", async (t) => {
   const { home, context } = await fixture(t);
+  context.interactive = false;
   const path = join(home, "mcp.json");
   await writeFile(path, '{"file-server":{"command":"node"}}');
 

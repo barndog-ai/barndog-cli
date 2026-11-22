@@ -143,6 +143,17 @@ export function parseConfig(text: string): WorkspaceConfig {
   return parsed.data;
 }
 
+/**
+ * The ID a Git or local workspace gives an asset, from where it lives: the
+ * same before it's committed as after, so a copy's ID is known as it's made.
+ */
+export const repoAssetId = (
+  workspaceId: string,
+  kind: AssetKind,
+  scope: Pick<RepoScope, "type" | "slug">,
+  name: string,
+) => stableId(workspaceId, "asset", kind, scope.type, scope.slug, name);
+
 /** A hash formatted as UUIDv4, so IDs need no stored record and cannot merge-conflict. */
 export function stableId(...parts: string[]) {
   const bytes = createHash("sha256")
@@ -402,7 +413,7 @@ export async function loadWorkspace(
     ) => {
       const base = {
         kind,
-        id: id("asset", kind, scope.type, scope.slug, name),
+        id: repoAssetId(config.workspaceId, kind, scope, name),
         name,
         origin: scope,
         publishedVersion: entry.hash,

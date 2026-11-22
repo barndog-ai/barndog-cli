@@ -23,11 +23,11 @@ import { synchronize } from "../environment/sync.js";
 import { locked } from "../environment/transaction.js";
 import { ensureLocalWorkspace } from "../imports/local.js";
 import {
+  keepLiteralValues,
   literalValues,
-  type LiteralValue,
+  type KeptChoice,
   type McpValue,
 } from "../mcps/import.js";
-import { readSecrets, updateSecrets } from "../secrets/index.js";
 import { writePackage } from "../workspace/directory.js";
 import { localRepoSource } from "../workspace/repo-source.js";
 import { copyFingerprint, installed } from "./copies.js";
@@ -136,7 +136,7 @@ async function hasSharedWorkspace(home: string) {
 function adoptionNotes(
   plan: PlannedAsset[],
   sourceOf: (asset: PlannedAsset) => FoundAsset,
-  keep: readonly string[],
+  keep: readonly KeptChoice[],
 ): Pick<AdoptionResult, "notes" | "values"> {
   const sources = [
     ...new Map(plan.map((asset) => [asset.source.key, asset])).values(),
@@ -156,41 +156,11 @@ function adoptionNotes(
   };
 }
 
-/**
- * Keeps the chosen values before the sync that writes them into the tools,
- * and returns how to put the file back as it was if adopting fails.
- */
-async function keepValues(
-  literals: readonly LiteralValue[],
-  keep: readonly string[],
-  runtime: RuntimeContext,
-) {
-  const chosen = literals.filter((l) => keep.includes(l.variable));
-  if (!chosen.length) {
-    return async () => {};
-  }
-
-  const before = await readSecrets(runtime);
-  await updateSecrets(
-    Object.fromEntries(chosen.map((l) => [l.variable, l.value])),
-    runtime,
-  );
-
-  return async () => {
-    await updateSecrets(
-      Object.fromEntries(
-        chosen.map((l) => [l.variable, before[l.variable] ?? null]),
-      ),
-      runtime,
-    );
-  };
-}
-
 /** Takes over the chosen assets; on any failure, puts back what it changed. */
 export async function adoptNative(
   keys: readonly string[],
-  /** Variables whose values BarnDog keeps on this machine (see `mcp env`). */
-  keep: readonly string[],
+  /** The MCP values BarnDog keeps on this machine (see `mcp env`). */
+  keep: readonly KeptChoice[],
   runtime: RuntimeContext,
 ): Promise<AdoptionResult> {
   const { home } = runtime;
@@ -264,21 +234,11 @@ export async function adoptNative(
 
     // Written before anything changes, so undo can always find what moved.
     await writeAdoption(record, home);
-    const sources = [
-      ...new Map(plan.map((asset) => [asset.source.key, asset])).values(),
-    ].map(sourceOf);
-
-    let forgetValues = async () => {};
+    const values = { forget: async () => {} };
 
     try {
-      forgetValues = await keepValues(
-        sources.flatMap((source) => source.literals),
-        keep,
-        runtime,
-      );
-
       const events = await apply(
-        { record, plan, sourceOf, workspace },
+        { record, plan, sourceOf, workspace, keep, values },
         runtime,
       );
 
@@ -301,7 +261,7 @@ export async function adoptNative(
         },
       );
 
-      await forgetValues();
+      await values.forget();
 
       throw error;
     }
@@ -314,6 +274,9 @@ async function apply(
     plan: PlannedAsset[];
     sourceOf: (asset: PlannedAsset) => FoundAsset;
     workspace: LocalWorkspace;
+    keep: readonly KeptChoice[];
+    /** Set once values are kept, to put them back if adopting fails. */
+    values: { forget: () => Promise<void> };
   },
   runtime: RuntimeContext,
 ): Promise<SyncEvent[]> {
@@ -349,6 +312,34 @@ async function apply(
 
     item.assetId = asset.id;
   }
+
+  // Kept by asset ID, which exists only now; saved before the sync writes them.
+  // One source per name, and every item of it shares one copy and asset ID.
+  const servers = new Map(
+    plan.flatMap((asset, index) =>
+      asset.kind === "mcp"
+        ? [
+            [
+              asset.source.key,
+              {
+                id: defined(
+                  record.items[index],
+                  "Each planned asset has an item",
+                ).assetId,
+                name: asset.name,
+                literals: sourceOf(asset).literals,
+              },
+            ] as const,
+          ]
+        : [],
+    ),
+  );
+
+  input.values.forget = await keepLiteralValues(
+    [...servers.values()],
+    input.keep,
+    runtime,
+  );
 
   // A settings file is saved as the user left it, before BarnDog's first change.
   for (const item of record.items) {

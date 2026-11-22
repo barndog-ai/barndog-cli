@@ -1,4 +1,5 @@
 /** Reads an MCP variable's value without showing it or putting it in shell history. */
+import confirm from "@inquirer/confirm";
 import input from "@inquirer/input";
 import { promptTheme } from "./theme.js";
 
@@ -21,4 +22,13 @@ export async function readStdin(
   }
 
   return text.replace(/\r?\n$/, "");
+}
+
+/** Asks whether a server should use the value BarnDog kept before values belonged to servers. */
+export function askUseUnassigned(variable: string): Promise<boolean> {
+  return confirm({
+    message: `BarnDog already keeps a value for ${variable} that no server has. Use it?`,
+    default: true,
+    theme: promptTheme,
+  });
 }

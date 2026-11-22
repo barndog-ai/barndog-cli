@@ -19,6 +19,7 @@ import { harnesses, adapters, type Harness } from "../harnesses/registry.js";
 import type { RuntimeContext } from "../runtime.js";
 import { bold, dim, heading, hint, ok, plural, table, warn } from "./format.js";
 import { displayPath } from "./output.js";
+import type { KeptChoice } from "../features/mcps/import.js";
 import { renderMcpValues } from "./mcp.js";
 import { checkboxTheme, promptTheme } from "./theme.js";
 
@@ -235,7 +236,7 @@ export function renderAdoptions(list: AdoptionSummary[]): string[] {
 export type AdoptionPrompt = {
   adoptNative: (
     keys: readonly string[],
-    keep: readonly string[],
+    keep: readonly KeptChoice[],
   ) => Promise<AdoptionResult>;
   write: (message: string) => void;
   runtime: RuntimeContext;
@@ -244,10 +245,10 @@ export type AdoptionPrompt = {
   keepValues?: ChooseKeptValues;
 };
 
-/** Which of the plan's MCP values BarnDog keeps on this machine, by variable. */
+/** Which of the plan's MCP values BarnDog keeps on this machine. */
 type ChooseKeptValues = (
   values: { server: string; key: string; variable: string }[],
-) => Promise<string[]>;
+) => Promise<KeptChoice[]>;
 
 const chooseKeptValues: ChooseKeptValues = (values) =>
   checkbox({
@@ -256,7 +257,7 @@ const chooseKeptValues: ChooseKeptValues = (values) =>
     choices: values.map((value) => ({
       name: `${value.variable}  ${dim(`${value.server}: ${value.key}`)}`,
       short: value.variable,
-      value: value.variable,
+      value: { server: value.server, variable: value.variable },
       checked: true,
     })),
     theme: checkboxTheme,
@@ -302,7 +303,7 @@ export async function offerAdoption(scan: NativeScan, prompt: AdoptionPrompt) {
       asset.values.map((value) => ({ server: asset.name, ...value })),
     );
 
-  let keep: string[] = [];
+  let keep: KeptChoice[] = [];
   if (values.length) {
     write("");
     write(

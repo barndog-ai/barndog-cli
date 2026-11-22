@@ -20,7 +20,7 @@ import { followImports } from "../imports/local.js";
 import { localOverlay } from "../workspace/overlay.js";
 import { openWorkspaceSource } from "../workspace/workspace-source.js";
 import { finishMoves } from "./moves.js";
-import { readSecrets } from "../secrets/index.js";
+import { keptValues } from "./kept-values.js";
 import {
   type RefreshPolicy,
   type WorkspaceSource,
@@ -206,7 +206,7 @@ export async function synchronize(
       state: before,
       source,
       harnesses: settings.harnesses,
-      kept: await readSecrets(runtime),
+      kept: await keptValues(runtime),
       runtime,
     });
 

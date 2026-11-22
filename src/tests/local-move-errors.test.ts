@@ -14,6 +14,8 @@ import { synchronize } from "../features/environment/sync.js";
 import { readMoved, recordMoved } from "../features/workspace/overlay.js";
 import { finishMoves } from "../features/environment/moves.js";
 import { selectionState } from "../config/environment.js";
+import { localRepoSource } from "../features/workspace/repo-source.js";
+import { changeSecrets, readStoredSecrets } from "../features/secrets/index.js";
 import {
   moveLocalAssets,
   listLocalAssets,
@@ -552,6 +554,51 @@ test("keeping local copies records nothing and leaves every local file", async (
   expect(
     (await listLocalAssets(runtime)).assets.map((asset) => asset.state),
   ).not.toContain("moving");
+});
+
+test("a copy that stays local starts with the local server's kept values, in this machine's workspace only", async (t) => {
+  const server = await cloud(t);
+  const { runtime, local } = await localFixture(server);
+  arrange(server, "publish");
+  await writeFile(
+    join(local.path, "org/mcp/docs.yaml"),
+    "transport: stdio\ncommand: docs\nargs: []\nenvironment:\n  API_KEY:\n    secretRef: API_KEY\ndescription: Docs\nauthentication: none\n",
+  );
+
+  const localId = (await localRepoSource(local, runtime).model()).assets.find(
+    (asset) => asset.path === "org/mcp/docs.yaml",
+  )!.id;
+
+  const kept = { API_KEY: { value: "sk" } };
+  await changeSecrets(
+    () => ({ servers: { [localId]: kept }, unassigned: {} }),
+    runtime,
+  );
+
+  // A one-off destination isn't installed here, so nothing is copied for it.
+  await moveLocalAssets(
+    { keepLocal: true, names: ["docs"], server: "http://127.0.0.1:9" },
+    runtime,
+  );
+
+  expect(await readStoredSecrets(runtime)).toStrictEqual({
+    version: 2,
+    servers: { [localId]: kept },
+    unassigned: {},
+  });
+
+  const shared = sample(contract.mcpSchema, { name: "docs" });
+  server.respond("POST", "/v1/mcps", shared);
+  await moveLocalAssets(
+    { keepLocal: true, names: ["docs"], to: "me" },
+    runtime,
+  );
+
+  expect(await readStoredSecrets(runtime)).toStrictEqual({
+    version: 2,
+    servers: { [localId]: kept, [shared.id]: kept },
+    unassigned: {},
+  });
 });
 
 test("a move to another server only copies, and moves this machine stopped using are dropped", async (t) => {

@@ -24,7 +24,7 @@ import {
 import { undoAdoption } from "../features/adoption/undo.js";
 import { directoryLinkType } from "../platform.js";
 import { scanNative } from "../features/adoption/scan.js";
-import { readSecrets } from "../features/secrets/index.js";
+import { readStoredSecrets } from "../features/secrets/index.js";
 import type { Harness } from "../harnesses/registry.js";
 import { createProgram } from "../program.js";
 import { runSetup } from "../ui/onboarding.js";
@@ -962,8 +962,20 @@ test("adopting can keep an MCP server's values on this machine, and says where",
   ]);
 
   expect(JSON.stringify(scan)).not.toContain("sk-secret");
-  const result = await adoptNative(["claude/mcp/keyed"], ["API_KEY"], runtime);
-  expect(await readSecrets(runtime)).toStrictEqual({ API_KEY: "sk-secret" });
+  const result = await adoptNative(
+    ["claude/mcp/keyed"],
+    [{ server: "keyed", variable: "API_KEY" }],
+    runtime,
+  );
+
+  const { native } = await readState(home);
+  const id = native.find((entry) => entry.key === "keyed")?.id;
+  expect(await readStoredSecrets(runtime)).toStrictEqual({
+    version: 2,
+    servers: { [id!]: { API_KEY: { value: "sk-secret" } } },
+    unassigned: {},
+  });
+
   expect(result.notes).toStrictEqual([]);
   expect(result.values).toStrictEqual([
     { server: "keyed", variable: "API_KEY", kept: true },
