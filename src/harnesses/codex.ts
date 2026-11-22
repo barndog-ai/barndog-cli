@@ -1,17 +1,19 @@
 import type { McpDefinition } from "@barndog-ai/api-contract";
 import { hookSpecificContext, nestedHookEntry, secretRefs } from "./formats.js";
 import type { HookAdapter, KeptValues } from "./types.js";
+import { withRenamedVariables } from "./renamed-variables.js";
 
 /**
  * Codex forwards variables by name (`env_vars`, `env_http_headers`) instead of
  * interpolating references. It can't give a stdio server a variable under
- * another name; BarnDog's launcher does that. A value BarnDog keeps goes in
- * `env` or `http_headers` as written, the way Codex stores values it's given.
+ * another name, so such a server starts through the system shell, which
+ * renames them (`renamed-variables.ts`). A value BarnDog keeps goes in `env` or
+ * `http_headers` as written, the way Codex stores values it's given.
  */
 function mcpServer(
   definition: McpDefinition,
-  launcher: string,
   kept: KeptValues,
+  platform: NodeJS.Platform,
 ): Record<string, unknown> {
   const refs = Object.entries(secretRefs(definition));
   const literal = refs.filter(([, ref]) => kept[ref.secretRef] !== undefined);
@@ -20,7 +22,7 @@ function mcpServer(
     literal.map(([name, ref]) => [name, kept[ref.secretRef] ?? ""]),
   );
 
-  const variables = forwarded.map(([, ref]) => ref.secretRef);
+  const variables = [...new Set(forwarded.map(([, ref]) => ref.secretRef))];
 
   if (definition.transport === "http") {
     return {
@@ -36,29 +38,17 @@ function mcpServer(
     };
   }
 
-  const inline = literal.length ? { env: values } : {};
-  const renamed = forwarded.some(([name, ref]) => name !== ref.secretRef);
-  if (renamed) {
-    // The launcher checks only the variables it forwards; kept ones arrive in `env`.
-    const environment = Object.fromEntries(forwarded);
+  const renamed = forwarded
+    .filter(([name, ref]) => name !== ref.secretRef)
+    .map(([name, ref]) => ({ name, from: ref.secretRef }));
 
-    return {
-      command: process.execPath,
-      args: [
-        launcher,
-        Buffer.from(JSON.stringify({ ...definition, environment })).toString(
-          "base64url",
-        ),
-      ],
-      ...inline,
-      env_vars: variables,
-    };
-  }
+  const server = { command: definition.command, args: definition.args };
 
   return {
-    command: definition.command,
-    args: definition.args,
-    ...inline,
+    ...(renamed.length
+      ? withRenamedVariables(server, renamed, platform)
+      : server),
+    ...(literal.length ? { env: values } : {}),
     env_vars: variables,
   };
 }

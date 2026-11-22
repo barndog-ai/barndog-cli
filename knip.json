@@ -5,7 +5,6 @@
     "src/cli.ts!",
     "src/entry/knowledge-startup.ts!",
     "src/entry/workspace-startup.ts!",
-    "src/entry/mcp-launch.ts!",
     "src/entry/opencode-plugin.ts!",
     "scripts/*.mjs!"
   ],
