@@ -4,7 +4,7 @@ import { z } from "zod";
 import { defaultServer } from "./config/build.js";
 
 /** The package version, read from package.json beside dist/ so it can't drift. */
-const version = z
+export const cliVersion = z
   .object({ version: z.string() })
   .parse(
     JSON.parse(
@@ -15,7 +15,7 @@ const version = z
 /** What `barndog --version` prints: enough to tell builds apart in a support report. */
 export function versionReport(platform: NodeJS.Platform) {
   return [
-    `barndog ${version}`,
+    `barndog ${cliVersion}`,
     `Node.js ${process.version} on ${platform} ${process.arch}`,
     `Default server ${defaultServer}`,
   ].join("\n");

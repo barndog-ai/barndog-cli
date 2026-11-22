@@ -40,6 +40,8 @@ export function barndogPaths(home: string) {
     },
     /** The last Cloud catalog revision a background sync delivered. */
     cloudCheck: join(root, "cloud-check.json"),
+    /** The CLI versions last published on npm, and when they were checked. */
+    updateCheck: join(root, "update-check.json"),
     /** Saved sessions, per server. */
     credentials: join(root, "credentials.json"),
     credentialsLock: join(root, "credentials.lock"),
