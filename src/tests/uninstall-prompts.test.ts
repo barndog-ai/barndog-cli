@@ -24,7 +24,8 @@ vi.mock("@inquirer/confirm", () => ({ default: vi.fn() }));
 vi.mock("@inquirer/select", () => ({ default: vi.fn() }));
 beforeEach(() => vi.resetAllMocks());
 
-const runtime = testRuntime("/home/dev");
+// The fixtures are POSIX paths, so the paths are displayed as on Linux.
+const runtime = testRuntime("/home/dev", { platform: "linux" });
 const text = (lines: string[]) => stripVTControlCharacters(lines.join("\n"));
 
 const adopted = (key: string): AdoptedAsset => {

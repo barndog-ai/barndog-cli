@@ -168,7 +168,8 @@ test("uninstall --keep-setup leaves Skills, MCP servers and Hooks working withou
   const settings = (await json(settingsFile)) as ClaudeSettings;
   const hookCommand = settings.hooks?.PreToolUse?.[0]?.hooks[0]?.command;
   assert(hookCommand);
-  expect(hookCommand).toContain(hookFolder);
+  // Claude Code runs Hooks in Git Bash on Windows, so the command uses `/`.
+  expect(hookCommand).toContain(hookFolder.replaceAll("\\", "/"));
 
   if (process.platform !== "win32") {
     const run = spawnSync("/bin/sh", ["-c", hookCommand], {
