@@ -4,6 +4,8 @@ Set up your AI coding environment once, and have it show up in Claude Code, Code
 
 `barndog` is the command-line tool for [BarnDog](https://barndog.dev). It installs Skills, MCP servers, Hooks, and knowledge into the coding agents you already use, keeps them up to date, and lets you improve them like code. It works the same whether it's just you, a small team, or a whole organization; only where the assets live changes.
 
+<img width="1832" height="1080" alt="yurii — -zsh — 139×39 (Window) 2026-11-24 12 03 AM" src="https://github.com/user-attachments/assets/e8454b86-b017-430b-b7dc-caa454bd675c" />
+
 Currently supported harnesses:
 
 - Claude Code
