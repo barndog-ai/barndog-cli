@@ -5,6 +5,7 @@ import { json } from "../ui/format.js";
 import {
   askUninstall,
   confirmUninstall,
+  hasAssets,
   renderUninstall,
   renderUninstallPlan,
   uninstallOptions,
@@ -54,7 +55,10 @@ export function registerUninstall(program: Command, context: CommandContext) {
     .action(async (flags: UninstallFlags) => {
       const survey = await context.uninstallSurvey();
       const choices: UninstallChoices = {
-        keepSetup: flags.keepSetup || (flags.removeAll ? false : undefined),
+        // With nothing of the developer's installed, there is nothing to choose.
+        keepSetup:
+          (flags.keepSetup || (flags.removeAll ? false : undefined)) ??
+          (hasAssets(survey) ? undefined : true),
         dropAdopted: flags.dropAdopted,
         removeWorkspace: flags.removeWorkspace,
         force: flags.force,

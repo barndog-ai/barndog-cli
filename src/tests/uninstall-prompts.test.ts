@@ -221,3 +221,40 @@ test("in a terminal, uninstall shows the plan and stops unless confirmed", async
   expect(calls).toHaveLength(1);
   expect(text(output)).toContain("BarnDog's files are gone");
 });
+
+test("with nothing of the developer's installed, uninstall doesn't ask what to do with it", async () => {
+  const calls: unknown[] = [];
+  const output: string[] = [];
+  const empty = { ...survey, installed: [], adopted: [], variables: [] };
+  const program = (interactive: boolean) =>
+    createProgram({
+      interactive,
+      write: (line) => output.push(line),
+      uninstallSurvey: async () => empty,
+      uninstall: async (options) => {
+        calls.push(options);
+
+        return {
+          keptSetup: true,
+          left: [],
+          removed: [],
+          variables: [],
+          restored: [],
+          signedOut: [],
+          root: survey.root,
+        };
+      },
+    });
+
+  vi.mocked(confirm).mockResolvedValueOnce(true).mockResolvedValueOnce(true);
+  await program(true).parseAsync(["uninstall"], { from: "user" });
+  expect(select).not.toHaveBeenCalled();
+  expect(text(output)).toContain("nothing of yours to keep or remove");
+
+  // Without a terminal, --keep-setup or --remove-all isn't required either.
+  await program(false).parseAsync(["uninstall"], { from: "user" });
+  expect(calls).toStrictEqual([
+    { keepSetup: true, restore: [], keepWorkspace: true, force: undefined },
+    { keepSetup: true, restore: [], keepWorkspace: true, force: undefined },
+  ]);
+});

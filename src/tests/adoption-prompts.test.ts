@@ -83,34 +83,58 @@ const result: AdoptionResult = {
   canShare: false,
 };
 
-test("the picker groups assets by tool and adopts only what's picked", async () => {
-  vi.mocked(checkbox).mockResolvedValue(["claude/mcp/github"]);
+test("the picker asks tool by tool and adopts only what's picked", async () => {
+  vi.mocked(checkbox)
+    .mockResolvedValueOnce(["claude/mcp/github"])
+    .mockResolvedValueOnce([])
+    .mockResolvedValueOnce([]);
+
   vi.mocked(confirm).mockResolvedValue(true);
   const lines: string[] = [];
   const adoptNative = vi.fn().mockResolvedValue(result);
+  const withCursorSkill: NativeScan = {
+    ...scan,
+    assets: [
+      ...scan.assets,
+      asset({
+        key: "cursor/skill/review",
+        harness: "cursor",
+        kind: "skill",
+        name: "review",
+      }),
+    ],
+  };
 
-  await offerAdoption(scan, {
+  await offerAdoption(withCursorSkill, {
     adoptNative,
     write: (line) => lines.push(line),
     runtime,
   });
 
-  const picker = vi.mocked(checkbox).mock.calls[0]?.[0];
-  const choices = (picker?.choices ?? []) as (
-    { separator: string } | { value: string }
-  )[];
+  const pickers = vi.mocked(checkbox).mock.calls.map(([config]) => ({
+    message: stripVTControlCharacters(config.message),
+    choices: (config.choices as { value: string; disabled?: unknown }[]).map(
+      (choice) => [choice.value, choice.disabled],
+    ),
+  }));
 
-  const names = choices.map((choice) =>
-    "separator" in choice ? `[${choice.separator}]` : choice.value,
-  );
-
-  expect(names).toStrictEqual([
-    "[Claude Code]",
-    "claude/mcp/github",
-    "[Codex]",
-    "codex/skill/notes",
-    "[Cursor]",
-    "cursor/mcp/github",
+  // Cursor's github differs from Claude Code's, which replaces it once picked.
+  expect(pickers).toStrictEqual([
+    {
+      message: "Which Claude Code assets should BarnDog adopt?",
+      choices: [["claude/mcp/github", false]],
+    },
+    {
+      message: "Which Codex assets should BarnDog adopt?",
+      choices: [["codex/skill/notes", false]],
+    },
+    {
+      message: "Which Cursor assets should BarnDog adopt?",
+      choices: [
+        ["cursor/mcp/github", "replaced by Claude Code's"],
+        ["cursor/skill/review", false],
+      ],
+    },
   ]);
 
   expect(adoptNative).toHaveBeenCalledWith(["claude/mcp/github"], []);
@@ -209,7 +233,11 @@ test("adoption output covers empty and partial results", () => {
 test("adopt in a terminal opens the picker, and reports when there's nothing", async () => {
   const lines: string[] = [];
   const adoptNative = vi.fn().mockResolvedValue(result);
-  vi.mocked(checkbox).mockResolvedValue(["codex/skill/notes"]);
+  vi.mocked(checkbox)
+    .mockResolvedValueOnce([])
+    .mockResolvedValueOnce(["codex/skill/notes"])
+    .mockResolvedValueOnce([]);
+
   vi.mocked(confirm).mockResolvedValue(true);
 
   const program = (found: NativeScan) =>
@@ -236,8 +264,10 @@ test("adopt in a terminal opens the picker, and reports when there's nothing", a
 });
 
 test("adopting asks once per value which ones BarnDog keeps, and passes the answer on", async () => {
+  // Claude Code's github brings Cursor's along, so Cursor isn't asked about.
   vi.mocked(checkbox)
     .mockResolvedValueOnce(["claude/mcp/github"])
+    .mockResolvedValueOnce([])
     .mockResolvedValueOnce([{ server: "github", variable: "TOKEN" }]);
 
   vi.mocked(confirm).mockResolvedValue(true);
@@ -259,7 +289,7 @@ test("adopting asks once per value which ones BarnDog keeps, and passes the answ
   });
 
   // Cursor's github comes along but shares claude's source, so TOKEN is asked once.
-  const asked = vi.mocked(checkbox).mock.calls[1]![0];
+  const asked = vi.mocked(checkbox).mock.calls[2]![0];
   expect(asked.message).toBe(
     "Which values should BarnDog keep on this machine?",
   );

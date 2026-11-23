@@ -15,7 +15,16 @@ import type {
 } from "../features/uninstall/survey.js";
 import { adapters, harnesses } from "../harnesses/registry.js";
 import type { RuntimeContext } from "../runtime.js";
-import { bold, dim, hint, ok, plural, table, warn } from "./format.js";
+import {
+  bold,
+  checklistPageSize,
+  dim,
+  hint,
+  ok,
+  plural,
+  table,
+  warn,
+} from "./format.js";
 import { displayPath } from "./output.js";
 import { checkboxTheme, promptTheme } from "./theme.js";
 
@@ -66,6 +75,13 @@ const variableRows = (variables: readonly McpVariable[], indent = 2) =>
     { indent, header: ["Variable", "MCP servers"] },
   );
 
+/**
+ * Whether there is anything of the developer's to leave or remove. With none,
+ * there's no choice to make: uninstall only removes BarnDog's own files.
+ */
+export const hasAssets = (survey: UninstallSurvey) =>
+  survey.installed.length > 0 || survey.adopted.length > 0;
+
 /** Options from the command line alone, for runs that can't prompt. */
 export function uninstallOptions(
   survey: UninstallSurvey,
@@ -87,6 +103,7 @@ const chooseRestored = (adopted: readonly AdoptedAsset[]) =>
     loop: false,
     message:
       "Put these adopted assets back where they were? Unchecked ones are deleted.",
+    pageSize: checklistPageSize(adopted.length + harnesses.length),
     choices: harnesses.flatMap((harness) => {
       const mine = adopted.filter((item) => item.harness === harness);
 
@@ -159,7 +176,14 @@ export function renderUninstallPlan(
   runtime: RuntimeContext,
 ): string[] {
   const root = displayPath(survey.root, runtime);
-  const lines: string[] = [bold("BarnDog will")];
+  const lines: string[] = hasAssets(survey)
+    ? []
+    : [
+        "BarnDog installed no Skills, MCP servers or Hooks in your coding tools, so there's nothing of yours to keep or remove.",
+        "",
+      ];
+
+  lines.push(bold("BarnDog will"));
   const step = (text: string) => lines.push(`${STEP}${text}`);
 
   if (survey.installed.length) {

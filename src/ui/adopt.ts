@@ -1,4 +1,4 @@
-import checkbox, { Separator } from "@inquirer/checkbox";
+import checkbox from "@inquirer/checkbox";
 import confirm from "@inquirer/confirm";
 
 import {
@@ -17,7 +17,17 @@ import {
 import { friendlyMessage } from "../errors.js";
 import { harnesses, adapters, type Harness } from "../harnesses/registry.js";
 import type { RuntimeContext } from "../runtime.js";
-import { bold, dim, heading, hint, ok, plural, table, warn } from "./format.js";
+import {
+  bold,
+  checklistPageSize,
+  dim,
+  heading,
+  hint,
+  ok,
+  plural,
+  table,
+  warn,
+} from "./format.js";
 import { displayPath } from "./output.js";
 import type { KeptChoice } from "../features/mcps/import.js";
 import { renderMcpValues } from "./mcp.js";
@@ -108,22 +118,59 @@ export function renderScan(
   return output;
 }
 
-const chooseAdoption: ChooseAdoption = (scan) =>
-  checkbox<string>({
-    loop: false,
-    message: "Which assets should BarnDog adopt?",
-    choices: byTool(scan.assets).flatMap(({ harness, items }) => [
-      new Separator(bold(adapters[harness].name)),
-      ...items.map((asset) => ({
-        value: asset.key,
-        checked: false,
-        short: asset.key,
-        name: `${kindLabels[asset.kind].padEnd(kindWidth)} ${asset.name}${sharing(asset) ? dim(`  ${sharing(asset)}`) : ""}`,
-        description: asset.description,
+/**
+ * Why an asset can't be picked: a same-named copy picked in an earlier tool's
+ * checklist already brings it along.
+ */
+function disabledReason(asset: NativeAsset, picked: readonly string[]) {
+  const twin = asset.sameName.find((other) => picked.includes(other.key));
+  if (!twin) {
+    return false;
+  }
+
+  const tool = adapters[twin.harness].name;
+
+  return asset.identical ? `comes with ${tool}'s` : `replaced by ${tool}'s`;
+}
+
+/** One choice in a tool's checklist. */
+function adoptionChoice(asset: NativeAsset, picked: readonly string[]) {
+  const disabled = disabledReason(asset, picked);
+
+  return {
+    value: asset.key,
+    checked: false,
+    short: asset.key,
+    name: `${kindLabels[asset.kind].padEnd(kindWidth)} ${asset.name}${!disabled && sharing(asset) ? dim(`  ${sharing(asset)}`) : ""}`,
+    description: asset.description,
+    disabled,
+  };
+}
+
+/** Asks tool by tool, so each checklist names the tool its assets are in. */
+const chooseAdoption: ChooseAdoption = async (scan) => {
+  const picked: string[] = [];
+  for (const { harness, items } of byTool(scan.assets)) {
+    const choices = items.map((asset) => adoptionChoice(asset, picked));
+
+    // Inquirer refuses a checklist with nothing left to pick.
+    if (choices.every((choice) => choice.disabled)) {
+      continue;
+    }
+
+    picked.push(
+      ...(await checkbox<string>({
+        loop: false,
+        message: `Which ${bold(adapters[harness].name)} assets should BarnDog adopt?`,
+        choices,
+        pageSize: checklistPageSize(items.length),
+        theme: checkboxTheme,
       })),
-    ]),
-    theme: checkboxTheme,
-  });
+    );
+  }
+
+  return picked;
+};
 
 /** What an adoption will take over, including other tools' copies BarnDog's one replaces. */
 function renderPlan(plan: PlannedAsset[]): string[] {
@@ -254,6 +301,7 @@ const chooseKeptValues: ChooseKeptValues = (values) =>
   checkbox({
     loop: false,
     message: "Which values should BarnDog keep on this machine?",
+    pageSize: checklistPageSize(values.length),
     choices: values.map((value) => ({
       name: `${value.variable}  ${dim(`${value.server}: ${value.key}`)}`,
       short: value.variable,

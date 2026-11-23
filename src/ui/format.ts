@@ -139,6 +139,22 @@ export function fields(
   );
 }
 
+/** Lines a checklist prompt takes besides its choices: question, description, key help and a spare. */
+const CHECKLIST_CHROME_LINES = 5;
+
+/** Inquirer's own page size, the fewest choices a checklist shows. */
+const MIN_CHECKLIST_PAGE = 7;
+
+/** How many of `count` choices a checklist shows at once: as many as the terminal's height fits. */
+export function checklistPageSize(count: number) {
+  const rows = process.stdout.rows || 0;
+
+  return Math.max(
+    MIN_CHECKLIST_PAGE,
+    Math.min(count, rows - CHECKLIST_CHROME_LINES),
+  );
+}
+
 /** Layout for `table()`. `width` defaults to the terminal's width. */
 export type TableOptions = {
   header?: readonly string[];

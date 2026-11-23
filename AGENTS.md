@@ -226,7 +226,7 @@ Synchronization stages all content, resolves the complete catalog, checks runtim
 
 ## Uninstall
 
-`barndog uninstall` (`src/features/uninstall/`) always removes BarnDog's own registrations, signs out of every server and deletes `~/.barndog/`, keeping the local workspace (`~/.barndog/workspace`) unless the user chooses otherwise. The developer's assets either stay in the tools as plain files that work without BarnDog (`--keep-setup`), or go, with adopted assets put back first (`--remove-all`). Changes are journaled and each step checks what is already done, so an interrupted uninstall can run again.
+`barndog uninstall` (`src/features/uninstall/`) always removes BarnDog's own registrations, signs out of every server and deletes `~/.barndog/`, keeping the local workspace (`~/.barndog/workspace`) unless the user chooses otherwise. The developer's assets either stay in the tools as plain files that work without BarnDog (`--keep-setup`), or go, with adopted assets put back first (`--remove-all`). When BarnDog installed and adopted none of the developer's assets, there is nothing to choose: it asks nothing about them and needs neither flag. Changes are journaled and each step checks what is already done, so an interrupted uninstall can run again.
 
 ## Name clashes
 
