@@ -2381,7 +2381,9 @@ test("copies of a Skill in different folders are told apart", async (t) => {
   ]);
 
   expect(
-    offered.every((c) => c.description === "Description: Keeps you focused"),
+    offered.every(
+      (c) => c.description?.split("\n")[0] === "Description: Keeps you focused",
+    ),
   ).toBeTruthy();
 
   expect(offered.some((c) => c.short === "focus (skills/focus)")).toBeTruthy();

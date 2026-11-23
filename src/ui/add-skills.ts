@@ -18,7 +18,7 @@ import {
   parseLocation,
   type RemoteRepo,
 } from "../features/imports/remote.js";
-import { bold, dim, ok, warn } from "./format.js";
+import { bold, choiceDescription, dim, ok, warn } from "./format.js";
 import { defined } from "../shared/lookup.js";
 import {
   finish,
@@ -146,7 +146,7 @@ export async function addSkills(
           name: `${s.name}  ${dim(folderLabel(s.root))}`,
           value: s.root,
           short: distinctName(s),
-          description: `Description: ${s.description}`,
+          description: choiceDescription(`Description: ${s.description}`),
         })),
       );
 

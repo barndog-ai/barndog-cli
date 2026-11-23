@@ -139,8 +139,20 @@ export function fields(
   );
 }
 
-/** Lines a checklist prompt takes besides its choices: question, description, key help and a spare. */
-const CHECKLIST_CHROME_LINES = 5;
+/**
+ * Lines a choice's description always takes, so a checklist keeps its height
+ * as the cursor moves between short and long descriptions.
+ */
+const DESCRIPTION_LINES = 5;
+
+/** Columns assumed when the output has no terminal dimensions. */
+const FALLBACK_COLUMNS = 80;
+
+/** Inquirer's checklist lines besides choices and description: question, blank line, key help. */
+const CHECKLIST_FIXED_LINES = 3;
+
+/** Lines a checklist takes besides its choices, with one spare. */
+const CHECKLIST_CHROME_LINES = CHECKLIST_FIXED_LINES + DESCRIPTION_LINES + 1;
 
 /** Inquirer's own page size, the fewest choices a checklist shows. */
 const MIN_CHECKLIST_PAGE = 7;
@@ -153,6 +165,56 @@ export function checklistPageSize(count: number) {
     MIN_CHECKLIST_PAGE,
     Math.min(count, rows - CHECKLIST_CHROME_LINES),
   );
+}
+
+/** Words wrapped to lines of at most `width` columns; a longer word is cut. */
+function wrapWords(text: string, width: number) {
+  const lines: string[] = [];
+  for (const paragraph of text.split("\n")) {
+    let line = "";
+    for (const word of paragraph.split(" ").filter(Boolean)) {
+      if (!line) {
+        line = word;
+      } else if (visibleWidth(line) + 1 + visibleWidth(word) <= width) {
+        line += ` ${word}`;
+      } else {
+        lines.push(line);
+        line = word;
+      }
+    }
+
+    lines.push(line);
+  }
+
+  return lines.map((line) => truncate(line, width));
+}
+
+/**
+ * A choice's description as exactly five lines: wrapped to the terminal,
+ * padded when shorter and cut with `…` when longer.
+ */
+export function choiceDescription(
+  text: string,
+  width = process.stdout.columns || FALLBACK_COLUMNS,
+) {
+  // A spare column keeps the terminal from wrapping a full line itself.
+  const room = width - 1;
+  const lines = wrapWords(text.trim(), room);
+  const shown =
+    lines.length > DESCRIPTION_LINES
+      ? [
+          ...lines.slice(0, DESCRIPTION_LINES - 1),
+          truncate(
+            `${lines[DESCRIPTION_LINES - 1]} ${lines[DESCRIPTION_LINES]}`,
+            room,
+          ),
+        ]
+      : lines;
+
+  return [
+    ...shown,
+    ...Array<string>(DESCRIPTION_LINES - shown.length).fill(""),
+  ].join("\n");
 }
 
 /** Layout for `table()`. `width` defaults to the terminal's width. */

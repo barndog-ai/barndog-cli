@@ -20,6 +20,7 @@ import type { RuntimeContext } from "../runtime.js";
 import {
   bold,
   checklistPageSize,
+  choiceDescription,
   dim,
   heading,
   hint,
@@ -142,7 +143,7 @@ function adoptionChoice(asset: NativeAsset, picked: readonly string[]) {
     checked: false,
     short: asset.key,
     name: `${kindLabels[asset.kind].padEnd(kindWidth)} ${asset.name}${!disabled && sharing(asset) ? dim(`  ${sharing(asset)}`) : ""}`,
-    description: asset.description,
+    description: choiceDescription(asset.description),
     disabled,
   };
 }

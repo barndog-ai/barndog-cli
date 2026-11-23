@@ -22,7 +22,7 @@ import { LOCAL_ORIGIN } from "../features/workspace/overlay.js";
 import { saveImported } from "../features/imports/local.js";
 import { assertSourceExists, plainFolder } from "../features/imports/folder.js";
 import { fetchRemote, parseLocation } from "../features/imports/remote.js";
-import { bold, dim, ok, warn } from "./format.js";
+import { bold, choiceDescription, dim, ok, warn } from "./format.js";
 import { setYamlName, slugify } from "../shared/patterns.js";
 import { only } from "../shared/lookup.js";
 import {
@@ -130,7 +130,7 @@ async function choosePackages(
         name: `${p.name}  ${dim(folderLabel(p.root))}`,
         value: p.root,
         short: p.name,
-        description: `Description: ${p.description}`,
+        description: choiceDescription(`Description: ${p.description}`),
       })),
     );
 

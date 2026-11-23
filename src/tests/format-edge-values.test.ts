@@ -3,6 +3,7 @@ import { stripVTControlCharacters } from "node:util";
 import {
   bad,
   badge,
+  choiceDescription,
   dim,
   ok,
   warn,
@@ -106,4 +107,35 @@ test("tables handle missing cells, empty rows and narrow explicit widths", () =>
   expect(result[0]).toContain("…");
   expect(result[0]).toMatch(/tail$/);
   expect(visibleWidth(result[0]!)).toBeLessThanOrEqual(20);
+});
+
+test("a choice's description always takes five lines, wrapped and cut to the terminal", () => {
+  const short = choiceDescription("Keeps you focused", 20);
+  expect(short.split("\n")).toStrictEqual([
+    "Keeps you focused",
+    "",
+    "",
+    "",
+    "",
+  ]);
+
+  const long = choiceDescription(
+    "one two three four five six seven eight nine ten eleven twelve",
+    10,
+  ).split("\n");
+
+  expect(long).toStrictEqual([
+    "one two",
+    "three",
+    "four five",
+    "six seven",
+    "eight ni…",
+  ]);
+
+  // A word wider than the terminal is cut, and paragraphs keep their breaks.
+  expect(
+    choiceDescription("abcdefghijklmnop\nsecond", 8).split("\n"),
+  ).toStrictEqual(["abcdef…", "second", "", "", ""]);
+
+  expect(choiceDescription("", 20)).toBe("\n\n\n\n");
 });
