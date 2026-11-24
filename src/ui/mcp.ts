@@ -1,4 +1,5 @@
 import { SHORT_COMMIT_LENGTH } from "../shared/constants.js";
+import { only } from "../shared/lookup.js";
 
 import confirm from "@inquirer/confirm";
 import { mcpDefinitionSchema } from "@barndog-ai/api-contract";
@@ -39,6 +40,10 @@ const shownMcpSchema = z.looseObject({
     z.looseObject({ number: z.number(), definition: mcpDefinitionSchema }),
   ]),
   definition: mcpDefinitionSchema.optional(),
+  /** Variables BarnDog keeps a value for, or reads from another variable. */
+  keptVariables: z
+    .array(z.object({ variable: z.string(), from: z.string().optional() }))
+    .optional(),
   /** Variables it refers to that have no value on this machine. */
   unsetVariables: z.array(z.string()).optional(),
 });
@@ -92,10 +97,39 @@ export function renderMcpValues(values: readonly McpValue[]): string[] {
   return output;
 }
 
+/** A variable whose value BarnDog keeps, as `mcp show` lists it. */
+const KEPT_BY_BARNDOG = "kept by BarnDog";
+
+/** What "kept by BarnDog" means, under the variables when any is. */
+const KEPT_NOTE =
+  "BarnDog keeps these values in ~/.barndog/secrets.json, on this machine only and never uploaded, and writes them into each coding tool's settings.";
+
 /**
- * A note per listed MCP server with variables that have no value here. One
- * variable gets the command that sets it; several point at `mcp show`, which
- * gives one for each.
+ * One warning for all of a server's variables with no value here (the
+ * variables table above it marks which), and the
+ * `mcp env set` that fixes them: naming the variable when there's one, else
+ * letting the person pick each from a list.
+ */
+function unsetProblem(server: string, variables: readonly string[]): string[] {
+  if (!variables.length) {
+    return [];
+  }
+
+  const single = only(variables);
+  const warning = single
+    ? `${bold(single)} has no value here, so ${server} can't use it.`
+    : `${variables.length} variables have no value here, so ${server} can't use them.`;
+
+  const fix = single
+    ? `barndog mcp env set ${server} ${single}`
+    : `barndog mcp env set ${server}`;
+
+  return ["", `${warn("!")} ${warning}`, `  ${hint(fix, "Fix")}`];
+}
+
+/**
+ * A note per listed MCP server with variables that have no value here, with
+ * the `mcp env set` that fixes them.
  */
 export function unsetVariableNotes(
   items: readonly { installedName: string; unsetVariables?: string[] }[],
@@ -105,11 +139,10 @@ export function unsetVariableNotes(
       return [];
     }
 
-    const [only] = variables;
-    const fix =
-      variables.length === 1 && only
-        ? `barndog mcp env set ${clean(name)} ${clean(only)}`
-        : `barndog mcp show ${clean(name)}`;
+    const single = only(variables);
+    const fix = single
+      ? `barndog mcp env set ${clean(name)} ${clean(single)}`
+      : `barndog mcp env set ${clean(name)}`;
 
     return [
       "",
@@ -141,19 +174,40 @@ export function renderMcp(value: unknown): string[] {
       : definition.headers;
 
   const unset = mcp.unsetVariables ?? [];
-  const variables = Object.entries(references).map(([key, reference]) => {
-    const shown = `${clean(key)} from $${reference.secretRef}`;
+  const kept = new Map(
+    (mcp.keptVariables ?? []).map((row) => [row.variable, row.from]),
+  );
 
-    return unset.includes(reference.secretRef)
-      ? `${shown} ${warn("(not set)")}`
-      : shown;
-  });
+  // A kept `from` is a variable to read; only a kept value is BarnDog's own.
+  const keptValue = (secretRef: string) =>
+    kept.has(secretRef) && !kept.get(secretRef);
 
-  const problems = unset.flatMap((variable) => [
-    "",
-    `${warn("!")} ${bold(clean(variable))} has no value here, so ${clean(mcp.name)} can't use it.`,
-    `  ${hint(`barndog mcp env set ${clean(mcp.name)} ${clean(variable)}`, "Fix")}`,
-  ]);
+  const valueSources = Object.entries(references).map(
+    ([key, { secretRef }]) => {
+      const source = keptValue(secretRef)
+        ? KEPT_BY_BARNDOG
+        : `from $${clean(kept.get(secretRef) ?? secretRef)}`;
+
+      return [
+        clean(key),
+        unset.includes(secretRef) ? `${source} ${warn("(not set)")}` : source,
+      ];
+    },
+  );
+
+  const keepsAny = Object.values(references).some(({ secretRef }) =>
+    keptValue(secretRef),
+  );
+
+  const variableTable = valueSources.length
+    ? [
+        "",
+        ...table(valueSources, { header: ["Variable", "Value"], indent: 0 }),
+        ...(keepsAny ? ["", dim(KEPT_NOTE)] : []),
+      ]
+    : [];
+
+  const problems = unsetProblem(clean(mcp.name), unset.map(clean));
 
   return [
     ...fields([
@@ -176,8 +230,8 @@ export function renderMcp(value: unknown): string[] {
           : clean([definition.command, ...definition.args].join(" ")),
       ],
       ["Sign-in", signIn[definition.authentication]],
-      ["Variables", variables.join(", ")],
     ]),
+    ...variableTable,
     ...problems,
   ];
 }

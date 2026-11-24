@@ -190,6 +190,31 @@ function wrapWords(text: string, width: number) {
 }
 
 /**
+ * A bold label before each comma-separated list, the lists aligned and
+ * wrapped under themselves rather than under the label:
+ *
+ *   node_repl  NODE_REPL_INSTRUCTIONS_USE_CASE_CHROME,
+ *              BROWSER_USE_ACCESS_PIPE_PATH
+ */
+export function labelledLists(
+  rows: readonly { label: string; items: readonly string[] }[],
+  options: { indent: number; width?: number },
+): string[] {
+  const width = options.width ?? (process.stdout.columns || FALLBACK_COLUMNS);
+  const labelWidth = Math.max(0, ...rows.map((row) => visibleWidth(row.label)));
+  const lead = options.indent + labelWidth + 2;
+  // A spare column keeps the terminal from wrapping a full line itself.
+  const room = Math.max(MIN_FLEX_COLUMN_WIDTH, width - lead - 1);
+
+  return rows.flatMap((row) =>
+    wrapWords(row.items.map(clean).join(", "), room).map(
+      (line, index) =>
+        `${" ".repeat(options.indent)}${index ? " ".repeat(labelWidth) : bold(pad(clean(row.label), labelWidth))}  ${line}`,
+    ),
+  );
+}
+
+/**
  * A choice's description as exactly five lines: wrapped to the terminal,
  * padded when shorter and cut with `…` when longer.
  */

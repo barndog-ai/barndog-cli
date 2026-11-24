@@ -58,7 +58,7 @@ import type {
 import type { CatalogAsset, McpServer } from "../features/asset-kinds/index.js";
 import type { AssetKind, PackageKind } from "../config/selection.js";
 import type { Harness, HookHarness } from "../harnesses/types.js";
-import type { Check } from "../features/doctor/index.js";
+import type { Check } from "../features/doctor/check.js";
 import type {
   UninstallOptions,
   UninstallResult,
