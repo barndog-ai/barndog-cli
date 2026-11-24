@@ -9,7 +9,7 @@ import {
 import { captureRuntime, createProgram } from "./program.js";
 import { renderError, renderJsonError } from "./ui/output.js";
 import { json } from "./ui/format.js";
-import { CliError, NothingToDoError } from "./errors.js";
+import { CliError, NothingToDoError, promptCancelled } from "./errors.js";
 import { updateCheck } from "./features/update-check/index.js";
 import { renderUpdateNotice } from "./ui/update.js";
 import { cliVersion } from "./version.js";
@@ -46,7 +46,7 @@ try {
         ),
       );
     }
-  } else if (error instanceof Error && error.name === "ExitPromptError") {
+  } else if (promptCancelled(error)) {
     const message = "Cancelled. Nothing was changed.";
     console.log(asJson ? json({ message }) : message);
     process.exitCode = 130;

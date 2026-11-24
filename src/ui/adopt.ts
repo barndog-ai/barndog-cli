@@ -1,4 +1,4 @@
-import checkbox from "@inquirer/checkbox";
+import checkbox, { Separator } from "@inquirer/checkbox";
 import confirm from "@inquirer/confirm";
 
 import {
@@ -14,7 +14,7 @@ import {
   type NativeAsset,
   type NativeScan,
 } from "../features/adoption/scan.js";
-import { friendlyMessage } from "../errors.js";
+import { friendlyMessage, promptCancelled } from "../errors.js";
 import { harnesses, adapters, type Harness } from "../harnesses/registry.js";
 import type { RuntimeContext } from "../runtime.js";
 import {
@@ -120,42 +120,75 @@ export function renderScan(
 }
 
 /**
- * Why an asset can't be picked: a same-named copy picked in an earlier tool's
- * checklist already brings it along.
+ * Columns Inquirer draws before a choice's name (cursor, then a circle such as
+ * ` ◯`, then a space); a text row is indented to match.
  */
-function disabledReason(asset: NativeAsset, picked: readonly string[]) {
+const CHOICE_PREFIX_WIDTH = 4;
+
+/** What a same-named copy picked in an earlier tool's checklist does to this one, if one was picked. */
+function broughtAlong(asset: NativeAsset, picked: readonly string[]) {
   const twin = asset.sameName.find((other) => picked.includes(other.key));
   if (!twin) {
-    return false;
+    return undefined;
   }
 
   const tool = adapters[twin.harness].name;
 
-  return asset.identical ? `comes with ${tool}'s` : `replaced by ${tool}'s`;
+  return asset.identical
+    ? `already comes with ${tool}`
+    : warn(`replaced by ${tool}'s copy`);
 }
 
-/** One choice in a tool's checklist. */
-function adoptionChoice(asset: NativeAsset, picked: readonly string[]) {
-  const disabled = disabledReason(asset, picked);
+/**
+ * One tool's checklist: the assets still to choose, then, as text the cursor
+ * skips, those an earlier pick already brings along. Returns no choices when
+ * nothing is left to pick.
+ */
+function adoptionChoices(
+  items: readonly NativeAsset[],
+  picked: readonly string[],
+) {
+  const nameWidth = Math.max(...items.map((asset) => asset.name.length));
+  const label = (asset: NativeAsset) =>
+    `${kindLabels[asset.kind].padEnd(kindWidth)} ${asset.name.padEnd(nameWidth)}`;
 
-  return {
-    value: asset.key,
-    checked: false,
-    short: asset.key,
-    name: `${kindLabels[asset.kind].padEnd(kindWidth)} ${asset.name}${!disabled && sharing(asset) ? dim(`  ${sharing(asset)}`) : ""}`,
-    description: choiceDescription(asset.description),
-    disabled,
-  };
+  const open = items.filter((asset) => !broughtAlong(asset, picked));
+  const along = items.flatMap((asset) => {
+    const note = broughtAlong(asset, picked);
+
+    return note
+      ? [
+          new Separator(
+            `${" ".repeat(CHOICE_PREFIX_WIDTH - 1)}${dim(label(asset))}  ${note}`,
+          ),
+        ]
+      : [];
+  });
+
+  if (!open.length) {
+    return [];
+  }
+
+  return [
+    ...open.map((asset) => ({
+      value: asset.key,
+      checked: false,
+      short: asset.key,
+      name: `${label(asset)}${sharing(asset) ? dim(`  ${sharing(asset)}`) : ""}`,
+      description: choiceDescription(asset.description),
+    })),
+    ...along,
+  ];
 }
 
 /** Asks tool by tool, so each checklist names the tool its assets are in. */
 const chooseAdoption: ChooseAdoption = async (scan) => {
   const picked: string[] = [];
   for (const { harness, items } of byTool(scan.assets)) {
-    const choices = items.map((asset) => adoptionChoice(asset, picked));
+    const choices = adoptionChoices(items, picked);
 
     // Inquirer refuses a checklist with nothing left to pick.
-    if (choices.every((choice) => choice.disabled)) {
+    if (!choices.length) {
       continue;
     }
 
@@ -388,6 +421,14 @@ export async function offerAdoptionAtSetup(
       });
     }
   } catch (error) {
+    if (promptCancelled(error)) {
+      prompt.write(
+        `${dim("Adoption cancelled; nothing was adopted. Run")} ${bold("barndog adopt")} ${dim("any time.")}`,
+      );
+
+      return;
+    }
+
     prompt.write(`${warn("!")} Nothing was adopted: ${friendlyMessage(error)}`);
     prompt.write(hint("barndog adopt", "Tip") + dim("  try again later"));
   }

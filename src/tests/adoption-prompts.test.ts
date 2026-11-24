@@ -86,58 +86,82 @@ const result: AdoptionResult = {
 test("the picker asks tool by tool and adopts only what's picked", async () => {
   vi.mocked(checkbox)
     .mockResolvedValueOnce(["claude/mcp/github"])
+    .mockResolvedValueOnce(["codex/skill/notes"])
     .mockResolvedValueOnce([])
     .mockResolvedValueOnce([]);
 
   vi.mocked(confirm).mockResolvedValue(true);
   const lines: string[] = [];
   const adoptNative = vi.fn().mockResolvedValue(result);
-  const withCursorSkill: NativeScan = {
+  const skill = (key: string, sameName: NativeAsset["sameName"] = []) => {
+    const [harness, , name] = key.split("/");
+
+    return asset({
+      key,
+      harness: harness as NativeAsset["harness"],
+      kind: "skill",
+      name: String(name),
+      sameName,
+    });
+  };
+
+  const moreTools: NativeScan = {
     ...scan,
     assets: [
       ...scan.assets,
-      asset({
-        key: "cursor/skill/review",
-        harness: "cursor",
-        kind: "skill",
-        name: "review",
-      }),
+      skill("cursor/skill/review"),
+      skill("opencode/skill/notes", [
+        { key: "codex/skill/notes", harness: "codex" },
+      ]),
+      skill("opencode/skill/lint"),
     ],
   };
 
-  await offerAdoption(withCursorSkill, {
+  await offerAdoption(moreTools, {
     adoptNative,
     write: (line) => lines.push(line),
     runtime,
   });
 
+  // Copies an earlier pick brings along are text rows the cursor skips.
   const pickers = vi.mocked(checkbox).mock.calls.map(([config]) => ({
     message: stripVTControlCharacters(config.message),
-    choices: (config.choices as { value: string; disabled?: unknown }[]).map(
-      (choice) => [choice.value, choice.disabled],
+    choices: (
+      config.choices as ({ separator: string } | { value: string })[]
+    ).map((choice) =>
+      "separator" in choice
+        ? stripVTControlCharacters(choice.separator).replace(/\s+/g, " ").trim()
+        : choice.value,
     ),
   }));
 
-  // Cursor's github differs from Claude Code's, which replaces it once picked.
   expect(pickers).toStrictEqual([
     {
       message: "Which Claude Code assets should BarnDog adopt?",
-      choices: [["claude/mcp/github", false]],
+      choices: ["claude/mcp/github"],
     },
     {
       message: "Which Codex assets should BarnDog adopt?",
-      choices: [["codex/skill/notes", false]],
+      choices: ["codex/skill/notes"],
     },
     {
       message: "Which Cursor assets should BarnDog adopt?",
       choices: [
-        ["cursor/mcp/github", "replaced by Claude Code's"],
-        ["cursor/skill/review", false],
+        "cursor/skill/review",
+        "MCP github replaced by Claude Code's copy",
       ],
+    },
+    {
+      message: "Which OpenCode assets should BarnDog adopt?",
+      choices: ["opencode/skill/lint", "Skill notes already comes with Codex"],
     },
   ]);
 
-  expect(adoptNative).toHaveBeenCalledWith(["claude/mcp/github"], []);
+  expect(adoptNative).toHaveBeenCalledWith(
+    ["claude/mcp/github", "codex/skill/notes"],
+    [],
+  );
+
   const text = lines.join("\n");
   expect(text).toMatch(/differs from Cursor/);
   expect(text).toMatch(/same as OpenCode/);

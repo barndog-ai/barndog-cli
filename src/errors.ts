@@ -297,6 +297,13 @@ export function friendlyHint(error: unknown): string | undefined {
   return code ? serverProblems[code].fix : undefined;
 }
 
+/** Inquirer's error name when the person presses Ctrl+C at a prompt. */
+const PROMPT_CLOSED = "ExitPromptError";
+
+/** Whether the person cancelled a prompt (Ctrl+C), which is a choice, not a failure. */
+export const promptCancelled = (error: unknown) =>
+  error instanceof Error && error.name === PROMPT_CLOSED;
+
 /** Turns internal codes and validation errors into something a person can act on. */
 export function friendlyMessage(error: unknown): string {
   if (!(error instanceof Error)) {

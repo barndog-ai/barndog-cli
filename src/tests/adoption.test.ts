@@ -27,6 +27,7 @@ import { scanNative } from "../features/adoption/scan.js";
 import { readStoredSecrets } from "../features/secrets/index.js";
 import type { Harness } from "../harnesses/registry.js";
 import { createProgram } from "../program.js";
+import { offerAdoptionAtSetup } from "../ui/adopt.js";
 import { runSetup } from "../ui/onboarding.js";
 import { testRuntime } from "./runtime.js";
 
@@ -986,4 +987,24 @@ test("adopting can keep an MCP server's values on this machine, and says where",
   expect(claude).toMatchObject({
     mcpServers: { keyed: { env: { API_KEY: "sk-secret", OTHER: "${OTHER}" } } },
   });
+});
+
+test("Ctrl+C at the adopt prompt during setup says it was cancelled, in plain words", async (t) => {
+  const { home, runtime } = await machine(t);
+  await write(home, ".claude/skills/notes/SKILL.md", skill("notes"));
+  const lines: string[] = [];
+  const closed = Object.assign(
+    new Error("User force closed the prompt with SIGINT"),
+    { name: "ExitPromptError" },
+  );
+
+  await offerAdoptionAtSetup(runtime, {
+    write: (line) => lines.push(line),
+    choose: () => Promise.reject(closed),
+  });
+
+  const text = lines.join("\n");
+  expect(text).toMatch(/Adoption cancelled; nothing was adopted/);
+  expect(text).not.toMatch(/SIGINT|force closed/);
+  expect(await readAdoptions(home)).toStrictEqual([]);
 });
