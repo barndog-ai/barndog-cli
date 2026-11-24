@@ -233,8 +233,8 @@ export type MissingValue = { variable: string; from?: string };
 
 /**
  * The variables a definition names that have no value on this machine:
- * BarnDog keeps none for this server and `env` doesn't set the variable read.
- * Each once, in the order the definition names them.
+ * BarnDog keeps none for this server and `env` doesn't set the variable read,
+ * even to an empty string. Each once, in the order the definition names them.
  */
 export function missingValues(
   definition: McpDefinition,
@@ -251,7 +251,8 @@ export function missingValues(
       literalOf(from ? values[from] : undefined) ??
       env[read];
 
-    if (!found) {
+    // An empty value is still a value: a tool passes it as it is.
+    if (found === undefined) {
       missing.set(secretRef, {
         variable: secretRef,
         ...(from ? { from } : {}),

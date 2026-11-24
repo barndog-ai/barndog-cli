@@ -7,6 +7,7 @@ import {
   heading,
   hint,
   json,
+  labelledLists,
   ok,
   warn,
 } from "../ui/format.js";
@@ -165,6 +166,8 @@ function registerGeneral(program: Command, context: CommandContext) {
 
       context.write(`\n${heading("doctor")}\n`);
       const width = Math.max(...checks.map((c) => c.name.length));
+      // Lines under a check start where its detail does.
+      const under = `  ${" ".repeat(width)}  `;
       for (const check of checks) {
         const mark = checkMarks[check.status];
 
@@ -172,19 +175,23 @@ function registerGeneral(program: Command, context: CommandContext) {
           `${mark} ${check.name.padEnd(width)}  ${check.status === "ok" ? dim(check.detail) : check.detail}`,
         );
 
+        for (const line of labelledLists(check.rows ?? [], {
+          indent: under.length,
+        })) {
+          context.write(line);
+        }
+
         if (check.fix) {
           // A fix in words reads as plain text when a command follows it.
           context.write(
             check.command
-              ? `  ${" ".repeat(width)}  ${dim("Fix:")} ${check.fix}`
-              : `  ${" ".repeat(width)}  ${hint(check.fix, "Fix")}`,
+              ? `${under}${dim("Fix:")} ${check.fix}`
+              : `${under}${hint(check.fix, "Fix")}`,
           );
         }
 
         if (check.command) {
-          context.write(
-            `  ${" ".repeat(width)}  ${dim("Command:")} ${bold(check.command)}`,
-          );
+          context.write(`${under}${dim("Command:")} ${bold(check.command)}`);
         }
       }
 

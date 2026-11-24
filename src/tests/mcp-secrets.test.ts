@@ -35,6 +35,7 @@ import {
   readStoredSecrets,
 } from "../features/secrets/index.js";
 import { doctor } from "../features/doctor/index.js";
+import { showMcp } from "../features/mcps/index.js";
 import { addMcp } from "../ui/add-mcp.js";
 import type { AddContext } from "../ui/add-asset.js";
 import { testRuntime } from "./runtime.js";
@@ -335,6 +336,12 @@ test("each server keeps its own value for a variable, or reads another variable"
     /AWS_REGION has no value here, so tickets can't read REGION from it/,
   );
 
+  const shown = await showMcp("tickets", "local", m.runtime);
+  expect(shown.keptVariables).toContainEqual({
+    variable: "REGION",
+    from: "AWS_REGION",
+  });
+
   await expect(
     keepMcpValue(
       { server: "tickets", variable: "REGION" },
@@ -445,18 +452,23 @@ test("without a terminal nothing is kept, and doctor names each variable with no
   });
 
   const checks = await doctor(m.runtime);
-  const variables = checks.filter((check) => check.name === "MCP variable");
-  expect(variables.map((check) => check.fix).sort()).toStrictEqual([
-    "barndog mcp env set other TOKEN",
-    "barndog mcp env set tickets API_KEY",
-    "barndog mcp env set tickets HOME",
-    "barndog mcp env set tickets REGION",
-    "barndog mcp env set web WEB_X_KEY",
-  ]);
+  const variables = checks.filter((check) => check.name.startsWith("MCP"));
+  expect(variables).toHaveLength(1);
+  expect(variables[0]).toMatchObject({
+    name: "MCP variables",
+    detail: expect.stringMatching(/^5 variables have no value here/),
+    fix: "barndog mcp env set <server> <variable>",
+  });
 
-  expect(variables.find((c) => c.fix?.endsWith("TOKEN"))?.detail).toMatch(
-    /TOKEN has no value here, so other can't use it/,
+  const rows = Object.fromEntries(
+    (variables[0]?.rows ?? []).map((row) => [row.label, [...row.items].sort()]),
   );
+
+  expect(rows).toStrictEqual({
+    other: ["TOKEN"],
+    tickets: ["API_KEY", "HOME", "REGION"],
+    web: ["WEB_X_KEY"],
+  });
 });
 
 test("mcp list and mcp show name the variables with no value here, and how to set them", async (t) => {
@@ -485,7 +497,7 @@ test("mcp list and mcp show name the variables with no value here, and how to se
   await run(["mcp", "list", "--installed"]);
   const listed = stripVTControlCharacters(output.join("\n"));
   expect(listed).toMatch(
-    /! tickets can't use REGION, HOME: no value here\.\n\s+Fix: barndog mcp show tickets/,
+    /! tickets can't use REGION, HOME: no value here\.\n\s+Fix: barndog mcp env set tickets$/m,
   );
 
   expect(listed).toMatch(
@@ -495,17 +507,36 @@ test("mcp list and mcp show name the variables with no value here, and how to se
   output.length = 0;
   await run(["mcp", "show", "tickets", "--origin", "local"]);
   const shown = stripVTControlCharacters(output.join("\n"));
+  // A table of where each value comes from, and what "kept" means.
+  expect(shown).toMatch(/^Variable +Value$/m);
+  expect(shown).toMatch(/^API_KEY +kept by BarnDog$/m);
+  expect(shown).toMatch(/^REGION +from \$REGION \(not set\)$/m);
+  expect(shown).toMatch(/^HOME_DIR +from \$HOME \(not set\)$/m);
   expect(shown).toMatch(
-    /API_KEY from \$API_KEY, REGION from \$REGION \(not set\)/,
+    /BarnDog keeps these values in ~\/\.barndog\/secrets\.json/,
   );
 
+  // One warning for both, rather than one each.
   expect(shown).toMatch(
-    /! HOME has no value here, so tickets can't use it\.\n\s+Fix: barndog mcp env set tickets HOME/,
+    /! 2 variables have no value here, so tickets can't use them\.\n\s+Fix: barndog mcp env set tickets$/m,
   );
+
+  expect(shown.match(/has no value here|have no value here/g)).toHaveLength(1);
+
+  output.length = 0;
+  await run(["mcp", "show", "web", "--origin", "local"]);
+  const web = stripVTControlCharacters(output.join("\n"));
+  expect(web).toMatch(
+    /! WEB_X_KEY has no value here, so web can't use it\.\n\s+Fix: barndog mcp env set web WEB_X_KEY/,
+  );
+
+  // Nothing kept, so nothing to explain.
+  expect(web).not.toMatch(/secrets\.json/);
 
   output.length = 0;
   await run(["mcp", "show", "tickets", "--origin", "local"], true);
   expect(JSON.parse(output.join("\n"))).toMatchObject({
+    keptVariables: [{ variable: "API_KEY" }],
     unsetVariables: ["REGION", "HOME"],
   });
 });
@@ -589,6 +620,15 @@ test("a server reads a variable it was pointed at, from its own kept values or t
   expect(
     missingValues(definition, values, { GITHUB_TOKEN: "x" }),
   ).toStrictEqual([]);
+
+  // An empty string is a value, kept or set, not a missing one.
+  expect(
+    missingValues(definition, { ...values, PAT: { value: "" } }, {}),
+  ).toStrictEqual([]);
+
+  expect(missingValues(definition, values, { GITHUB_TOKEN: "" })).toStrictEqual(
+    [],
+  );
 });
 
 test("a value kept for a server that's gone is forgotten by its asset ID", async (t) => {

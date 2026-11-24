@@ -4,7 +4,7 @@ import open from "open";
 import { createProgram } from "../program.js";
 import { CliError } from "../errors.js";
 import type { RepositoryStatus } from "../features/inspection/index.js";
-import type { Check } from "../features/doctor/index.js";
+import type { Check } from "../features/doctor/check.js";
 import type { SetsList } from "../features/environment/operations.js";
 
 vi.mock("open", () => ({ default: vi.fn() }));
@@ -75,6 +75,31 @@ test("doctor shows each check with its mark, detail and fix", async () => {
     "Fix: barndog sync",
     "Fix: barndog doctor",
   ]);
+});
+
+test("doctor lists a grouped check's names under its detail, aligned by label", async () => {
+  const lines = await doctorOutput([
+    passing,
+    {
+      name: "MCP variables",
+      status: "warn",
+      detail: "3 variables have no value here.",
+      rows: [
+        { label: "web", items: ["KEY"] },
+        { label: "tickets", items: ["REGION", "HOME"] },
+      ],
+      fix: "barndog mcp env set <server> <variable>",
+    },
+  ]);
+
+  expect(lines.map(stripVTControlCharacters)).toEqual(
+    expect.arrayContaining([
+      "! MCP variables  3 variables have no value here.",
+      "                 web      KEY",
+      "                 tickets  REGION, HOME",
+      "                 Fix: barndog mcp env set <server> <variable>",
+    ]),
+  );
 });
 
 test("doctor --json prints the checks as they are", async () => {

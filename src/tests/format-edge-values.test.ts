@@ -8,6 +8,7 @@ import {
   ok,
   warn,
   fields,
+  labelledLists,
   renderValue,
   table,
   visibleWidth,
@@ -138,4 +139,22 @@ test("a choice's description always takes five lines, wrapped and cut to the ter
   ).toStrictEqual(["abcdef…", "second", "", "", ""]);
 
   expect(choiceDescription("", 20)).toBe("\n\n\n\n");
+});
+
+test("labelled lists wrap under the list, not the label", () => {
+  expect(
+    labelledLists(
+      [
+        { label: "node_repl", items: ["ALPHA_VALUE", "BETA_VALUE", "GAMMA"] },
+        { label: "web", items: ["KEY"] },
+      ],
+      { indent: 2, width: 40 },
+    ),
+  ).toStrictEqual([
+    "  node_repl  ALPHA_VALUE, BETA_VALUE,",
+    "             GAMMA",
+    "  web        KEY",
+  ]);
+
+  expect(labelledLists([], { indent: 2, width: 40 })).toStrictEqual([]);
 });

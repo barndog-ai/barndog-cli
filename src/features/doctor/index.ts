@@ -11,47 +11,8 @@ import { LoginRequiredError } from "../auth/transport.js";
 import { synchronize } from "../environment/sync.js";
 import { assetKinds } from "../asset-kinds/index.js";
 import { barndogPaths } from "../../config/paths.js";
-import {
-  unassignedValueMessage,
-  unsetValueMessage,
-  type SyncEvent,
-} from "../environment/events.js";
-
-export type Check = {
-  name: string;
-  status: "ok" | "warn" | "fail";
-  detail: string;
-  fix?: string;
-  /** A command that deletes or changes something; `fix` says it in words. */
-  command?: string;
-};
-
-/** An MCP variable with no value on this machine, or a kept value no server has. */
-function variableCheck(event: SyncEvent): Check[] {
-  if (event.type === "unassigned-value") {
-    return [
-      {
-        name: "MCP variable",
-        status: "warn",
-        detail: unassignedValueMessage(event.variable),
-        fix: `barndog mcp env set <server> ${event.variable}`,
-      },
-    ];
-  }
-
-  if (event.type !== "unset-variable") {
-    return [];
-  }
-
-  return [
-    {
-      name: "MCP variable",
-      status: "warn",
-      detail: `${unsetValueMessage(event)} BarnDog doesn't keep it and it isn't set in this shell. Coding tools opened outside a terminal may not see your shell's variables either.`,
-      fix: `barndog mcp env set ${event.server} ${event.variable}`,
-    },
-  ];
-}
+import type { Check } from "./check.js";
+import { unsupportedChecks, variableChecks } from "./grouped.js";
 
 const failure = (error: unknown) => ({
   detail: error instanceof Error ? error.message : String(error),
@@ -209,7 +170,7 @@ export async function doctor(runtime: RuntimeContext): Promise<Check[]> {
       fix: pending ? "barndog sync" : undefined,
     });
 
-    checks.push(...events.flatMap(variableCheck));
+    checks.push(...variableChecks(events));
     for (const event of events) {
       if (event.type === "notice") {
         checks.push({ name: "Notice", status: "warn", detail: event.message });
@@ -231,15 +192,9 @@ export async function doctor(runtime: RuntimeContext): Promise<Check[]> {
           detail: `${event.kind} ${event.name}: ${event.reason}. The installed version stays in place.`,
         });
       }
-
-      if (event.type === "unsupported") {
-        checks.push({
-          name: "Unsupported",
-          status: "warn",
-          detail: `${event.kind} ${event.name} on ${adapters[event.harness].name}: ${event.reason}`,
-        });
-      }
     }
+
+    checks.push(...unsupportedChecks(events));
   } catch (error) {
     checks.push({ name: "Installation", status: "fail", ...failure(error) });
   }

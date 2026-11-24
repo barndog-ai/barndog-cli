@@ -506,7 +506,7 @@ test("MCP details read as fields and keep variable names exact", () => {
 
   expect(text).toMatch(/v3/);
   expect(text).toMatch(/node server\.js/);
-  expect(text).toMatch(/E2E_MCP_TOKEN from \$E2E_MCP_TOKEN/);
+  expect(text).toMatch(/^E2E_MCP_TOKEN +from \$E2E_MCP_TOKEN$/m);
   expect(text).not.toMatch(/\[object|E2e mcp/);
   expect(plain(renderValue({ E2E_MCP_TOKEN: "x" }))).toMatch(/E2E_MCP_TOKEN/);
 });

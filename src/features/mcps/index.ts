@@ -27,7 +27,7 @@ import {
 import { gitVersions } from "../collaboration/workspace-git.js";
 import type { PackageVersion } from "../collaboration/results.js";
 import { adapters } from "../../harnesses/registry.js";
-import { missingValues } from "../secrets/index.js";
+import { missingValues, readsFrom } from "../secrets/index.js";
 import { keptValues } from "../environment/kept-values.js";
 import type { Harness } from "../../harnesses/types.js";
 import { patchNative, type NativeEntry } from "../native/configuration.js";
@@ -143,10 +143,17 @@ export async function updateMcp(
 }
 
 /**
- * An MCP configuration as `mcp show` prints it, with the variables it refers to
- * that have no value on this machine.
+ * A variable BarnDog keeps a value for on this machine: the value itself, or
+ * another variable to read instead (`from`). Never the value.
+ */
+type KeptReference = { variable: string; from?: string };
+
+/**
+ * An MCP configuration as `mcp show` prints it, with the variables BarnDog
+ * keeps values for and those that have no value on this machine.
  */
 export type ShownMcp = (RepoAssetView | PublishedAsset) & {
+  keptVariables: KeptReference[];
   unsetVariables: string[];
 };
 
@@ -163,16 +170,23 @@ export async function showMcp(
   const withUnset = async (
     asset: RepoAssetView | PublishedAsset,
     definition: McpDefinition | undefined,
-  ): Promise<ShownMcp> => ({
-    ...asset,
-    unsetVariables: definition
-      ? missingValues(
-          definition,
-          (await keptValues(runtime)).servers[asset.id] ?? {},
-          runtime.env,
-        ).map((missing) => missing.variable)
-      : [],
-  });
+  ): Promise<ShownMcp> => {
+    const values = (await keptValues(runtime)).servers[asset.id] ?? {};
+
+    return {
+      ...asset,
+      keptVariables: Object.entries(values).map(([variable, kept]) => {
+        const from = readsFrom(kept);
+
+        return from ? { variable, from } : { variable };
+      }),
+      unsetVariables: definition
+        ? missingValues(definition, values, runtime.env).map(
+            (missing) => missing.variable,
+          )
+        : [],
+    };
+  };
 
   if (repo) {
     const view = showRepoAsset(
