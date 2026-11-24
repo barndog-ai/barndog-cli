@@ -41,6 +41,7 @@ import { discoverSkills, ROOT_TOKEN } from "../imports/discover.js";
 import { readFolder } from "../imports/folder.js";
 import { renamedSkill } from "../imports/local.js";
 import { convertServer, harnessServers } from "../mcps/import.js";
+import { queryParameters } from "../asset-kinds/url-query.js";
 import { assetKinds } from "../asset-kinds/index.js";
 import { assetPath, NAME_RULE } from "../workspace/format.js";
 import { localMcpNamed, type LiteralValue } from "../mcps/import.js";
@@ -70,6 +71,11 @@ export type NativeAsset = {
    * only: adopting asks whether BarnDog keeps each on this machine.
    */
   values: { key: string; variable: string }[];
+  /**
+   * The names of an MCP server's URL query parameters, which BarnDog keeps as
+   * written; empty for everything else.
+   */
+  queryParameters: string[];
 };
 
 /** Another tool's asset, by key and tool. */
@@ -124,6 +130,7 @@ const publicAsset = (asset: FoundAsset): NativeAsset => ({
   identical: asset.identical,
   notes: asset.notes,
   values: asset.values,
+  queryParameters: asset.queryParameters,
 });
 
 /** Every adoptable asset in the selected tools, with its contents. */
@@ -360,6 +367,7 @@ async function readSkill(
     notes: [],
     literals: [],
     values: [],
+    queryParameters: [],
     content: { kind: "skill", entries: renamedSkill(skill, name) },
     original:
       link === null
@@ -425,6 +433,7 @@ async function toolServers(
           key,
           variable,
         })),
+        queryParameters: queryParameters(converted.definition),
         content: { kind: "mcp", definition: converted.definition },
         original: {
           type: "entry",
@@ -506,6 +515,7 @@ async function toolHooks(
           notes: hook.notes,
           literals: [],
           values: [],
+          queryParameters: [],
           content: { kind: "hook", entries: hook.entries },
           original: {
             type: "entry",

@@ -1,4 +1,8 @@
 import type { RuntimeContext } from "../../runtime.js";
+import {
+  type ConfirmUrlQuery,
+  mayShareUrlQueries,
+} from "../asset-kinds/url-query.js";
 import { randomBytes } from "node:crypto";
 import { basename, join } from "node:path";
 import { rm } from "node:fs/promises";
@@ -99,6 +103,11 @@ export type MoveOptions = {
   repo?: string;
   server?: string;
   kind?: string;
+  /**
+   * Asked before sharing MCP servers whose URL has a query string; without it
+   * they aren't shared.
+   */
+  confirmUrlQuery?: ConfirmUrlQuery;
 };
 
 export type MoveResult = {
@@ -664,6 +673,10 @@ export function moveLocalAssets(
       options.as,
       options.kind,
     );
+
+    if (!(await mayShareUrlQueries(items, options.confirmUrlQuery))) {
+      throw new CliError("Nothing was moved.");
+    }
 
     // Only this machine's own workspace: a one-off destination isn't installed here.
     const sharedIds: SharedIds = new Map();

@@ -31,7 +31,7 @@ import {
 } from "./format.js";
 import { displayPath } from "./output.js";
 import type { KeptChoice } from "../features/mcps/import.js";
-import { renderMcpValues } from "./mcp.js";
+import { LOCAL_URL_QUERY, renderMcpValues, renderUrlQueries } from "./mcp.js";
 import { checkboxTheme, promptTheme } from "./theme.js";
 
 /** Asks which scanned assets to adopt and returns their keys; tests pass their own answer. */
@@ -231,6 +231,17 @@ function renderPlan(plan: PlannedAsset[]): string[] {
       "Adopted Skills and MCP servers install in every coding tool BarnDog manages.",
     ),
   );
+
+  // Same-named copies share one source, so each server is named once.
+  const queries = plan
+    .filter((asset) => asset.key === asset.source.key)
+    .flatMap(({ name, queryParameters: parameters }) =>
+      parameters.length ? [{ name, parameters }] : [],
+    );
+
+  if (queries.length) {
+    output.push("", ...renderUrlQueries(queries), dim(LOCAL_URL_QUERY));
+  }
 
   return output;
 }

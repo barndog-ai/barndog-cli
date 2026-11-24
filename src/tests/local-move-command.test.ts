@@ -126,6 +126,27 @@ for (const [args, message] of [
   });
 }
 
+test("--allow-url-query lets a move share a URL query; without it the move stops with that fix", async () => {
+  const queries = [{ name: "supabase", parameters: ["project_ref"] }];
+  const f = program(false);
+  await f.run("supabase", "--keep-local", "--to", "org", "--allow-url-query");
+  await f.run(
+    "supabase",
+    "--no-keep-local",
+    "--repo",
+    "https://git.test/a.git",
+  );
+
+  const [allowed, asked] = f.calls;
+  expect(await allowed?.confirmUrlQuery?.(queries)).toBe(true);
+  await expect(asked?.confirmUrlQuery?.(queries)).rejects.toSatisfy(
+    (error) =>
+      error instanceof CliError &&
+      error.hint ===
+        "barndog local move supabase --no-keep-local --repo https://git.test/a.git --allow-url-query",
+  );
+});
+
 test("local move --help explains choosing, moving and keeping", async () => {
   const f = program(false);
   await expect(f.run("--help")).rejects.toBeInstanceOf(CommanderError);

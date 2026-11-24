@@ -1,4 +1,5 @@
 import { json, ok, ORIGIN_HELP } from "../ui/format.js";
+import { confirmSharingUrlQuery } from "../ui/mcp.js";
 import { Option, type Command } from "commander";
 import { type CommandContext } from "./context.js";
 import { harnesses } from "../harnesses/registry.js";
@@ -27,7 +28,11 @@ export function registerMcp(program: Command, context: CommandContext) {
         "--file <file>",
         "JSON connection definition with secret references",
       )
-      .option("--key <key>", "Stable key for exact retries");
+      .option("--key <key>", "Stable key for exact retries")
+      .option(
+        "--allow-url-query",
+        "Publish a URL with query parameters without asking",
+      );
 
     if (action === "update") {
       command.requiredOption(
@@ -44,12 +49,22 @@ export function registerMcp(program: Command, context: CommandContext) {
           file: string;
           key?: string;
           expectedVersion: string;
+          allowUrlQuery?: boolean;
         },
       ) => {
+        const { allowUrlQuery, ...rest } = options;
+        const confirmUrlQuery = confirmSharingUrlQuery({
+          interactive: context.mode.interactive,
+          allowed: allowUrlQuery,
+          write: context.write,
+          fix: `barndog mcp ${action} ${name} --origin ${options.origin} --file ${options.file}${action === "update" ? ` --expected-version ${options.expectedVersion}` : ""} --allow-url-query`,
+        });
+
+        const input = { ...rest, name, confirmUrlQuery };
         const result =
           action === "create"
-            ? await context.createMcp({ ...options, name })
-            : await context.updateMcp({ ...options, name });
+            ? await context.createMcp(input)
+            : await context.updateMcp(input);
 
         if (context.mode.json) {
           return context.write(json(result));

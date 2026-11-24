@@ -28,6 +28,7 @@ import { synchronize } from "../environment/sync.js";
 import { patchNative } from "../native/configuration.js";
 import { validMcpName, VARIABLE_NAME } from "../../shared/patterns.js";
 import { assetKinds } from "../asset-kinds/index.js";
+import { queryParameters } from "../asset-kinds/url-query.js";
 import { LOCAL_ORIGIN } from "../workspace/overlay.js";
 import { ensureLocalWorkspace } from "../imports/local.js";
 import {
@@ -398,7 +399,23 @@ export function convertServer(
     );
   }
 
-  return { name, definition: parsed.data, notes, literals };
+  return {
+    name,
+    definition: parsed.data,
+    notes: [...notes, ...urlQueryNotes(parsed.data)],
+    literals,
+  };
+}
+
+/** What to check before sharing a server whose URL has a query string. */
+function urlQueryNotes(definition: McpDefinition): string[] {
+  const parameters = queryParameters(definition);
+
+  return parameters.length
+    ? [
+        `Its URL keeps the query parameters ${parameters.join(", ")} as written. Check none of them holds a secret before you share it.`,
+      ]
+    : [];
 }
 
 export type HarnessServer = ImportedServer & {

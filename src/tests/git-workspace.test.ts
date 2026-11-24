@@ -3028,7 +3028,7 @@ test("pasted MCP JSON never stores a secret and installs everywhere", async (t) 
   expect(() =>
     convertServer({
       name: "a",
-      server: { url: "https://x.example.com/?key=1" },
+      server: { url: "https://user:key@x.example.com/" },
     }),
   ).toThrow(/can't be added/);
 });

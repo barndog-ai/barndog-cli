@@ -490,6 +490,7 @@ describe("interactive fork and promote", () => {
       target: "team/web",
       newName: "copied",
       key: undefined,
+      confirmUrlQuery: expect.any(Function),
     });
 
     expect(fork).not.toHaveBeenCalled();
@@ -550,6 +551,7 @@ describe("promotion of a local asset", () => {
       target: "org",
       newName: "copied",
       key: undefined,
+      confirmUrlQuery: expect.any(Function),
     });
 
     expect(write.mock.calls.map(([line]) => line)).toEqual([

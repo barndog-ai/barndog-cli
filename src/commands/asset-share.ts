@@ -1,4 +1,5 @@
 import { renderMove } from "../ui/move.js";
+import { confirmSharingUrlQuery } from "../ui/mcp.js";
 import input from "@inquirer/input";
 import { type Command } from "commander";
 import { type CommandContext } from "./context.js";
@@ -134,7 +135,15 @@ export function registerSharing(
                   outcome: "promoted",
                   promotion: await context.fork(input),
                 } as const)
-              : await context.promote(input);
+              : await context.promote({
+                  ...input,
+                  confirmUrlQuery: confirmSharingUrlQuery({
+                    interactive: context.mode.interactive,
+                    write: context.write,
+                    // Promoting a local asset shares a copy, as this does.
+                    fix: `barndog local move ${name} --keep-local --to ${target} --allow-url-query`,
+                  }),
+                });
 
           if (outcome.outcome === "moved") {
             if (context.mode.json) {

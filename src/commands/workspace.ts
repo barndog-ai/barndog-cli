@@ -11,6 +11,7 @@ import {
   warn,
 } from "../ui/format.js";
 import { chooseKeepLocal, pickLocalAssets, renderMove } from "../ui/move.js";
+import { confirmSharingUrlQuery } from "../ui/mcp.js";
 import { CliError } from "../errors.js";
 import type { CommandContext } from "./context.js";
 import type { MigrationRow } from "../features/migration/migrate.js";
@@ -101,6 +102,10 @@ export function registerWorkspace(program: Command, context: CommandContext) {
       "--server <url>",
       "Send to this Cloud Workspace; this machine stays as it is",
     )
+    .option(
+      "--allow-url-query",
+      "Share MCP servers whose URL has query parameters without asking",
+    )
     .addHelpText(
       "after",
       `
@@ -123,6 +128,7 @@ With --repo or --server this machine stays as it is, so the assets are always co
           as?: string;
           repo?: string;
           server?: string;
+          allowUrlQuery?: boolean;
         },
       ) => {
         const chosen = await chooseNames(names, options.all);
@@ -138,6 +144,25 @@ With --repo or --server this machine stays as it is, so the assets are always co
           as: options.as,
           repo: options.repo,
           server: options.server,
+          confirmUrlQuery: confirmSharingUrlQuery({
+            interactive: context.mode.interactive,
+            allowed: options.allowUrlQuery,
+            write: context.write,
+            fix: [
+              "barndog local move",
+              chosen?.join(" ") ?? "--all",
+              keepLocal ? "--keep-local" : "--no-keep-local",
+              ...Object.entries({
+                to: options.to,
+                as: options.as,
+                repo: options.repo,
+                server: options.server,
+              }).flatMap(([flag, value]) =>
+                value ? [`--${flag} ${value}`] : [],
+              ),
+              "--allow-url-query",
+            ].join(" "),
+          }),
         });
 
         if (context.mode.json) {

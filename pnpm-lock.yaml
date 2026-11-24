@@ -167,8 +167,8 @@ importers:
   .:
     dependencies:
       '@barndog-ai/api-contract':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: ^0.2.1
+        version: 0.2.1
       '@inquirer/ansi':
         specifier: ^2.0.10
         version: 2.0.10
@@ -289,8 +289,8 @@ packages:
     resolution: {integrity: sha512-UjI/dKmwJwT9pOszJitq2G6EObZPnsZUfdCr92z2TlF3EZK9J3EdfOKUrCzHl6wFthbzwhzl1Soc/UIwxRiq6w==}
     engines: {node: '>=6.9.0'}
 
-  '@barndog-ai/api-contract@0.1.0':
-    resolution: {integrity: sha512-B0B5e84uLh3skINIitDhpNKHbSa8oQAeX2l4C2lcXxz2vFeubwbyr7SLwGk7SkQ0fiorpPSKaj0lbUrbS4vQEg==}
+  '@barndog-ai/api-contract@0.2.1':
+    resolution: {integrity: sha512-WTQj/A2Y+IRw+GTSvACLmegZs4mMycM023TWBashqAAs505BORFxYPc52ChMp2xiYNPGUKp/AS3bmPQG0azGwg==}
     engines: {node: '>=24'}
 
   '@bcoe/v8-coverage@1.0.2':
@@ -1833,7 +1833,7 @@ snapshots:
       '@babel/helper-string-parser': 7.29.14
       '@babel/helper-validator-identifier': 7.29.7
 
-  '@barndog-ai/api-contract@0.1.0':
+  '@barndog-ai/api-contract@0.2.1':
     dependencies:
       openapi-fetch: 0.17.0
       tar: 7.5.22

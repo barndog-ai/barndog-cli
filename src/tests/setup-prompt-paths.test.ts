@@ -614,7 +614,11 @@ for (const choice of ["keep", "copy", "move", "leave"] as const) {
     expect(moveLocalAssets).toHaveBeenCalledTimes(shares ? 1 : 0);
     if (shares) {
       expect(moveLocalAssets).toHaveBeenCalledWith(
-        { to: "org", keepLocal: choice === "copy" },
+        {
+          to: "org",
+          keepLocal: choice === "copy",
+          confirmUrlQuery: expect.any(Function),
+        },
         runtime,
       );
 

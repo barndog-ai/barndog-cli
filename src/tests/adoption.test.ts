@@ -523,6 +523,7 @@ test("adopt passes its options to the adoption functions", async () => {
             identical: true,
             notes: [],
             values: [],
+            queryParameters: [],
           },
         ],
         skipped: [],

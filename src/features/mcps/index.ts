@@ -32,6 +32,10 @@ import { keptValues } from "../environment/kept-values.js";
 import type { Harness } from "../../harnesses/types.js";
 import { patchNative, type NativeEntry } from "../native/configuration.js";
 import { fileText, inputJson } from "../../shared/files.js";
+import {
+  type ConfirmUrlQuery,
+  mayShareUrlQueries,
+} from "../asset-kinds/url-query.js";
 import { defined } from "../../shared/lookup.js";
 import { CliError, friendlyMessage } from "../../errors.js";
 import { barndogPaths } from "../../config/paths.js";
@@ -43,6 +47,11 @@ export type McpWriteInput = {
   /** Path of the JSON connection definition. */
   file: string;
   key?: RetryKey;
+  /**
+   * Asked before publishing a definition whose URL has a query string; without
+   * it such a definition isn't published.
+   */
+  confirmUrlQuery?: ConfirmUrlQuery;
 };
 
 /** One published revision of an MCP configuration. */
@@ -60,7 +69,9 @@ export type McpUpdateInput = McpWriteInput & {
   expectedVersion: string;
 };
 
-async function readDefinition(file: string, runtime: RuntimeContext) {
+/** The definition in `input.file`, once the developer agrees to share any URL query it has. */
+async function readDefinition(input: McpWriteInput, runtime: RuntimeContext) {
+  const { file } = input;
   const result = mcpDefinitionSchema.safeParse(
     await inputJson(localPath(file, runtime)),
   );
@@ -71,6 +82,15 @@ async function readDefinition(file: string, runtime: RuntimeContext) {
       "Check the fields against the MCP definition format at barndog.dev/docs",
       { cause: result.error },
     );
+  }
+
+  if (
+    !(await mayShareUrlQueries(
+      [{ name: input.name, definition: result.data }],
+      input.confirmUrlQuery,
+    ))
+  ) {
+    throw new CliError("Nothing was published.");
   }
 
   return result.data;
@@ -84,7 +104,7 @@ export async function createMcp(
   const conn = await connection(runtime);
   const scope = await selectOrigin(input.origin, conn, runtime);
 
-  const definition = await readDefinition(input.file, runtime);
+  const definition = await readDefinition(input, runtime);
 
   return parsed(
     mcpSchema,
@@ -106,7 +126,7 @@ export async function updateMcp(
 ): Promise<McpServer> {
   const conn = await connection(runtime);
   await selectOrigin(input.origin, conn, runtime);
-  const definition = await readDefinition(input.file, runtime);
+  const definition = await readDefinition(input, runtime);
   const selected = await selectAsset("mcp", input.name, input.origin, runtime);
 
   return parsed(

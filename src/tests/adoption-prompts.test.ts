@@ -37,6 +37,7 @@ const asset = (overrides: Partial<NativeAsset>): NativeAsset => ({
   identical: true,
   notes: [],
   values: [],
+  queryParameters: [],
   ...overrides,
 });
 
@@ -170,6 +171,37 @@ test("the picker asks tool by tool and adopts only what's picked", async () => {
   expect(text).toMatch(/MCP github: Set TOKEN/);
   expect(text).toMatch(/Tip: barndog local list/);
   expect(text).not.toMatch(/adopt undo/);
+});
+
+test("the plan warns about an MCP server's URL query before asking to adopt", async () => {
+  vi.mocked(checkbox).mockResolvedValue(["codex/mcp/supabase"]);
+  vi.mocked(confirm).mockResolvedValue(false);
+  const lines: string[] = [];
+
+  await offerAdoption(
+    {
+      assets: [
+        asset({
+          key: "codex/mcp/supabase",
+          harness: "codex",
+          name: "supabase",
+          queryParameters: ["project_ref", "read_only"],
+        }),
+      ],
+      skipped: [],
+    },
+    { adoptNative: vi.fn(), write: (line) => lines.push(line), runtime },
+  );
+
+  const text = stripVTControlCharacters(lines.join("\n"));
+  expect(text).toMatch(
+    /supabase's URL has query parameters: project_ref, read_only\./,
+  );
+
+  expect(text).toMatch(/stays on this machine and works as is/);
+  expect(text.indexOf("query parameters")).toBeLessThan(
+    text.indexOf("Nothing adopted"),
+  );
 });
 
 test("after adopting beside a shared workspace, the next step is sharing", () => {

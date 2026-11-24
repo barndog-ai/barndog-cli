@@ -112,7 +112,10 @@ import type {
   Promotion,
   PromoteInput,
 } from "../features/discovery/index.js";
-import type { PromoteResult } from "../features/migration/promote.js";
+import type {
+  PromoteRequest,
+  PromoteResult,
+} from "../features/migration/promote.js";
 import type {
   GithubInstallation,
   GithubPage,
@@ -279,7 +282,7 @@ type FeatureFunctions = {
     handle: string,
     search?: string,
   ) => Promise<DeveloperAssets>;
-  promote: (input: PromoteInput) => Promise<PromoteResult>;
+  promote: (input: PromoteRequest) => Promise<PromoteResult>;
   fork: (input: PromoteInput) => Promise<Promotion>;
 
   createPackage: (target: WorkingCopyTarget) => Promise<CreatedPackage>;

@@ -1,4 +1,5 @@
 import type { RuntimeContext } from "../runtime.js";
+import { confirmSharingUrlQuery } from "./mcp.js";
 import { environmentChooser } from "./environment-onboarding.js";
 import { authStatus, configuredServer } from "../features/auth/session.js";
 import {
@@ -538,7 +539,15 @@ export async function runSetup(options: {
     write("");
     for (const line of renderMove(
       await moveLocalAssets(
-        { to, keepLocal: localChoice === "copy" },
+        {
+          to,
+          keepLocal: localChoice === "copy",
+          confirmUrlQuery: confirmSharingUrlQuery({
+            interactive: true,
+            write,
+            fix: "barndog local move --all --allow-url-query",
+          }),
+        },
         options.runtime,
       ),
     )) {

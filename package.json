@@ -24,7 +24,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@barndog-ai/api-contract": "^0.1.0",
+    "@barndog-ai/api-contract": "^0.2.1",
     "@inquirer/ansi": "^2.0.10",
     "@inquirer/checkbox": "^5.2.7",
     "@inquirer/confirm": "^6.3.4",

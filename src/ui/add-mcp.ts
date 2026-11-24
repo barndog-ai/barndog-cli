@@ -7,6 +7,7 @@ import {
   addMcpServers,
   type AddedServers,
   conflictingEntries,
+  type ConvertedServer,
   convertServer,
   harnessServers,
   localMcpNamed,
@@ -19,7 +20,8 @@ import { assetKinds } from "../features/asset-kinds/index.js";
 import { validMcpName } from "../shared/patterns.js";
 import { bold, dim, ok, warn } from "./format.js";
 import { type AddContext, type AddOptions } from "./add-asset.js";
-import { renderMcpValues } from "./mcp.js";
+import { urlQueries } from "../features/asset-kinds/url-query.js";
+import { LOCAL_URL_QUERY, renderMcpValues, renderUrlQueries } from "./mcp.js";
 
 async function serversToAdd(
   name: string | undefined,
@@ -204,6 +206,31 @@ async function namedServers(
 }
 
 /**
+ * Warns about URLs with a query string, which BarnDog keeps as written, and in
+ * a terminal asks whether to add them; elsewhere the added servers' notes say so.
+ */
+async function confirmUrlQueries(
+  servers: readonly ConvertedServer[],
+  context: AddContext,
+) {
+  const queries = urlQueries(servers);
+  if (!queries.length || !context.interactive) {
+    return;
+  }
+
+  for (const line of renderUrlQueries(queries)) {
+    context.write(line);
+  }
+
+  context.write(dim(LOCAL_URL_QUERY));
+  if (
+    !(await context.prompts.yes(`Add ${queries.length === 1 ? "it" : "them"}?`))
+  ) {
+    throw new CliError("Nothing was added.");
+  }
+}
+
+/**
  * `mcp add`: imports MCP servers from a harness's configuration or pasted JSON
  * into the local workspace.
  */
@@ -252,6 +279,8 @@ export async function addMcp(
   if (!servers.length) {
     throw new CliError("No MCP servers were chosen, so nothing was added.");
   }
+
+  await confirmUrlQueries(servers, context);
 
   let replace = options.replace;
   const conflicts = (

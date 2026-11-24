@@ -1,12 +1,19 @@
 import { SHORT_COMMIT_LENGTH } from "../shared/constants.js";
 
+import confirm from "@inquirer/confirm";
 import { mcpDefinitionSchema } from "@barndog-ai/api-contract";
 import { z } from "zod";
 
 import type { McpValue } from "../features/mcps/import.js";
+import type {
+  ConfirmUrlQuery,
+  UrlQuery,
+} from "../features/asset-kinds/url-query.js";
+import { CliError } from "../errors.js";
 import {
   bold,
   clean,
+  dim,
   fields,
   hint,
   originLabel,
@@ -14,6 +21,7 @@ import {
   table,
   warn,
 } from "./format.js";
+import { promptTheme } from "./theme.js";
 
 const shownMcpSchema = z.looseObject({
   name: z.string(),
@@ -172,4 +180,63 @@ export function renderMcp(value: unknown): string[] {
     ]),
     ...problems,
   ];
+}
+
+/** One warning per MCP server whose URL has query parameters, naming them but never their values. */
+export function renderUrlQueries(servers: readonly UrlQuery[]): string[] {
+  return servers.map(
+    (server) =>
+      `${warn("!")} ${bold(server.name)}'s URL has query parameters: ${server.parameters.join(", ")}.`,
+  );
+}
+
+/** Said before adding servers with a query string to the local folder. */
+export const LOCAL_URL_QUERY =
+  "A query string can hold sensitive data, such as an API key. BarnDog keeps the URL as written: it stays on this machine and works as is.";
+
+/** Asks whether to go ahead; tests pass their own answer. */
+type AskUrlQuery = (message: string) => Promise<boolean>;
+
+const askToShare: AskUrlQuery = (message) =>
+  confirm({ message, default: false, theme: promptTheme });
+
+/**
+ * How a command that shares assets beyond this machine asks about MCP servers
+ * whose URL has a query string: `--allow-url-query` shares them, a terminal
+ * asks (no by default), and anything else is refused with that flag as the fix.
+ */
+export function confirmSharingUrlQuery(options: {
+  interactive: boolean;
+  /** `--allow-url-query`: share without asking. */
+  allowed?: boolean;
+  write: (line: string) => void;
+  /** The command line that shares them without asking. */
+  fix: string;
+  ask?: AskUrlQuery;
+}): ConfirmUrlQuery {
+  return async (servers) => {
+    if (options.allowed) {
+      return true;
+    }
+
+    const one = servers.length === 1;
+    if (!options.interactive) {
+      throw new CliError(
+        `${servers.map((server) => server.name).join(", ")} ${one ? "has a URL" : "have URLs"} with query parameters, which can hold sensitive data such as an API key, and sharing shows ${one ? "it" : "them"} to everyone who can see the destination.`,
+        options.fix,
+      );
+    }
+
+    for (const line of renderUrlQueries(servers)) {
+      options.write(line);
+    }
+
+    options.write(
+      dim(
+        "A query string can hold sensitive data, such as an API key. Sharing keeps the URL as written, so everyone who can see the destination can read it.",
+      ),
+    );
+
+    return (options.ask ?? askToShare)(`Share ${one ? "it" : "them"} anyway?`);
+  };
 }
