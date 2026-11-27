@@ -13,7 +13,7 @@ export function pickLocalAssets(local: LocalAssets): Promise<string[]> {
       .map((asset) => ({
         value: asset.name,
         name: asset.name,
-        hint: asset.kind,
+        columns: [dim(asset.kind)],
       })),
     { empty: "No local assets can be moved." },
   );

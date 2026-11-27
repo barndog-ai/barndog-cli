@@ -1,3 +1,4 @@
+import { stripVTControlCharacters } from "node:util";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import input from "@inquirer/input";
 import { NothingToDoError } from "../errors.js";
@@ -66,7 +67,9 @@ function offered(call: number, picker: typeof pickMany | typeof pickOne) {
     ids: choices.map((choice) =>
       typeof choice.value === "string" ? choice.value : choice.value.id,
     ),
-    hints: choices.map((choice) => choice.hint),
+    hints: choices.map((choice) =>
+      stripVTControlCharacters((choice.columns ?? []).join(" · ")),
+    ),
   } satisfies Offered;
 }
 

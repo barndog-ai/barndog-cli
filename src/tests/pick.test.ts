@@ -68,9 +68,9 @@ test("an empty multiple picker throws NothingToDoError with the caller's message
 });
 
 const threeChoices = [
-  { name: "Alpha", value: 1, hint: "first" },
-  { name: "Beta", value: 2, hint: "second" },
-  { name: "Gamma", value: 3, hint: "third" },
+  { name: "Alpha", value: 1, columns: ["first"] },
+  { name: "Beta", value: 2, columns: ["second"] },
+  { name: "Gamma", value: 3, columns: ["third"] },
 ];
 
 test("single picker chooses the first choice when up is pressed at the top", async () => {
@@ -96,7 +96,7 @@ test("single picker moves down and stops at the last choice", async () => {
   expect(await result).toBe(3);
 });
 
-test("single picker filters by hint text", async () => {
+test("single picker filters by column text", async () => {
   const ui = screen();
   const result = pickOne("Pick", threeChoices);
 
@@ -181,7 +181,7 @@ test("multiple picker requires a selection and clips long hints in narrow termin
       {
         name: "A",
         value: "a",
-        hint: "a hint that is much longer than the available space",
+        columns: ["a hint that is much longer than the available space"],
       },
       { name: "B", value: "b" },
     ]);
@@ -209,4 +209,25 @@ test("multiple picker requires a selection and clips long hints in narrow termin
       Reflect.deleteProperty(process.stdout, "columns");
     }
   }
+});
+
+test("columns line up across choices and searching matches any of them", async () => {
+  const ui = screen();
+  const result = pickOne("Pick", [
+    { name: "alpha", value: "a", columns: ["org", "installed"] },
+    { name: "b", value: "b", columns: ["team/security", "disabled"] },
+  ]);
+
+  await setImmediate();
+  const rows = stripVTControlCharacters(ui.text())
+    .split(/[\r\n]/)
+    .filter((line) => line.includes("alpha") || line.includes("security"));
+
+  const at = (word: string) =>
+    rows.find((line) => line.includes(word))?.indexOf(word);
+
+  expect(at("installed")).toBe(at("disabled"));
+  await ui.key("disab");
+  await ui.key("\r");
+  expect(await result).toBe("b");
 });

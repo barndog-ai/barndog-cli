@@ -13,6 +13,11 @@ import {
 } from "../workspace/assets.js";
 import type { RepoAsset } from "../workspace/format.js";
 import { inventory, type InventoryItem } from "./index.js";
+import {
+  cloudHookCompatibility,
+  repoHookCompatibility,
+} from "../hooks/compatibility.js";
+import type { HarnessCompatibility } from "../hooks/types.js";
 
 /** A Skill or Hook as `skills show` and `hooks show` describe it. */
 export type PackageDetails = {
@@ -26,6 +31,8 @@ export type PackageDetails = {
   description: string;
   /** Hooks only: the events each coding tool runs it on, for the tools it implements. */
   events?: Partial<Record<HookHarness, string[]>>;
+  /** Hooks only: support, requirements and the author's notes in each tool BarnDog manages. */
+  compatibility?: HarnessCompatibility[];
   /** Null when this machine hasn't selected it. */
   installed: Pick<InventoryItem, "state" | "harnesses" | "paths"> | null;
 };
@@ -44,7 +51,11 @@ export async function showPackage(
   const settings = await readSettings(home);
   const repo = settings && repoForOrigin(settings, runtime, origin);
   const described = repo
-    ? repoDetails(selectRepoAsset(await repo.model(), kind, name, origin), kind)
+    ? await repoDetails(
+        selectRepoAsset(await repo.model(), kind, name, origin),
+        kind,
+        runtime,
+      )
     : await cloudDetails(kind, name, origin, runtime);
 
   const item = (await inventory(runtime)).items.find(
@@ -59,7 +70,11 @@ export async function showPackage(
   };
 }
 
-function repoDetails(asset: RepoAsset, kind: PackageKind): Described {
+async function repoDetails(
+  asset: RepoAsset,
+  kind: PackageKind,
+  runtime: RuntimeContext,
+): Promise<Described> {
   const view = showRepoAsset(asset);
   const events = view.manifest
     ? eventsByTool((harness) => view.manifest?.implementations[harness]?.events)
@@ -73,6 +88,12 @@ function repoDetails(asset: RepoAsset, kind: PackageKind): Described {
     version: view.version,
     description: view.description,
     ...(events ? { events } : {}),
+    ...(kind === "hook"
+      ? {
+          compatibility: (await repoHookCompatibility(asset, runtime))
+            .compatibility,
+        }
+      : {}),
   };
 }
 
@@ -110,6 +131,7 @@ async function cloudDetails(
         hook.compatibility.find((row) => row.harness === harness)
           ?.implementation?.events,
     ),
+    compatibility: (await cloudHookCompatibility(hook, runtime)).compatibility,
   };
 }
 

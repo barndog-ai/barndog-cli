@@ -3,7 +3,8 @@ import { assetKinds } from "../features/asset-kinds/index.js";
 import { type AssetKind } from "../config/selection.js";
 import { CliError } from "../errors.js";
 import { pickOne } from "../ui/pick.js";
-import { clean, originLabel } from "../ui/format.js";
+import { clean, dim, originLabel } from "../ui/format.js";
+import { stateBadge } from "../ui/assets.js";
 import { only } from "../shared/lookup.js";
 
 /**
@@ -59,10 +60,14 @@ export async function resolveOrigin(
     labels.map((label) => ({
       value: label,
       name: label,
-      hint: clean(
-        rows.find((row) => originLabel(row.origin) === label)?.version
-          .description ?? "",
-      ),
+      columns: [
+        dim(
+          clean(
+            rows.find((row) => originLabel(row.origin) === label)?.version
+              .description ?? "",
+          ),
+        ),
+      ],
     })),
   );
 }
@@ -89,7 +94,7 @@ export async function pickInstalled(
     items.map((item) => ({
       value: item,
       name: item.installedName,
-      hint: `${item.origin} · ${item.state}`,
+      columns: [dim(item.origin), stateBadge(item.state)],
     })),
     { empty: `No ${assetKinds[kind].one}s are installed on this machine.` },
   );

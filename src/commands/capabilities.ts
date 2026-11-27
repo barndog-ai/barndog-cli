@@ -9,6 +9,8 @@ import {
   json,
   labelledLists,
   ok,
+  plural,
+  table,
   warn,
 } from "../ui/format.js";
 import { type Command } from "commander";
@@ -159,7 +161,7 @@ function registerGeneral(program: Command, context: CommandContext) {
       "Check your setup, session and installed assets, and suggest fixes",
     )
     .action(async () => {
-      const checks = await context.doctor();
+      const { checks, hooksMissingTools } = await context.doctor();
       if (context.mode.json) {
         return context.write(json(checks));
       }
@@ -181,6 +183,18 @@ function registerGeneral(program: Command, context: CommandContext) {
           context.write(line);
         }
 
+        if (check.table) {
+          context.write("");
+          for (const line of table(
+            check.table.map(([first = "", ...rest]) => [bold(first), ...rest]),
+            { indent: under.length },
+          )) {
+            context.write(line);
+          }
+
+          context.write("");
+        }
+
         if (check.fix) {
           // A fix in words reads as plain text when a command follows it.
           context.write(
@@ -199,6 +213,13 @@ function registerGeneral(program: Command, context: CommandContext) {
       const warned = checks.filter((c) => c.status === "warn").length;
       context.write("");
       context.write(doctorSummary(failed, warned));
+
+      if (hooksMissingTools) {
+        context.write("");
+        context.write(
+          `${dim(`Tip: ${plural(hooksMissingTools, "Hook")} ${hooksMissingTools === 1 ? "is" : "are"} written for only some of your tools.`)} ${bold("barndog hooks compatibility --all")}${dim("  to see which")}`,
+        );
+      }
 
       if (failed) {
         process.exitCode = 1;

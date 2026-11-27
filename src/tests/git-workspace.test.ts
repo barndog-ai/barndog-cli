@@ -748,7 +748,7 @@ test("an invalid asset is reported and the installed version stays", async (t) =
   );
 
   expect(
-    (await doctor(testRuntime(member))).some(
+    (await doctor(testRuntime(member))).checks.some(
       (check) => check.name === "Invalid asset",
     ),
   ).toBeTruthy();
@@ -1033,8 +1033,9 @@ test("sync uses the last fetch when the host is unreachable", async (t) => {
 
   expect(await installed(member, "skills/code-review/SKILL.md")).toMatch(/Do/);
   expect(
-    (await doctor(testRuntime(member))).find((c) => c.name === "Git access")
-      ?.status,
+    (await doctor(testRuntime(member))).checks.find(
+      (c) => c.name === "Git access",
+    )?.status,
   ).toBe("fail");
 });
 

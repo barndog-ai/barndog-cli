@@ -1,10 +1,4 @@
 import type { RuntimeContext } from "../../runtime.js";
-import { coerce, satisfies, validRange } from "semver";
-import {
-  programOutput,
-  findExecutable,
-  runtimeExecutable,
-} from "../../platform.js";
 import type { HookManifest, McpDefinition } from "@barndog-ai/api-contract";
 import { adapters, nativeFile } from "../../harnesses/registry.js";
 import type {
@@ -15,62 +9,7 @@ import type {
 import { secretRefs } from "../../harnesses/formats.js";
 import { type NativeEntry } from "./configuration.js";
 import { hookCommand } from "./hook-shell.js";
-
-/** A `--version` answer is one short line; anything slower or longer is broken. */
-const VERSION_TIMEOUT_MS = 5000;
-const VERSION_OUTPUT_LIMIT_BYTES = 4096;
-
-/**
- * Checks required executables and optionally runs the harness version command;
- * returns the first issue or null.
- */
-export async function runtimeRequirements(
-  harness: Harness,
-  requirements: { commands: string[]; harnessVersion?: string },
-  runtime: RuntimeContext,
-) {
-  for (const command of requirements.commands) {
-    if (!(await runtimeExecutable(command, runtime))) {
-      return `Missing runtime: ${command}`;
-    }
-  }
-
-  if (requirements.harnessVersion) {
-    if (!validRange(requirements.harnessVersion)) {
-      return `Invalid declared harness version requirement: ${requirements.harnessVersion}`;
-    }
-
-    const command = (
-      await Promise.all(
-        adapters[harness].commands.map((c) => findExecutable(c, runtime)),
-      )
-    ).find(Boolean);
-
-    if (!command) {
-      return `Cannot verify ${harness} version: harness command is missing`;
-    }
-
-    try {
-      const stdout = await programOutput(command, ["--version"], runtime, {
-        timeoutMs: VERSION_TIMEOUT_MS,
-        maxBytes: VERSION_OUTPUT_LIMIT_BYTES,
-      });
-
-      const version = coerce(stdout);
-      if (!version) {
-        return `Cannot verify ${harness} version: ${command} --version printed no version`;
-      }
-
-      if (!satisfies(version, requirements.harnessVersion)) {
-        return `${harness} ${version.version} does not meet ${requirements.harnessVersion}`;
-      }
-    } catch {
-      return `Cannot verify ${harness} version`;
-    }
-  }
-
-  return null;
-}
+import { runtimeRequirements, type HookSkip } from "./requirements.js";
 
 /**
  * Why a Hook can't be installed for a tool: no implementation for it, or
@@ -80,13 +19,19 @@ export async function hookIssue(
   harness: HookHarness,
   manifest: HookManifest,
   runtime: RuntimeContext,
-): Promise<string | null> {
+): Promise<HookSkip | null> {
   const implementation = manifest.implementations[harness];
   if (!implementation) {
-    return "No implementation for this harness";
+    return { type: "no-implementation" };
   }
 
-  return runtimeRequirements(harness, implementation.requirements, runtime);
+  const requirement = await runtimeRequirements(
+    harness,
+    implementation.requirements,
+    runtime,
+  );
+
+  return requirement && { type: "missing-requirement", requirement };
 }
 
 /**

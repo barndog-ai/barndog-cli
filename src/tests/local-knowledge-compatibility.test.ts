@@ -14,6 +14,7 @@ import {
 } from "../features/knowledge/index.js";
 import { hookCompatibility } from "../features/hooks/compatibility.js";
 import { showPackage } from "../features/inventory/show.js";
+import { hookBlocked } from "../features/inventory/hook-readiness.js";
 import { renderPackageDetails } from "../ui/package-details.js";
 import { stripVTControlCharacters } from "node:util";
 import type { Harness } from "../harnesses/registry.js";
@@ -214,7 +215,8 @@ test("local hook compatibility reports a missing runtime for the harness that ne
     ),
   ).toMatchObject({
     claude: null,
-    codex: "Missing runtime: barndog-test-missing-runtime",
+    codex:
+      "needs the barndog-test-missing-runtime command, which isn't installed here or isn't on your PATH",
   });
 });
 
@@ -270,16 +272,91 @@ test("hooks show describes a local Hook and the events each tool runs it on", as
   );
 
   expect(text).toMatch(
-    /Events\n {2}Claude Code: SessionStart\n {2}Codex: SessionStart/,
+    /Tools\n\s+Tool\s+Author says\s+On this machine\s+Events/,
+  );
+
+  expect(text).toMatch(/Claude Code\s+supported\s+✔ ready\s+SessionStart/);
+  expect(text).toMatch(
+    /Codex\s+supported\s+! missing requirement\s+SessionStart/,
+  );
+
+  expect(text).toMatch(
+    /Codex\s+barndog-test-missing-runtime command\s+! not installed/,
   );
 
   expect(text).toMatch(/Installed in\s+Claude Code/);
   expect(text).toMatch(/Paths\n {2}\/home\/dev\/\.claude\/settings\.json/);
   expect(
     stripVTControlCharacters(
-      renderPackageDetails({ ...details, events: {}, installed: null }).join(
-        "\n",
-      ),
+      renderPackageDetails({
+        ...details,
+        events: {},
+        compatibility: undefined,
+        installed: null,
+      }).join("\n"),
     ),
   ).toMatch(/State\s+not installed[\s\S]*No coding tool runs it/);
+});
+
+const ONLY_CODEX = (requirements: string) =>
+  [
+    "name: release-notes",
+    "description: Checks release notes",
+    "implementations:",
+    "  codex:",
+    "    compatibility: supported",
+    "    scripts: [scripts/hook.sh]",
+    "    requirements:",
+    `      commands: [${requirements}]`,
+    "    events:",
+    "      SessionStart:",
+    "        - hooks:",
+    "            - type: command",
+    "              command: '${BARNDOG_HOOK_ROOT}/scripts/hook.sh'",
+    "",
+  ].join("\n");
+
+test("a Hook no selected tool can run says why rather than staying pending", async (t) => {
+  const folder = async (manifest: string) => {
+    const runtime = await hookFixture(t, manifest, ["claude", "codex"]);
+    const settings = (await readSettings(runtime.home))!;
+
+    return {
+      runtime,
+      path: join(settings.localWorkspace!.path, "org/hooks/release-notes"),
+    };
+  };
+
+  const missing = await folder(ONLY_CODEX("barndog-test-missing-runtime"));
+  expect(
+    await hookBlocked(missing.path, ["claude", "codex"], missing.runtime),
+  ).toBe("cant-run");
+
+  expect(await hookBlocked(missing.path, ["claude"], missing.runtime)).toBe(
+    "no-version",
+  );
+
+  expect(await hookBlocked(missing.path, ["opencode"], missing.runtime)).toBe(
+    "no-version",
+  );
+
+  expect(await hookBlocked(missing.path, [], missing.runtime)).toBeNull();
+
+  const runnable = await folder(ONLY_CODEX("sh"));
+  expect(
+    await hookBlocked(runnable.path, ["claude", "codex"], runnable.runtime),
+  ).toBeNull();
+
+  expect(
+    await hookBlocked(
+      join(runnable.path, "nowhere"),
+      ["codex"],
+      runnable.runtime,
+    ),
+  ).toBeNull();
+
+  await writeFile(join(runnable.path, "hook.yaml"), "name: [broken");
+  expect(
+    await hookBlocked(runnable.path, ["codex"], runnable.runtime),
+  ).toBeNull();
 });

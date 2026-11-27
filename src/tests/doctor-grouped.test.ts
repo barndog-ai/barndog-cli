@@ -1,9 +1,11 @@
 import { expect, test } from "vitest";
 import type { SyncEvent } from "../features/environment/events.js";
 import {
-  unsupportedChecks,
+  cantRunChecks,
+  hooksMissingTools,
   variableChecks,
 } from "../features/doctor/grouped.js";
+import type { HookSkip } from "../features/native/requirements.js";
 
 const unset = (server: string, variable: string, from?: string): SyncEvent => ({
   type: "unset-variable",
@@ -15,8 +17,20 @@ const unset = (server: string, variable: string, from?: string): SyncEvent => ({
 const unsupported = (
   harness: "claude" | "codex",
   name: string,
-  reason = "No implementation for this harness",
-): SyncEvent => ({ type: "unsupported", kind: "hook", harness, name, reason });
+  cause: HookSkip = { type: "no-implementation" },
+): SyncEvent => ({
+  type: "unsupported",
+  kind: "hook",
+  harness,
+  name,
+  cause,
+  reason: "unused",
+});
+
+const needs = (command: string): HookSkip => ({
+  type: "missing-requirement",
+  requirement: { type: "command", command },
+});
 
 test("one variable with no value keeps its own sentence and exact fix", () => {
   expect(variableChecks([unset("web", "KEY")])).toStrictEqual([
@@ -86,33 +100,61 @@ test("variables read from another variable are grouped apart, saying which", () 
   expect(checks[2]?.fix).toBe("barndog mcp env set <server> STRAY");
 });
 
-test("unsupported Hooks are one check per reason, listed by tool", () => {
-  const checks = unsupportedChecks([
+test("Hooks that can't run are one check, a row each, with the fix they share", () => {
+  const checks = cantRunChecks([
     unsupported("codex", "stop"),
-    unsupported("claude", "pre"),
-    unsupported("codex", "post"),
-    unsupported("codex", "needs", "Needs python3"),
+    unsupported("claude", "lint", needs("deno")),
+    unsupported("codex", "lint", needs("deno")),
     { type: "notice", message: "unrelated" },
   ]);
 
   expect(checks).toStrictEqual([
     {
-      name: "Unsupported",
+      name: "Hooks",
       status: "warn",
-      detail:
-        "No implementation for this harness, so BarnDog skips these Hooks there.",
-      rows: [
-        { label: "Codex", items: ["stop", "post"] },
-        { label: "Claude Code", items: ["pre"] },
+      detail: "1 Hook can't run in a tool it's written for.",
+      table: [
+        [
+          "lint",
+          "Claude Code",
+          "needs the deno command, which isn't installed here or isn't on your PATH",
+        ],
+        [
+          "lint",
+          "Codex",
+          "needs the deno command, which isn't installed here or isn't on your PATH",
+        ],
       ],
-    },
-    {
-      name: "Unsupported",
-      status: "warn",
-      detail: "Needs python3, so BarnDog skips this Hook there.",
-      rows: [{ label: "Codex", items: ["needs"] }],
+      fix: "Install deno, then run the command below",
+      command: "barndog sync",
     },
   ]);
 
-  expect(unsupportedChecks([])).toStrictEqual([]);
+  expect(cantRunChecks([unsupported("codex", "stop")])).toStrictEqual([]);
+});
+
+test("Hooks that need different things share a general fix", () => {
+  const [check] = cantRunChecks([
+    unsupported("claude", "lint", needs("deno")),
+    unsupported("claude", "format", needs("prettier")),
+  ]);
+
+  expect(check?.detail).toBe(
+    "2 Hooks can't run in a tool they're written for.",
+  );
+
+  expect(check?.fix).toBe(
+    "Install or update what each Hook needs, then run the command below",
+  );
+});
+
+test("Hooks not written for a tool are counted once each, apart from those that can't run", () => {
+  expect(
+    hooksMissingTools([
+      unsupported("codex", "stop"),
+      unsupported("codex", "post"),
+      unsupported("claude", "stop"),
+      unsupported("claude", "lint", needs("deno")),
+    ]),
+  ).toBe(2);
 });

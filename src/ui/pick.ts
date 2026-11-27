@@ -13,10 +13,11 @@ import {
   useState,
 } from "@inquirer/core";
 import { cursorHide } from "@inquirer/ansi";
-import { styleText } from "node:util";
+import { stripVTControlCharacters, styleText } from "node:util";
 import { NothingToDoError } from "../errors.js";
 import { promptTheme, selected } from "./theme.js";
 import { defined } from "../shared/lookup.js";
+import { pad, truncate, visibleWidth } from "./format.js";
 
 /** Cap names to leave room for hints in the picker. */
 const MAX_CHOICE_NAME_WIDTH = 40;
@@ -36,8 +37,11 @@ const MIN_HINT_ROOM = 3;
 export type PickChoice<T> = {
   value: T;
   name: string;
-  /** Dim text after the name, such as origin and description. */
-  hint?: string;
+  /**
+   * Cells after the name, such as origin and state, aligned with the same
+   * cells of every other choice. Callers style them (`dim()`, `stateBadge()`).
+   */
+  columns?: readonly string[];
   checked?: boolean;
 };
 
@@ -49,7 +53,9 @@ type Config<T> = {
 };
 
 const matches = (choice: PickChoice<unknown>, search: string) => {
-  const text = `${choice.name} ${choice.hint ?? ""}`.toLowerCase();
+  const text = stripVTControlCharacters(
+    [choice.name, ...(choice.columns ?? [])].join(" "),
+  ).toLowerCase();
 
   return search
     .toLowerCase()
@@ -82,6 +88,18 @@ const prompt = createPrompt(
         ),
       [],
     );
+
+    // Measured over every choice, so columns stay put while the list filters.
+    const columnWidths = useMemo(() => {
+      const widths: number[] = [];
+      for (const choice of config.choices) {
+        (choice.columns ?? []).forEach((cell, index) => {
+          widths[index] = Math.max(widths[index] ?? 0, visibleWidth(cell));
+        });
+      }
+
+      return widths;
+    }, []);
 
     const visible = useMemo(
       () =>
@@ -190,11 +208,17 @@ const prompt = createPrompt(
               nameWidth -
               2;
 
-            const text = item.choice.hint ?? "";
+            const cells = item.choice.columns ?? [];
+            const text = cells
+              .map((cell, index) =>
+                index === cells.length - 1
+                  ? cell
+                  : pad(cell, columnWidths[index] ?? 0),
+              )
+              .join("  ");
+
             const hint =
-              text && room > MIN_HINT_ROOM
-                ? `  ${styleText("dim", text.length > room ? `${text.slice(0, room - 1)}…` : text)}`
-                : "";
+              text && room > MIN_HINT_ROOM ? `  ${truncate(text, room)}` : "";
 
             return `${cursor} ${box}${name}${hint}`;
           },

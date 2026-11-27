@@ -1,8 +1,11 @@
 import type { Hook } from "../asset-kinds/index.js";
+import type { MissingRequirement } from "../native/requirements.js";
 
 /** What a Hook declares for one coding tool, and what this machine lacks to run it. */
-type HarnessCompatibility = Hook["compatibility"][number] & {
-  /** Null when every requirement is met. */
+export type HarnessCompatibility = Hook["compatibility"][number] & {
+  /** What its implementation needs that this machine lacks; empty without an implementation. */
+  missingRequirements: MissingRequirement[];
+  /** The same in words, or why there is nothing to run; null when it can run. */
   runtimeIssue: string | null;
 };
 

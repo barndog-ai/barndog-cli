@@ -204,7 +204,7 @@ export function registerSets(program: Command, context: CommandContext) {
         .map((scope) => ({
           value: label(scope),
           name: label(scope),
-          hint: scope.name,
+          columns: [dim(scope.name)],
         })),
       { empty },
     );

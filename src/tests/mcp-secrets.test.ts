@@ -328,7 +328,7 @@ test("each server keeps its own value for a variable, or reads another variable"
     (await listKeptValues(m.runtime)).find((row) => row.variable === "REGION"),
   ).toMatchObject({ server: "tickets", from: "AWS_REGION" });
 
-  const checks = await doctor(m.runtime);
+  const checks = (await doctor(m.runtime)).checks;
   expect(
     checks.find((check) => check.fix === "barndog mcp env set tickets REGION")
       ?.detail,
@@ -384,7 +384,7 @@ test("a version 1 file gives each value to the servers it was written for", asyn
     unassigned: { STRAY: "x" },
   });
 
-  const checks = await doctor(m.runtime);
+  const checks = (await doctor(m.runtime)).checks;
   expect(checks.map((check) => check.fix)).toContain(
     "barndog mcp env set <server> STRAY",
   );
@@ -451,7 +451,7 @@ test("without a terminal nothing is kept, and doctor names each variable with no
     unassigned: {},
   });
 
-  const checks = await doctor(m.runtime);
+  const checks = (await doctor(m.runtime)).checks;
   const variables = checks.filter((check) => check.name.startsWith("MCP"));
   expect(variables).toHaveLength(1);
   expect(variables[0]).toMatchObject({

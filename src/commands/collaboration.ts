@@ -25,7 +25,14 @@ import { packageKindList, type PackageKind } from "../config/selection.js";
 import { pickOne } from "../ui/pick.js";
 import { renderPackageDetails } from "../ui/package-details.js";
 import { resolveOrigin } from "./origin.js";
-import { clean, json, ORIGIN_HELP, originLabel, warn } from "../ui/format.js";
+import {
+  clean,
+  dim,
+  json,
+  ORIGIN_HELP,
+  originLabel,
+  warn,
+} from "../ui/format.js";
 import { defined } from "../shared/lookup.js";
 import { positiveInteger } from "../ui/options.js";
 
@@ -227,7 +234,10 @@ export function registerCollaboration(
       rows.map((row) => ({
         value: row,
         name: row.name,
-        hint: `${originLabel(row.origin)} · ${clean(row.version.description)}`,
+        columns: [
+          dim(originLabel(row.origin)),
+          dim(clean(row.version.description)),
+        ],
       })),
       { empty: `No ${noun}s are published yet.` },
     );

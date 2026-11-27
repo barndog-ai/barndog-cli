@@ -640,13 +640,23 @@ test("lookup commands infer --origin when one scope has the name", async () => {
   expect(calls.length).toBe(0);
 });
 
-test("Hook compatibility shows support and readiness with a short version", async () => {
+test("Hook compatibility shows support, readiness, requirements and the author's notes", async () => {
+  const implementation = (
+    requirements: { commands: string[]; harnessVersion?: string },
+    notes?: string,
+  ) => ({
+    compatibility: "supported",
+    scripts: [],
+    requirements,
+    events: { Stop: [] },
+    ...(notes ? { notes } : {}),
+  });
+
   const run = async (version: number | string) => {
     const lines: string[] = [];
     await createProgram({
       write: (line) => lines.push(line),
       interactive: false,
-      // Only the fields the table reads; a real result also carries each implementation.
       hookCompatibility: async () =>
         ({
           version,
@@ -655,18 +665,30 @@ test("Hook compatibility shows support and readiness with a short version", asyn
               harness: "claude",
               status: "supported",
               declared: true,
+              implementation: implementation({
+                commands: ["node"],
+                harnessVersion: ">=2",
+              }),
+              missingRequirements: [],
               runtimeIssue: null,
             },
             {
               harness: "codex",
               status: "partial",
               declared: true,
-              runtimeIssue: "Missing runtime: jq",
+              implementation: implementation(
+                { commands: ["jq"] },
+                "No SubagentStop event in Codex.",
+              ),
+              missingRequirements: [{ type: "command", command: "jq" }],
+              runtimeIssue: "needs the jq command",
             },
             {
               harness: "cursor",
               status: "unsupported",
               declared: true,
+              implementation: null,
+              missingRequirements: [],
               runtimeIssue: "No implementation for this harness",
             },
           ],
@@ -680,14 +702,128 @@ test("Hook compatibility shows support and readiness with a short version", asyn
 
   const text = await run(3);
   expect(text).toMatch(/Version\s+3/);
-  expect(text).toMatch(/Tool\s+Support\s+Ready on this machine/);
-  expect(text).toMatch(/claude\s+supported\s+✔/);
-  expect(text).toMatch(/codex\s+partial\s+✖ Missing runtime: jq/);
+  expect(text).toMatch(/Tool\s+Author says\s+On this machine\s+Events/);
+  expect(text).toMatch(/Claude Code\s+supported\s+✔ ready\s+Stop/);
+  expect(text).toMatch(/Codex\s+partial\s+! missing requirement\s+Stop/);
+  expect(text).toMatch(/Cursor\s+—\s+—\s+—/);
+  expect(text).toMatch(/Claude Code\s+node command\s+✔/);
+  expect(text).toMatch(/Claude Code\s+Claude Code >=2\s+✔/);
+  expect(text).toMatch(
+    /Codex\s+jq command\s+! not installed or not on your PATH/,
+  );
+
+  expect(text).toMatch(/Fix: Install jq, then run barndog sync/);
+  expect(text).toMatch(
+    /Author's notes\n\s+Codex\s+No SubagentStop event in Codex\./,
+  );
+
+  expect(text).toMatch(/partial: the author says only part of this Hook works/);
   expect(text).toMatch(/barndog hooks adapt guard --for cursor/);
-  expect(text).not.toMatch(/Declared|Tested|No implementation/);
   const local = await run("ac93c0ce639c89b0f4871900b90039c17fd7ffe3");
   expect(local).toMatch(/Version\s+ac93c0c\n/);
   expect(local).not.toMatch(/ac93c0ce/);
+});
+
+test("a partial Hook without notes says the author left none", async () => {
+  const lines: string[] = [];
+  await createProgram({
+    write: (line) => lines.push(line),
+    interactive: false,
+    hookCompatibility: async () =>
+      ({
+        version: 1,
+        compatibility: [
+          {
+            harness: "codex",
+            status: "partial",
+            declared: true,
+            implementation: {
+              compatibility: "partial",
+              scripts: [],
+              requirements: { commands: [] },
+              events: { Stop: [] },
+            },
+            missingRequirements: [],
+            runtimeIssue: null,
+          },
+        ],
+      }) as never,
+  }).parseAsync(["hooks", "compatibility", "guard", "--origin", "org"], {
+    from: "user",
+  });
+
+  const text = stripVTControlCharacters(lines.join("\n"));
+  expect(text).toMatch(
+    /Codex\s+The author marked this partial but didn't say what's missing\./,
+  );
+
+  expect(text).not.toMatch(/Requirements/);
+});
+
+test("hooks compatibility --all shows every selected Hook against each tool", async () => {
+  const lines: string[] = [];
+  const row = (
+    harness: "claude" | "codex",
+    status: "supported" | "partial" | "unsupported",
+    missing = false,
+  ) => ({
+    harness,
+    status,
+    declared: true,
+    implementation: null,
+    missingRequirements: missing ? [{ type: "command", command: "deno" }] : [],
+    runtimeIssue: null,
+  });
+
+  await createProgram({
+    write: (line) => lines.push(line),
+    interactive: false,
+    allHookCompatibility: async () =>
+      [
+        {
+          name: "guard",
+          origin: "org",
+          compatibility: [row("claude", "supported"), row("codex", "partial")],
+        },
+        {
+          name: "lint",
+          origin: "local",
+          compatibility: [
+            row("claude", "supported", true),
+            row("codex", "unsupported"),
+          ],
+        },
+      ] as never,
+  }).parseAsync(["hooks", "compatibility", "--all"], { from: "user" });
+
+  const text = stripVTControlCharacters(lines.join("\n"));
+  expect(text).toMatch(/Hook\s+Claude Code\s+Codex/);
+  expect(text).toMatch(/guard\s+✔ supported\s+◐ partial/);
+  expect(text).toMatch(/lint\s+! can't run\s+—/);
+  expect(text).toMatch(/—\s+not written for that tool/);
+  expect(text).toMatch(/Tip: barndog hooks show <name>/);
+});
+
+test("hooks compatibility --all takes no name, and says so when there are no Hooks", async () => {
+  const lines: string[] = [];
+  const program = () =>
+    createProgram({
+      write: (line) => lines.push(line),
+      interactive: false,
+      allHookCompatibility: async () => [],
+    });
+
+  await expect(
+    program().parseAsync(["hooks", "compatibility", "guard", "--all"], {
+      from: "user",
+    }),
+  ).rejects.toThrow("--all shows every selected Hook");
+
+  await program().parseAsync(["hooks", "compatibility", "--all"], {
+    from: "user",
+  });
+
+  expect(lines).toEqual(["No Hooks are selected on this machine."]);
 });
 
 test("a machine counts as set up once config.yaml exists", async () => {

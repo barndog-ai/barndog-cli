@@ -59,7 +59,8 @@ export function visibleWidth(text: string): number {
   return [...stripVTControlCharacters(text)].length;
 }
 
-function pad(text: string, width: number): string {
+/** `text` followed by spaces to `width` visible columns. */
+export function pad(text: string, width: number): string {
   return text + " ".repeat(Math.max(0, width - visibleWidth(text)));
 }
 
@@ -67,7 +68,8 @@ function pad(text: string, width: number): string {
 // eslint-disable-next-line no-control-regex -- matches terminal style codes
 const STYLE_CODE = /(\u001b\[[\d;]*m)/;
 
-function truncate(text: string, width: number): string {
+/** `text` cut to `width` visible columns with `…`, keeping its style codes. */
+export function truncate(text: string, width: number): string {
   const plain = stripVTControlCharacters(text);
   if ([...plain].length <= width) {
     return text;
