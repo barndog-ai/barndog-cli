@@ -21,6 +21,10 @@ import {
 } from "../native/secret-values.js";
 import { inPluginModule, pluginModule } from "../native/plugin-module.js";
 import type { SyncEvent } from "./events.js";
+import {
+  keptValueNotices,
+  type KeptValueChange,
+} from "./kept-value-notices.js";
 import { linkTarget, type Write } from "./transaction.js";
 
 /** An installed folder a sync wants, and the cached package it is filled from. */
@@ -201,56 +205,47 @@ const sameEntry = (left: NativeEntry, right: NativeEntry) =>
   left.key === right.key &&
   sameValue(left.value, right.value);
 
-/** A notice for kept values a changed entry no longer holds. */
+/** The kept values a changed entry no longer holds. */
 function removedSecrets(
   entry: NativeEntry,
   still: readonly string[],
-): SyncEvent[] {
+  nameOf: (entry: NativeEntry) => string,
+): KeptValueChange[] {
   const gone = recordedVariables(entry.value).filter(
     (variable) => !still.includes(variable),
   );
 
-  return gone.length
-    ? [
-        {
-          type: "notice",
-          message: `Removed the kept ${plural(gone)} ${gone.join(", ")} from ${entry.file}.`,
-        },
-      ]
-    : [];
+  return [
+    {
+      action: "removed",
+      server: nameOf(entry),
+      file: entry.file,
+      variables: gone,
+    },
+  ];
 }
 
-/** Says where kept values were written, and where they were taken out. */
-function secretNotices(
+/** Where a changed entry's kept values were written, and where they were taken out. */
+function secretChanges(
   entry: NativeEntry,
   old: readonly NativeEntry[],
-  changed: boolean,
   nameOf: (entry: NativeEntry) => string,
-): SyncEvent[] {
-  if (!changed) {
-    return [];
-  }
-
+): KeptValueChange[] {
   const written = (entry.secrets ?? []).map((secret) => secret.variable);
   const before = old.find(
     (e) => e.id === entry.id && e.harness === entry.harness,
   );
 
   return [
-    ...(written.length
-      ? [
-          {
-            type: "notice" as const,
-            message: `Wrote the kept ${plural(written)} ${written.join(", ")} into ${entry.file} for ${nameOf(entry)}. ${written.length === 1 ? "It stays" : "They stay"} on this machine.`,
-          },
-        ]
-      : []),
-    ...(before ? removedSecrets(before, written) : []),
+    {
+      action: "wrote",
+      server: nameOf(entry),
+      file: entry.file,
+      variables: written,
+    },
+    ...(before ? removedSecrets(before, written, nameOf) : []),
   ];
 }
-
-const plural = (variables: readonly string[]) =>
-  variables.length === 1 ? "value of" : "values of";
 
 /**
  * One write per native settings file that holds, or will hold, an entry of
@@ -269,6 +264,7 @@ export async function nativeWrites(
   const { trees, updated, nameOf, platform } = context;
   const writes: Write[] = [];
   const events: SyncEvent[] = [];
+  const secrets: KeptValueChange[] = [];
 
   for (const file of new Set([
     ...previous.map((e) => e.file),
@@ -306,7 +302,9 @@ export async function nativeWrites(
         name: nameOf(entry),
       });
 
-      events.push(...secretNotices(entry, old, action !== "unchanged", nameOf));
+      if (action !== "unchanged") {
+        secrets.push(...secretChanges(entry, old, nameOf));
+      }
     }
 
     for (const entry of old) {
@@ -325,10 +323,12 @@ export async function nativeWrites(
           name: nameOf(entry),
         });
 
-        events.push(...removedSecrets(entry, []));
+        secrets.push(...removedSecrets(entry, [], nameOf));
       }
     }
   }
+
+  events.push(...keptValueNotices(secrets));
 
   return { writes, events };
 }

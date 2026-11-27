@@ -137,8 +137,11 @@ test("kept values are written into every tool, and state.json records only their
   const output = m.lines.join("\n");
   expect(output).toMatch(/never uploaded/);
   expect(output).toMatch(
-    /Wrote the kept value of API_KEY into .*\.claude\.json for tickets/,
+    /Wrote the kept value of API_KEY into .*\.claude\.json.* for tickets/,
   );
+
+  // Every tool got the same value, so one notice names all their files.
+  expect(output.match(/Wrote the kept value of API_KEY/g)).toHaveLength(1);
 
   // One sentence per outcome, then a column of variables under each server.
   const plain = stripVTControlCharacters(output);
@@ -260,6 +263,12 @@ test("mcp env changes a kept value, lists where it's written, and forgets it", a
         ),
     ),
   ).toBe(true);
+
+  expect(
+    forgotten.events.filter(
+      (e) => e.type === "notice" && e.message.includes("API_KEY"),
+    ),
+  ).toHaveLength(1);
 
   expect(
     JSON.parse(await m.file(".claude.json")).mcpServers.tickets.env.API_KEY,
