@@ -29,7 +29,6 @@ import { patchNative } from "../native/configuration.js";
 import { validMcpName, VARIABLE_NAME } from "../../shared/patterns.js";
 import { assetKinds } from "../asset-kinds/index.js";
 import { queryParameters } from "../asset-kinds/url-query.js";
-import { LOCAL_ORIGIN } from "../workspace/overlay.js";
 import { ensureLocalWorkspace } from "../imports/local.js";
 import {
   keptValues,
@@ -345,12 +344,6 @@ export function convertServer(
 
     // Claude Code writes `oauth` and Cursor writes `auth` for servers that sign in natively.
     const signsIn = oauth || !!server.oauth || !!server.auth;
-    if (signsIn) {
-      notes.push(
-        `Sign in once it's added: barndog mcp auth ${name} --origin ${LOCAL_ORIGIN} --harness <tool>`,
-      );
-    }
-
     candidate = {
       ...common,
       transport: "http",
@@ -596,6 +589,16 @@ export async function localMcpNamed(
 /** Something to do before an added server works, and which server it's for. */
 type ServerNote = { server: string; text: string };
 
+const toolList = new Intl.ListFormat("en", { type: "conjunction" });
+
+/** The servers that sign in through each coding tool, which `mcp auth` starts. */
+export const signsIn = (
+  servers: readonly { name: string; definition: McpDefinition }[],
+) =>
+  servers
+    .filter(({ definition }) => definition.authentication === "native-oauth")
+    .map(({ name }) => name);
+
 /** What `mcp add` added, and what the developer still has to do. */
 export type AddedServers = {
   added: string[];
@@ -604,6 +607,8 @@ export type AddedServers = {
   values: McpValue[];
   /** Copies of the tool settings files it changed. */
   backups: string[];
+  /** The added servers that sign in through each coding tool (`mcp auth`). */
+  signIn: string[];
   events: SyncEvent[];
 };
 
@@ -647,7 +652,7 @@ export async function addMcpServers(
       const conflicts = await conflictingEntries(name, runtime);
       if (conflicts.length && !options.replace) {
         throw new CliError(
-          `${name} is already configured in ${conflicts.map((c) => c.file).join(" and ")}. Replacing it is required for BarnDog to manage it.`,
+          `${name} is already configured in ${toolList.format(conflicts.map((c) => adapters[c.harness].name))}. Replacing it is required for BarnDog to manage it.`,
           `barndog mcp add ${name} --replace`,
         );
       }
@@ -730,6 +735,7 @@ export async function addMcpServers(
         literalValues(s.name, s.literals, options.keep),
       ),
       backups,
+      signIn: signsIn(servers),
       events,
     };
   });

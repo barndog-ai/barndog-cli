@@ -76,6 +76,7 @@ const result: AdoptionResult = {
   id: "a1",
   adopted: [],
   backup: "/home/dev/.barndog/adoptions/a1",
+  signIn: [],
   notes: [
     { kind: "mcp", name: "github", text: "Set TOKEN in your environment." },
   ],

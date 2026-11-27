@@ -206,9 +206,9 @@ test("replacement requires consent and reports its backup", async (t) => {
     .mocked(context.write)
     .mock.calls.map(([line]) => line)
     .find((line) => line.startsWith("Backup: "))!
-    .slice("Backup: ".length);
+    .slice("Backup: ~/".length);
 
-  expect(await readFile(backup, "utf8")).toBe(original);
+  expect(await readFile(join(home, backup), "utf8")).toBe(original);
 });
 
 test("two servers replaced in one settings file share one backup of the file as it was", async (t) => {
@@ -229,14 +229,14 @@ test("two servers replaced in one settings file share one backup of the file as 
     .mocked(context.write)
     .mock.calls.map(([line]) => line)
     .filter((line) => line.startsWith("Backup: "))
-    .map((line) => line.slice("Backup: ".length));
+    .map((line) => line.slice("Backup: ~/".length));
 
   expect(context.write).toHaveBeenCalledWith(
     expect.stringMatching(/Added two/),
   );
 
   expect(backups).toHaveLength(1);
-  expect(await readFile(backups[0]!, "utf8")).toBe(original);
+  expect(await readFile(join(home, backups[0]!), "utf8")).toBe(original);
 });
 
 test("invalid Codex TOML names the file instead of a bare parser error", async (t) => {
@@ -378,4 +378,45 @@ test("without a terminal, a taken name fails with --as as the fix, and --as rena
     "docs",
     "docs_upper",
   ]);
+});
+
+test("an OAuth server says how to sign in in each tool, and unset variables are listed once", async (t) => {
+  const { home, context } = await fixture(t);
+  await saveSettings({ harnesses: ["claude", "codex"] }, home);
+  vi.mocked(context.prompts.chooseMany).mockResolvedValue([]);
+
+  await addMcp(
+    undefined,
+    {
+      config: JSON.stringify({
+        docs: { url: "https://docs.test/mcp", oauth: true },
+        tool: {
+          command: "node",
+          env: { A_KEY: "${A_KEY}", B_KEY: "${B_KEY}", REGION: "eu" },
+        },
+      }),
+    },
+    { ...context, runtime: testRuntime(home, { cwd: home, env: {} }) },
+  );
+
+  const lines = vi
+    .mocked(context.write)
+    .mock.calls.map(([line]) => stripVTControlCharacters(line));
+
+  expect(lines).toContain(
+    "! docs signs in through each coding tool. Sign in once in each:",
+  );
+
+  expect(lines).toContain(
+    "    barndog mcp auth docs --origin local --harness claude",
+  );
+
+  expect(lines).toContain(
+    "    barndog mcp auth docs --origin local --harness codex",
+  );
+
+  // REGION was a literal left unkept, so the values table lists it, not the warning.
+  const text = lines.join("\n");
+  expect(text).toContain("    tool  A_KEY, B_KEY");
+  expect(text.match(/REGION/g)).toHaveLength(1);
 });

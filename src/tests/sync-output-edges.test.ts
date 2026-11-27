@@ -310,19 +310,34 @@ describe("notices", () => {
       ),
     ).toEqual([
       TITLE,
-      "✔ Sync complete",
-      "Everything is up to date.",
+      "! Sync complete",
+      "Nothing else changed.",
       "",
-      "! RESOLVE_SCRIPT_API has no value here, so davinci-resolve can't use it.",
+      "! RESOLVE_SCRIPT_API has no value here, so davinci-resolve can't use it. BarnDog doesn't keep it and it isn't set in this shell. Coding tools opened outside a terminal may not see your shell's variables either.",
       "  Fix: barndog mcp env set davinci-resolve RESOLVE_SCRIPT_API",
       "",
-      "! GITHUB_TOKEN has no value here, so github can't read GITHUB_PAT from it.",
+      "! GITHUB_TOKEN has no value here, so github can't read GITHUB_PAT from it. Coding tools opened outside a terminal may not see your shell's variables either.",
       "  Fix: barndog mcp env set github GITHUB_PAT",
       "",
       "! BarnDog keeps a value for STRAY from before each value belonged to one MCP server, and no server has it yet.",
       "  Fix: barndog mcp env set <server> STRAY",
       "",
     ]);
+  });
+
+  test("several variables with no value share one warning, listed by server, and one fix", () => {
+    const lines = renderSyncOutput(
+      ["A_KEY", "B_KEY", "C_KEY"].map((variable): SyncEvent => ({
+        type: "unset-variable",
+        server: "dup",
+        variable,
+      })),
+      uiRuntime,
+    );
+
+    expect(lines.filter((line) => line.startsWith("!"))).toHaveLength(2);
+    expect(lines).toContain("    dup  A_KEY, B_KEY, C_KEY");
+    expect(lines).toContain("  Fix: barndog mcp env set dup");
   });
 
   test("a notice does not hide changes that were made", () => {

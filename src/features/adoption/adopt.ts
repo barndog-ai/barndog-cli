@@ -25,6 +25,7 @@ import { ensureLocalWorkspace } from "../imports/local.js";
 import {
   keepLiteralValues,
   literalValues,
+  signsIn,
   type KeptChoice,
   type McpValue,
 } from "../mcps/import.js";
@@ -119,6 +120,8 @@ export type AdoptionResult = {
   backup: string;
   /** What to do before an adopted asset works. */
   notes: AdoptionNote[];
+  /** The adopted MCP servers that sign in through each coding tool (`mcp auth`). */
+  signIn: string[];
   /** The literal values adopted MCP servers held, and which of them BarnDog keeps. */
   values: McpValue[];
   events: SyncEvent[];
@@ -137,7 +140,7 @@ function adoptionNotes(
   plan: PlannedAsset[],
   sourceOf: (asset: PlannedAsset) => FoundAsset,
   keep: readonly KeptChoice[],
-): Pick<AdoptionResult, "notes" | "values"> {
+): Pick<AdoptionResult, "notes" | "values" | "signIn"> {
   const sources = [
     ...new Map(plan.map((asset) => [asset.source.key, asset])).values(),
   ];
@@ -152,6 +155,15 @@ function adoptionNotes(
     ),
     values: sources.flatMap((asset) =>
       literalValues(asset.name, sourceOf(asset).literals, keep),
+    ),
+    signIn: signsIn(
+      sources.flatMap((asset) => {
+        const { content } = sourceOf(asset);
+
+        return content.kind === "mcp"
+          ? [{ name: asset.name, definition: content.definition }]
+          : [];
+      }),
     ),
   };
 }

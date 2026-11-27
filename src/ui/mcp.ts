@@ -23,6 +23,8 @@ import {
   warn,
 } from "./format.js";
 import { promptTheme } from "./theme.js";
+import type { SyncEvent } from "../features/environment/events.js";
+import { LOCAL_ORIGIN } from "../features/workspace/overlay.js";
 
 const shownMcpSchema = z.looseObject({
   name: z.string(),
@@ -53,6 +55,40 @@ const signIn = {
   environment: "environment variables",
   "native-oauth": "OAuth, through each coding tool",
 } as const;
+
+/**
+ * How to sign in to each local server that signs in through its coding tools:
+ * one `mcp auth` per tool the sync installed it in, read from its events.
+ */
+export function renderSignIn(
+  servers: readonly string[],
+  events: readonly SyncEvent[],
+): string[] {
+  return servers.flatMap((server) => {
+    const tools = [
+      ...new Set(
+        events.flatMap((event) =>
+          event.type === "native" &&
+          event.kind === "mcp" &&
+          event.name === server &&
+          event.action !== "removed"
+            ? [event.harness]
+            : [],
+        ),
+      ),
+    ];
+
+    const commands = (tools.length ? tools : ["<tool>"]).map(
+      (tool) =>
+        `    ${bold(`barndog mcp auth ${server} --origin ${LOCAL_ORIGIN} --harness ${tool}`)}`,
+    );
+
+    return [
+      `${warn("!")} ${bold(clean(server))} signs in through each coding tool. Sign in once in each:`,
+      ...commands,
+    ];
+  });
+}
 
 /**
  * Where each literal MCP value went: one sentence for the values BarnDog keeps

@@ -19,12 +19,18 @@ import {
 import { assetKinds } from "../features/asset-kinds/index.js";
 import { validMcpName } from "../shared/patterns.js";
 import { bold, dim, ok, warn } from "./format.js";
-import { keptValueFiles } from "./output.js";
+import { displayPath, keptValueFiles } from "./output.js";
+import { variableProblemLines } from "./variable-problems.js";
 import { keptValuesMessage } from "../features/environment/events.js";
 import type { RuntimeContext } from "../runtime.js";
 import { type AddContext, type AddOptions } from "./add-asset.js";
 import { urlQueries } from "../features/asset-kinds/url-query.js";
-import { LOCAL_URL_QUERY, renderMcpValues, renderUrlQueries } from "./mcp.js";
+import {
+  LOCAL_URL_QUERY,
+  renderMcpValues,
+  renderSignIn,
+  renderUrlQueries,
+} from "./mcp.js";
 
 async function serversToAdd(
   name: string | undefined,
@@ -335,6 +341,7 @@ function renderAddedServers(
     ...result.notes.map(
       (note) => `${warn("!")} ${bold(note.server)}: ${note.text}`,
     ),
+    ...renderSignIn(result.signIn, result.events),
     ...renderMcpValues(result.values),
     // Sync says where each kept value was written.
     ...result.events.flatMap((event) => {
@@ -347,6 +354,20 @@ function renderAddedServers(
 
       return event.type === "notice" ? [dim(event.message)] : [];
     }),
-    ...result.backups.map((backup) => dim(`Backup: ${backup}`)),
+    ...result.backups.map((backup) =>
+      dim(`Backup: ${displayPath(backup, runtime)}`),
+    ),
+    // renderMcpValues already lists the literal values left for the developer to set.
+    ...variableProblemLines(
+      result.events.filter(
+        (event) =>
+          event.type !== "unset-variable" ||
+          !result.values.some(
+            (value) =>
+              value.server === event.server &&
+              value.variable === event.variable,
+          ),
+      ),
+    ),
   ];
 }
