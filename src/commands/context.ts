@@ -77,6 +77,7 @@ import type {
   ServerVariable,
 } from "../features/mcps/values.js";
 import type { KeptValue } from "../features/secrets/index.js";
+import type { McpServerRecord } from "../config/state.js";
 import type { KeptChoice } from "../features/mcps/import.js";
 import type {
   LocalAssets,
@@ -240,6 +241,7 @@ type FeatureFunctions = {
   forgetMcpValue: (target: ServerVariable) => Promise<KeptValueChange>;
   forgetUnassignedValue: (variable: string) => Promise<KeptValueChange>;
   listKeptValues: () => Promise<KeptVariable[]>;
+  recordedMcpServers: () => Promise<McpServerRecord[]>;
   showPackage: (
     kind: PackageKind,
     name: string,

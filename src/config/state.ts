@@ -19,6 +19,26 @@ const linkSchema = z.object({
   target: z.string(),
 });
 
+/**
+ * One selected MCP server, enabled or not, as the last sync saw it. Disabling a
+ * server removes its native entries, so this is what lets `mcp env` name it and
+ * check its variables without asking the workspace.
+ */
+const mcpServerSchema = z.strictObject({
+  id: z.string(),
+  /** The workspace's name for it. */
+  name: z.string(),
+  /** The name its coding-tool entries use, after any clash rename. */
+  installedName: z.string(),
+  /** The published version `variables` were read from. */
+  versionId: z.string(),
+  /** Every variable its definition refers to. */
+  variables: z.array(z.string()),
+  enabled: z.boolean(),
+});
+
+export type McpServerRecord = z.infer<typeof mcpServerSchema>;
+
 /** The complete persisted installation ownership journal. */
 const stateSchema = z.looseObject({
   version: z.literal(1),
@@ -42,6 +62,8 @@ const stateSchema = z.looseObject({
       versionId: z.string(),
     }),
   ),
+  /** Absent until a sync by a CLI that records MCP servers. */
+  mcpServers: z.array(mcpServerSchema).optional(),
 });
 
 export type Link = z.infer<typeof linkSchema>;

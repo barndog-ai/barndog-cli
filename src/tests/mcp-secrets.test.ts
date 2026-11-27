@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { parse as parseToml } from "smol-toml";
 import { expect, test, vi, type TestContext } from "vitest";
 import { saveSettings } from "../config/settings.js";
+import { readState } from "../config/state.js";
 import { barndogPaths } from "../config/paths.js";
 import { CliError } from "../errors.js";
 import { synchronize } from "../features/environment/sync.js";
@@ -240,6 +241,7 @@ test("mcp env changes a kept value, lists where it's written, and forgets it", a
     {
       server: "tickets",
       assetId: (await m.ids()).tickets,
+      enabled: true,
       variable: "API_KEY",
       writtenTo: expect.arrayContaining([
         join(m.home, ".claude.json"),
@@ -639,7 +641,13 @@ test("a value kept for a server that's gone is forgotten by its asset ID", async
   );
 
   expect(await listKeptValues(m.runtime)).toStrictEqual([
-    { server: "gone-id", assetId: "gone-id", variable: "X", writtenTo: [] },
+    {
+      server: "gone-id",
+      assetId: "gone-id",
+      enabled: null,
+      variable: "X",
+      writtenTo: [],
+    },
   ]);
 
   await forgetMcpValue({ server: "gone-id", variable: "X" }, m.runtime);
@@ -668,4 +676,116 @@ test.each([
   expect(sameValue(recorded, recorded)).toBe(true);
   expect(sameValue({ a: 1 }, { a: 1, b: 2 })).toBe(false);
   expect(sameValue(["x"], ["x", "y"])).toBe(false);
+});
+
+test("sync records every selected MCP server, disabled ones too, and mcp env works from that record", async (t) => {
+  const m = await machine(t, ["API_KEY"]);
+  const id = (await m.ids()).tickets;
+  const record = async () => (await readState(m.home)).mcpServers;
+  const disable = () =>
+    createProgram({
+      home: m.home,
+      env: m.runtime.env,
+      write: () => undefined,
+    }).parseAsync(["mcp", "disable", "tickets", "--no-interactive"], {
+      from: "user",
+    });
+
+  expect(await record()).toContainEqual({
+    id,
+    name: "tickets",
+    installedName: "tickets",
+    versionId: expect.any(String),
+    variables: ["API_KEY", "REGION", "HOME"],
+    enabled: true,
+  });
+
+  await disable();
+  expect(await record()).toContainEqual(
+    expect.objectContaining({ id, installedName: "tickets", enabled: false }),
+  );
+
+  // A disabled server keeps its name, and a change waits until it's enabled.
+  const before = await m.file(".claude.json");
+  const changed = await keepMcpValue(
+    { server: "tickets", variable: "REGION" },
+    { value: "us" },
+    m.runtime,
+  );
+
+  expect(changed).toStrictEqual({
+    file: barndogPaths(m.home).secrets,
+    events: [],
+    notWritten: { because: "disabled" },
+  });
+
+  expect(await m.file(".claude.json")).toBe(before);
+  expect(
+    (await listKeptValues(m.runtime)).map((row) => [
+      row.server,
+      row.variable,
+      row.enabled,
+      row.writtenTo,
+    ]),
+  ).toStrictEqual([
+    ["tickets", "API_KEY", false, []],
+    ["tickets", "REGION", false, []],
+  ]);
+
+  await expect(
+    keepMcpValue(
+      { server: "tickets", variable: "NOPE" },
+      { value: "x" },
+      m.runtime,
+    ),
+  ).rejects.toThrow(/tickets doesn't use NOPE/);
+
+  expect(
+    (await forgetMcpValue({ server: "tickets", variable: "REGION" }, m.runtime))
+      .notWritten,
+  ).toStrictEqual({ because: "disabled" });
+});
+
+test("a value is kept when the sync after it fails, and says why it isn't written", async (t) => {
+  const m = await machine(t, []);
+  await writeFile(join(m.home, ".claude.json"), "{ not json");
+
+  const changed = await keepMcpValue(
+    { server: "tickets", variable: "API_KEY" },
+    { value: "sk-kept" },
+    m.runtime,
+  );
+
+  expect(changed.notWritten).toMatchObject({ because: "sync-failed" });
+  expect(
+    (await listKeptValues(m.runtime)).map((row) => [row.server, row.variable]),
+  ).toStrictEqual([["tickets", "API_KEY"]]);
+});
+
+test("mcp env asks for a sync when state.json has no record of MCP servers yet", async (t) => {
+  const m = await machine(t, []);
+  const path = barndogPaths(m.home).state;
+  const older = JSON.parse(await readFile(path, "utf8")) as Record<
+    string,
+    unknown
+  >;
+
+  delete older.mcpServers;
+  await writeFile(path, JSON.stringify(older));
+
+  await expect(
+    keepMcpValue(
+      { server: "tickets", variable: "API_KEY" },
+      { value: "x" },
+      m.runtime,
+    ),
+  ).rejects.toSatisfy(
+    (error: CliError) =>
+      /hasn't recorded this machine's MCP servers/.test(error.message) &&
+      error.hint === "barndog sync",
+  );
+
+  // The next sync writes the record.
+  await synchronize(undefined, m.runtime);
+  expect((await readState(m.home)).mcpServers).toHaveLength(2);
 });

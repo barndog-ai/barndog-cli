@@ -136,7 +136,7 @@ async function removeEntries(
       kind: "file",
       path: stateFile,
       before: await fileText(stateFile),
-      after: stateText({ links: [], native: [], trees: [] }),
+      after: stateText({ links: [], native: [], trees: [], mcpServers: [] }),
     },
   ];
 

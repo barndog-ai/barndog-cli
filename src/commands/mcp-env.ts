@@ -4,7 +4,7 @@ import { barndogPaths } from "../config/paths.js";
 import { CliError } from "../errors.js";
 import type { KeptValueChange, KeptVariable } from "../features/mcps/values.js";
 import { readsFrom, type KeptValue } from "../features/secrets/index.js";
-import { bold, dim, json, ok, table } from "../ui/format.js";
+import { bold, dim, hint, json, ok, table, warn } from "../ui/format.js";
 import { displayPath, renderSyncOutput } from "../ui/output.js";
 import { pickOne } from "../ui/pick.js";
 import { askSecret, askUseUnassigned, readStdin } from "../ui/secret-input.js";
@@ -35,16 +35,60 @@ export function registerMcpEnv(mcp: Command, context: CommandContext) {
   const report = (
     message: string,
     result: KeptValueChange,
-    data: Record<string, unknown>,
+    data: { server?: string; variable: string; from?: string },
   ) => {
+    const { notWritten } = result;
     if (context.mode.json) {
-      return context.write(json({ ...data, file: result.file }));
+      return context.write(
+        json({
+          ...data,
+          file: result.file,
+          ...(notWritten ? { notWritten } : {}),
+        }),
+      );
     }
 
     context.write(`${ok("✔")} ${message}`);
     for (const line of renderSyncOutput(result.events)) {
       context.write(line);
     }
+
+    if (notWritten?.because === "disabled") {
+      context.write(
+        dim(
+          `${data.server ?? "This server"} is disabled, so your coding tools get the change when you enable it.`,
+        ),
+      );
+    }
+
+    if (notWritten?.because === "sync-failed") {
+      context.write(
+        `${warn("Your coding tools weren't updated:")} ${notWritten.message}`,
+      );
+
+      context.write(
+        dim(
+          `The change is kept; the next ${bold("barndog sync")} writes it into them.`,
+        ),
+      );
+
+      if (notWritten.fix) {
+        context.write(hint(notWritten.fix, "Fix"));
+      }
+    }
+  };
+
+  /** Where a kept value is written, or why it isn't. */
+  const writtenInto = (row: KeptVariable) => {
+    if (row.writtenTo.length) {
+      return row.writtenTo.map(where).join(", ");
+    }
+
+    return dim(
+      row.enabled === false
+        ? "not written (disabled)"
+        : "not written anywhere yet",
+    );
   };
 
   env
@@ -57,7 +101,8 @@ export function registerMcpEnv(mcp: Command, context: CommandContext) {
       `
 The value is saved in ~/.barndog/secrets.json, which only you can read, and never leaves this machine.
 Sync then writes it into that server's entry in each coding tool's settings, as the tools store values
-they're given; shared definitions keep only the variable's name. With --from, the server reads another
+they're given; shared definitions keep only the variable's name. A disabled server gets it when you
+enable it, and a sync that can't run leaves it for the next one. With --from, the server reads another
 variable from your environment instead, such as GITHUB_TOKEN for GITHUB_PERSONAL_ACCESS_TOKEN.`,
     )
     .action(
@@ -204,9 +249,7 @@ variable from your environment instead, such as GITHUB_TOKEN for GITHUB_PERSONAL
           row.server ? bold(row.server) : dim("not assigned"),
           bold(row.variable),
           describe(row),
-          row.writtenTo.length
-            ? row.writtenTo.map(where).join(", ")
-            : dim("not written anywhere yet"),
+          writtenInto(row),
         ]),
         { header: ["Server", "Variable", "Value", "Written into"] },
       )) {
@@ -239,9 +282,7 @@ variable from your environment instead, such as GITHUB_TOKEN for GITHUB_PERSONAL
     }
 
     requireArguments(context, SET_USAGE);
-    const servers = (
-      await context.inventory({ checkVariables: true })
-    ).items.filter((item) => item.kind === "mcp");
+    const servers = await context.recordedMcpServers();
 
     const item = server
       ? servers.find((candidate) =>
@@ -254,7 +295,7 @@ variable from your environment instead, such as GITHUB_TOKEN for GITHUB_PERSONAL
           servers.map((candidate) => ({
             value: candidate,
             name: candidate.installedName,
-            hint: `${candidate.origin} · ${candidate.state}`,
+            hint: candidate.enabled ? undefined : "disabled",
           })),
           { empty: "No MCP servers on this machine." },
         );
@@ -276,7 +317,7 @@ variable from your environment instead, such as GITHUB_TOKEN for GITHUB_PERSONAL
 
     const chosen = await pickOne(
       `Choose a variable of ${item.installedName}`,
-      (item.variables ?? []).map((name) => {
+      item.variables.map((name) => {
         const row = kept.find((candidate) => candidate.variable === name);
 
         return { value: name, name, hint: row ? describe(row) : undefined };
