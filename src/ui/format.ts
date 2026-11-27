@@ -45,6 +45,9 @@ export const ok = (text: string) => selected(text);
 
 export const bad = (text: string) => danger(text);
 
+/** Dimmed danger, for things the user has turned off. */
+export const off = (text: string) => dim(danger(text));
+
 /** Removes terminal control sequences and folds whitespace in remote text. */
 export function clean(value: unknown): string {
   return safe(value).replace(/\s+/g, " ").trim();
@@ -314,6 +317,8 @@ export function badge(state: string, label: string = state): string {
     case "missing":
     case "unavailable":
       return bad(label);
+    case "disabled":
+      return off(label);
     default:
       return dim(label);
   }

@@ -9,6 +9,7 @@ import { pickOne } from "../ui/pick.js";
 import {
   bold,
   dim,
+  off,
   hint,
   json,
   ok,
@@ -109,7 +110,7 @@ export function registerSets(program: Command, context: CommandContext) {
               ),
               scope?.name ?? dim("unavailable"),
               subscription.mode,
-              subscription.enabled ? ok("enabled") : dim("disabled"),
+              subscription.enabled ? ok("enabled") : off("disabled"),
             ]),
             { header: ["Scope", "Name", "Mode", "State"] },
           ).join("\n")
