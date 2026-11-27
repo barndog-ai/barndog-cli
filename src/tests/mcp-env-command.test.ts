@@ -122,8 +122,11 @@ function program(
         file: secrets,
         events: [
           {
-            type: "notice",
-            message: "Removed the kept value of API_KEY from ~/.claude.json.",
+            type: "kept-values",
+            action: "removed",
+            server: "tickets",
+            variables: ["API_KEY"],
+            files: [inHome(machine, ".claude.json")],
           },
         ],
       };
@@ -282,7 +285,10 @@ test("unset forgets one server's value, or an unassigned one, and reports it", a
     `Removed API_KEY for tickets from ${shown(host, ".barndog", "secrets.json")}.`,
   );
 
-  expect(text).toMatch(/Removed the kept value of API_KEY/);
+  expect(text).toContain(
+    `Removed the kept value of API_KEY for tickets.\n    ${shown(host, ".claude.json")}`,
+  );
+
   expect(text).toContain("Removed the unassigned value of UNUSED");
 
   // github keeps two, so without a terminal the variable has to be named.

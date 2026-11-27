@@ -46,6 +46,8 @@ import { renderSyncOutput } from "../ui/output.js";
 import { table } from "../ui/format.js";
 import { barndogPaths } from "../config/paths.js";
 
+const uiRuntime = testRuntime("/home/test");
+
 /** Each file under `directory` as [relative path, text, executable], sorted by path. */
 async function filesIn(directory: string) {
   const entries = await readdir(directory, {
@@ -494,7 +496,10 @@ test("sync resolves MCP name clashes, persists renames and restores the plain na
   expect(clash.skipped.origin).toBe("org");
   expect(await servers()).toStrictEqual(["docs"]);
   expect(((await readSettings(home)) as Settings).localNames).toBe(undefined);
-  const text = stripVTControlCharacters(renderSyncOutput(skipped).join("\n"));
+  const text = stripVTControlCharacters(
+    renderSyncOutput(skipped, uiRuntime).join("\n"),
+  );
+
   expect(text).toMatch(
     /barndog mcp rename docs --origin org --as org-acme-docs/,
   );

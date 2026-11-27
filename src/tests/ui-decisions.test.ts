@@ -1,3 +1,4 @@
+import { testRuntime } from "./runtime.js";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import select from "@inquirer/select";
 import confirm from "@inquirer/confirm";
@@ -8,6 +9,8 @@ import { renderJsonError } from "../ui/output.js";
 import { runSelection } from "../ui/selection.js";
 import type { Clash, ClashChoice } from "../features/environment/names.js";
 import type { SelectionOutcome } from "../features/environment/operations.js";
+
+const uiRuntime = testRuntime("/home/test");
 
 vi.mock("@inquirer/select", () => ({ default: vi.fn() }));
 vi.mock("@inquirer/confirm", () => ({ default: vi.fn() }));
@@ -212,7 +215,7 @@ describe("override decisions in a terminal", () => {
       .mockResolvedValueOnce(applied);
 
     await withTerminal(true, async () => {
-      await runSelection({ write: vi.fn() }, change);
+      await runSelection({ runtime: uiRuntime, write: vi.fn() }, change);
     });
 
     return change;
@@ -279,7 +282,7 @@ describe("override decisions without a terminal", () => {
   test("--json prints an applied change without prompting", async () => {
     const write = vi.fn();
     await runSelection(
-      { write, mode: { json: true, interactive: false } },
+      { runtime: uiRuntime, write, mode: { json: true, interactive: false } },
       vi.fn().mockResolvedValue(applied),
     );
 
@@ -289,7 +292,11 @@ describe("override decisions without a terminal", () => {
 
   test("--json names every asset awaiting a decision and the flags that answer it", async () => {
     const failure = await runSelection(
-      { write: vi.fn(), mode: { json: true, interactive: false } },
+      {
+        runtime: uiRuntime,
+        write: vi.fn(),
+        mode: { json: true, interactive: false },
+      },
       unresolved(),
     ).catch((error: unknown) => error);
 
@@ -309,7 +316,11 @@ describe("override decisions without a terminal", () => {
 
   test("--no-interactive in a terminal asks nothing and names the flags instead", async () => {
     const failure = await runSelection(
-      { write: vi.fn(), mode: { json: false, interactive: false } },
+      {
+        runtime: uiRuntime,
+        write: vi.fn(),
+        mode: { json: false, interactive: false },
+      },
       unresolved(),
     ).catch((error: unknown) => error);
 
@@ -319,7 +330,11 @@ describe("override decisions without a terminal", () => {
 
   test("the JSON error lists the decisions to make", async () => {
     const failure = await runSelection(
-      { write: vi.fn(), mode: { json: true, interactive: false } },
+      {
+        runtime: uiRuntime,
+        write: vi.fn(),
+        mode: { json: true, interactive: false },
+      },
       unresolved(),
     ).catch((error: unknown) => error);
 
@@ -338,7 +353,7 @@ describe("override decisions without a terminal", () => {
   test("a non-terminal run fails the same way instead of prompting", async () => {
     await withTerminal(false, async () => {
       const failure = await runSelection(
-        { write: vi.fn() },
+        { runtime: uiRuntime, write: vi.fn() },
         unresolved(),
       ).catch((error: unknown) => error);
 

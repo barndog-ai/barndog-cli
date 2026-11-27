@@ -1,7 +1,10 @@
+import { testRuntime } from "./runtime.js";
 import { describe, expect, test } from "vitest";
 import { changeSchema } from "@barndog-ai/api-contract";
 import { renderCollaboration } from "../ui/collaboration.js";
 import { sample } from "./sample.js";
+
+const uiRuntime = testRuntime("/home/test");
 
 const COMMIT = "a".repeat(40);
 const PR_URL = "https://example.test/pr/1";
@@ -61,7 +64,7 @@ describe("push output", () => {
   ];
 
   test.each(pushes)("$name", ({ result, lines }) => {
-    expect(renderCollaboration(result)).toEqual(lines);
+    expect(renderCollaboration(result, { runtime: uiRuntime })).toEqual(lines);
   });
 });
 
@@ -83,29 +86,35 @@ describe("diff rows", () => {
     "mode change %s → %s is shown as %j",
     (oldExecutable, newExecutable, line) => {
       expect(
-        renderCollaboration([
-          {
-            kind: "modified",
-            path: "script.sh",
-            patch: "@@ diff",
-            oldExecutable,
-            newExecutable,
-          },
-        ]),
+        renderCollaboration(
+          [
+            {
+              kind: "modified",
+              path: "script.sh",
+              patch: "@@ diff",
+              oldExecutable,
+              newExecutable,
+            },
+          ],
+          { runtime: uiRuntime },
+        ),
       ).toEqual([line, "@@ diff"]);
     },
   );
 
   test("binary files are marked", () => {
     expect(
-      renderCollaboration([
-        { kind: "added", path: "logo.png", patch: "", binary: true },
-      ]),
+      renderCollaboration(
+        [{ kind: "added", path: "logo.png", patch: "", binary: true }],
+        { runtime: uiRuntime },
+      ),
     ).toEqual(["added  logo.png (binary)"]);
   });
 
   test("an empty diff says there are no changes", () => {
-    expect(renderCollaboration([])).toEqual(["No changes."]);
+    expect(renderCollaboration([], { runtime: uiRuntime })).toEqual([
+      "No changes.",
+    ]);
   });
 });
 
@@ -123,7 +132,7 @@ describe("working status", () => {
   };
 
   test("a new package with nothing pending says there are no changes", () => {
-    expect(renderCollaboration(status)).toEqual([
+    expect(renderCollaboration(status, { runtime: uiRuntime })).toEqual([
       "review  /copy",
       "Base: new package",
       "No changes.",
@@ -131,32 +140,39 @@ describe("working status", () => {
   });
 
   test("a published base is shown as its version", () => {
-    expect(renderCollaboration({ ...status, baseVersion: 3 })).toEqual([
-      "review  /copy",
-      "Base: v3",
-      "No changes.",
-    ]);
+    expect(
+      renderCollaboration(
+        { ...status, baseVersion: 3 },
+        { runtime: uiRuntime },
+      ),
+    ).toEqual(["review  /copy", "Base: v3", "No changes."]);
   });
 
   test("a base commit wins over the version and is shortened", () => {
     expect(
-      renderCollaboration({
-        ...status,
-        baseVersion: 3,
-        baseCommit: "abcdef1234567",
-      }),
+      renderCollaboration(
+        {
+          ...status,
+          baseVersion: 3,
+          baseCommit: "abcdef1234567",
+        },
+        { runtime: uiRuntime },
+      ),
     ).toEqual(["review  /copy", "Base: abcdef1", "No changes."]);
   });
 
   test("a review branch with a URL, a proposal and a pull request", () => {
     expect(
-      renderCollaboration({
-        ...status,
-        baseVersion: 1,
-        review: { branch: "review/1", url: PR_URL },
-        proposal: { id: "proposal-1", revision: 2 },
-        external: { pull: { number: 4, head: "head-sha" } },
-      }),
+      renderCollaboration(
+        {
+          ...status,
+          baseVersion: 1,
+          review: { branch: "review/1", url: PR_URL },
+          proposal: { id: "proposal-1", revision: 2 },
+          external: { pull: { number: 4, head: "head-sha" } },
+        },
+        { runtime: uiRuntime },
+      ),
     ).toEqual([
       "review  /copy",
       "Base: v1",
@@ -169,10 +185,13 @@ describe("working status", () => {
 
   test("a review branch without a URL shows only the branch", () => {
     expect(
-      renderCollaboration({
-        ...status,
-        review: { branch: "review/1", url: null },
-      }),
+      renderCollaboration(
+        {
+          ...status,
+          review: { branch: "review/1", url: null },
+        },
+        { runtime: uiRuntime },
+      ),
     ).toEqual([
       "review  /copy",
       "Base: new package",
@@ -183,11 +202,14 @@ describe("working status", () => {
 
   test("a pending submission and conflicts tell you what to do", () => {
     expect(
-      renderCollaboration({
-        ...status,
-        pending: true,
-        conflicts: ["SKILL.md", "notes.md"],
-      }),
+      renderCollaboration(
+        {
+          ...status,
+          pending: true,
+          conflicts: ["SKILL.md", "notes.md"],
+        },
+        { runtime: uiRuntime },
+      ),
     ).toEqual([
       "review  /copy",
       "Base: new package",
@@ -200,16 +222,19 @@ describe("working status", () => {
 
   test("changes are listed without their patch lines", () => {
     expect(
-      renderCollaboration({
-        ...status,
-        changes: [
-          {
-            kind: "modified",
-            path: "SKILL.md",
-            patch: "@@ -1 +1 @@\n-old\n+new",
-          },
-        ],
-      }),
+      renderCollaboration(
+        {
+          ...status,
+          changes: [
+            {
+              kind: "modified",
+              path: "SKILL.md",
+              patch: "@@ -1 +1 @@\n-old\n+new",
+            },
+          ],
+        },
+        { runtime: uiRuntime },
+      ),
     ).toEqual(["review  /copy", "Base: new package", "modified  SKILL.md"]);
   });
 });
@@ -217,38 +242,46 @@ describe("working status", () => {
 describe("package files", () => {
   test("text files show their content and binary files are labelled", () => {
     expect(
-      renderCollaboration({
-        files: [
-          {
-            path: "run.sh",
-            content: Buffer.from("echo hi").toString("base64"),
-            executable: true,
-          },
-          { path: "logo", content: Buffer.from([0, 1]).toString("base64") },
-        ],
-      }),
+      renderCollaboration(
+        {
+          files: [
+            {
+              path: "run.sh",
+              content: Buffer.from("echo hi").toString("base64"),
+              executable: true,
+            },
+            { path: "logo", content: Buffer.from([0, 1]).toString("base64") },
+          ],
+        },
+        { runtime: uiRuntime },
+      ),
     ).toEqual(["run.sh (executable)", "echo hi", "logo", "Binary file"]);
   });
 
   test("no files render nothing", () => {
-    expect(renderCollaboration({ files: false })).toEqual([]);
+    expect(
+      renderCollaboration({ files: false }, { runtime: uiRuntime }),
+    ).toEqual([]);
   });
 });
 
 describe("working copy results", () => {
   test("a bare root", () => {
-    expect(renderCollaboration({ root: "/new" })).toEqual([
-      "Working copy: /new",
-    ]);
+    expect(
+      renderCollaboration({ root: "/new" }, { runtime: uiRuntime }),
+    ).toEqual(["Working copy: /new"]);
   });
 
   test("a commit is shortened and conflicts say how to resolve them", () => {
     expect(
-      renderCollaboration({
-        root: "/new",
-        commit: "abcdef123456",
-        conflicts: ["file"],
-      }),
+      renderCollaboration(
+        {
+          root: "/new",
+          commit: "abcdef123456",
+          conflicts: ["file"],
+        },
+        { runtime: uiRuntime },
+      ),
     ).toEqual([
       "Working copy: /new",
       "Base: abcdef1",
@@ -257,52 +290,54 @@ describe("working copy results", () => {
   });
 
   test("a version is shown when there is no commit", () => {
-    expect(renderCollaboration({ root: "/new", version: 5 })).toEqual([
-      "Working copy: /new",
-      "Base: v5",
-    ]);
+    expect(
+      renderCollaboration({ root: "/new", version: 5 }, { runtime: uiRuntime }),
+    ).toEqual(["Working copy: /new", "Base: v5"]);
   });
 
   test("a resolved file", () => {
-    expect(renderCollaboration({ resolved: "file" })).toEqual([
-      "Resolved: file",
-    ]);
+    expect(
+      renderCollaboration({ resolved: "file" }, { runtime: uiRuntime }),
+    ).toEqual(["Resolved: file"]);
   });
 
   test("an unchanged package", () => {
-    expect(renderCollaboration({ unchanged: true })).toEqual([
-      "Package unchanged.",
-    ]);
+    expect(
+      renderCollaboration({ unchanged: true }, { runtime: uiRuntime }),
+    ).toEqual(["Package unchanged."]);
   });
 });
 
 describe("lists and unknown values", () => {
   test("proposals and versions each have their own row, others print as JSON", () => {
     expect(
-      renderCollaboration([
-        7,
-        { other: true },
-        {
-          name: "review",
-          status: "open",
-          revision: 2,
-          id: "p1",
-          title: "Fix it",
-        },
-        {
-          number: 1,
-          commit: "abc",
-          description: "Initial",
-          publishedBy: "Alice",
-        },
-        {
-          number: 2,
-          commit: "def",
-          description: "Second",
-          publishedBy: "id",
-          publisherName: "Bob",
-        },
-      ]),
+      renderCollaboration(
+        [
+          7,
+          { other: true },
+          {
+            name: "review",
+            status: "open",
+            revision: 2,
+            id: "p1",
+            title: "Fix it",
+          },
+          {
+            number: 1,
+            commit: "abc",
+            description: "Initial",
+            publishedBy: "Alice",
+          },
+          {
+            number: 2,
+            commit: "def",
+            description: "Second",
+            publishedBy: "id",
+            publisherName: "Bob",
+          },
+        ],
+        { runtime: uiRuntime },
+      ),
     ).toEqual([
       "7",
       '{\n  "other": true\n}',
@@ -313,7 +348,7 @@ describe("lists and unknown values", () => {
   });
 
   test("null prints as JSON", () => {
-    expect(renderCollaboration(null)).toEqual(["null"]);
+    expect(renderCollaboration(null, { runtime: uiRuntime })).toEqual(["null"]);
   });
 });
 
@@ -327,7 +362,7 @@ describe("change details", () => {
   function detailLines(overrides: Record<string, unknown>) {
     return renderCollaboration(
       { ...change, files: [withFiles], ...overrides },
-      { details: true },
+      { runtime: uiRuntime, details: true },
     );
   }
 
@@ -379,11 +414,14 @@ describe("change details", () => {
     ["merged", "Published"],
   ] as const) {
     test(`without details only the title lines of a ${status} change are shown`, () => {
-      const lines = renderCollaboration({
-        ...change,
-        status,
-        files: [withFiles],
-      });
+      const lines = renderCollaboration(
+        {
+          ...change,
+          status,
+          files: [withFiles],
+        },
+        { runtime: uiRuntime },
+      );
 
       expect(lines).toHaveLength(2);
       expect(lines[0]).toBe(`${title}  ${change.id}`);

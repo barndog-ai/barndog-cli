@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../runtime.js";
 import select from "@inquirer/select";
 import confirm from "@inquirer/confirm";
 import { DecisionRequiredError } from "./decision-error.js";
@@ -11,6 +12,7 @@ import { interactiveTerminal } from "./pick.js";
 /** What selection prompts need from the command running them. */
 export type SelectionContext = {
   write: (message: string) => void;
+  runtime: RuntimeContext;
   /** Absent in callers outside a command; prompts then follow the terminal. */
   mode?: { json: boolean; interactive: boolean };
 };
@@ -30,7 +32,7 @@ export async function runSelection(
         return;
       }
 
-      for (const line of renderSyncOutput(result.events)) {
+      for (const line of renderSyncOutput(result.events, context.runtime)) {
         context.write(line);
       }
 

@@ -136,12 +136,11 @@ test("kept values are written into every tool, and state.json records only their
 
   const output = m.lines.join("\n");
   expect(output).toMatch(/never uploaded/);
-  expect(output).toMatch(
-    /Wrote the kept value of API_KEY into .*\.claude\.json.* for tickets/,
-  );
-
-  // Every tool got the same value, so one notice names all their files.
+  // Every tool got the same value, so one sentence, then each file under it.
   expect(output.match(/Wrote the kept value of API_KEY/g)).toHaveLength(1);
+  expect(stripVTControlCharacters(output)).toMatch(
+    /Wrote the kept value of API_KEY for tickets\. It stays on this machine\.\n {4}~\/\.claude\.json\n {4}~\/\.codex\/config\.toml\n/,
+  );
 
   // One sentence per outcome, then a column of variables under each server.
   const plain = stripVTControlCharacters(output);
@@ -254,21 +253,21 @@ test("mcp env changes a kept value, lists where it's written, and forgets it", a
   expect(JSON.stringify(listed)).not.toContain("sk-new");
 
   const forgotten = await forgetMcpValue(tickets, m.runtime);
+  // Every tool lost the same value, so one event names all their files.
   expect(
-    forgotten.events.some(
-      (e) =>
-        e.type === "notice" &&
-        /Removed the kept value of API_KEY from .*\.claude\.json/.test(
-          e.message,
-        ),
-    ),
-  ).toBe(true);
-
-  expect(
-    forgotten.events.filter(
-      (e) => e.type === "notice" && e.message.includes("API_KEY"),
-    ),
-  ).toHaveLength(1);
+    forgotten.events.filter((e) => e.type === "kept-values"),
+  ).toStrictEqual([
+    {
+      type: "kept-values",
+      action: "removed",
+      server: "tickets",
+      variables: ["API_KEY"],
+      files: expect.arrayContaining([
+        join(m.home, ".claude.json"),
+        join(m.home, ".codex/config.toml"),
+      ]),
+    },
+  ]);
 
   expect(
     JSON.parse(await m.file(".claude.json")).mcpServers.tickets.env.API_KEY,

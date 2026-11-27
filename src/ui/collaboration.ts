@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "../runtime.js";
 import { SHORT_COMMIT_LENGTH } from "../shared/constants.js";
 
 import { primary } from "./theme.js";
@@ -107,7 +108,7 @@ function executableNote(previous: unknown, next: unknown) {
 /** Results are told apart by their shape, not by the command that produced them. */
 export function renderCollaboration(
   value: unknown,
-  options: { details?: boolean } = {},
+  options: { details?: boolean; runtime: RuntimeContext },
 ): string[] {
   if (Array.isArray(value)) {
     if (!value.length) {
@@ -193,7 +194,7 @@ export function renderCollaboration(
 
   if (value && typeof value === "object") {
     if (isEnvironmentPreview(value)) {
-      return renderSyncOutput(value.events, {
+      return renderSyncOutput(value.events, options.runtime, {
         title: "preview",
         preview: true,
       });
@@ -248,9 +249,9 @@ export function renderCollaboration(
           ? ["Submission awaiting confirmation; retry barndog push."]
           : []),
         ...status.conflicts.map((path) => `Conflict: ${safe(path)}`),
-        ...renderCollaboration(status.changes).filter(
-          (line) => !line.startsWith("@@") && !line.startsWith("+"),
-        ),
+        ...renderCollaboration(status.changes, {
+          runtime: options.runtime,
+        }).filter((line) => !line.startsWith("@@") && !line.startsWith("+")),
       ];
     }
 

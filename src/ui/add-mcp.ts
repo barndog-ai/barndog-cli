@@ -19,6 +19,9 @@ import {
 import { assetKinds } from "../features/asset-kinds/index.js";
 import { validMcpName } from "../shared/patterns.js";
 import { bold, dim, ok, warn } from "./format.js";
+import { keptValueFiles } from "./output.js";
+import { keptValuesMessage } from "../features/environment/events.js";
+import type { RuntimeContext } from "../runtime.js";
 import { type AddContext, type AddOptions } from "./add-asset.js";
 import { urlQueries } from "../features/asset-kinds/url-query.js";
 import { LOCAL_URL_QUERY, renderMcpValues, renderUrlQueries } from "./mcp.js";
@@ -317,13 +320,16 @@ export async function addMcp(
     context.runtime,
   );
 
-  for (const line of renderAddedServers(result)) {
+  for (const line of renderAddedServers(result, context.runtime)) {
     context.write(line);
   }
 }
 
 /** What `mcp add` added, what's left to do, and where it backed up settings. */
-function renderAddedServers(result: AddedServers): string[] {
+function renderAddedServers(
+  result: AddedServers,
+  runtime: RuntimeContext,
+): string[] {
   return [
     ...result.added.map((added) => `${ok("✔")} Added ${bold(added)}`),
     ...result.notes.map(
@@ -331,9 +337,16 @@ function renderAddedServers(result: AddedServers): string[] {
     ),
     ...renderMcpValues(result.values),
     // Sync says where each kept value was written.
-    ...result.events.flatMap((event) =>
-      event.type === "notice" ? [dim(event.message)] : [],
-    ),
+    ...result.events.flatMap((event) => {
+      if (event.type === "kept-values") {
+        return [
+          dim(keptValuesMessage(event)),
+          ...keptValueFiles(event, runtime),
+        ];
+      }
+
+      return event.type === "notice" ? [dim(event.message)] : [];
+    }),
     ...result.backups.map((backup) => dim(`Backup: ${backup}`)),
   ];
 }

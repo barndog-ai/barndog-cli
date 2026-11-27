@@ -505,6 +505,7 @@ export async function runSetup(options: {
       ? async (settings) => {
           for (const line of renderSyncOutput(
             await synchronize(undefined, options.runtime, settings),
+            options.runtime,
           )) {
             write(line);
           }

@@ -8,6 +8,7 @@ import { basename } from "node:path";
 import { isInside } from "../shared/files.js";
 import { SetupRequiredError } from "../config/settings.js";
 import {
+  keptValuesMessage,
   unassignedValueMessage,
   unsetValueMessage,
   type SyncEvent,
@@ -106,6 +107,7 @@ function rows(events: SyncEvent[]): Row[] {
     if (
       event.type === "disabled" ||
       event.type === "notice" ||
+      event.type === "kept-values" ||
       event.type === "unset-variable" ||
       event.type === "unassigned-value"
     ) {
@@ -174,6 +176,7 @@ function rows(events: SyncEvent[]): Row[] {
  */
 export function renderSyncOutput(
   events: SyncEvent[],
+  runtime: RuntimeContext,
   options: { title?: string; verbose?: boolean; preview?: boolean } = {},
 ): string[] {
   const all = rows(events);
@@ -244,7 +247,7 @@ export function renderSyncOutput(
   }
 
   for (const event of events) {
-    output.push(...problemLines(event));
+    output.push(...problemLines(event, runtime));
   }
 
   output.push("");
@@ -252,10 +255,24 @@ export function renderSyncOutput(
   return output;
 }
 
+/** The settings files a `kept-values` event names, one per line under its sentence. */
+export const keptValueFiles = (
+  event: { files: readonly string[] },
+  runtime: RuntimeContext,
+) => event.files.map((file) => dim(`    ${displayPath(file, runtime)}`));
+
 /** What a sync event asks the developer to look at, after the summary; nothing for the rest. */
-function problemLines(event: SyncEvent): string[] {
+function problemLines(event: SyncEvent, runtime: RuntimeContext): string[] {
   if (event.type === "notice") {
     return ["", `${warn("!")} ${event.message}`];
+  }
+
+  if (event.type === "kept-values") {
+    return [
+      "",
+      `${warn("!")} ${keptValuesMessage(event)}`,
+      ...keptValueFiles(event, runtime),
+    ];
   }
 
   if (event.type === "unset-variable") {
