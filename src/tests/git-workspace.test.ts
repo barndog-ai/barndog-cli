@@ -117,6 +117,9 @@ const uiRuntime = testRuntime("/home/test");
 
 const execute = promisify(execFile);
 
+/** How long the detached session-start sync may take; Vitest's test timeout is 60 s. */
+const BACKGROUND_SYNC_WAIT_MS = 45_000;
+
 process.env.GIT_AUTHOR_NAME = "Test";
 process.env.GIT_AUTHOR_EMAIL = "test@example.com";
 process.env.GIT_COMMITTER_NAME = "Test";
@@ -790,16 +793,17 @@ test("the session-start entry syncs in a detached process", async (t) => {
   );
 
   const saved = JSON.parse(await readFile(state, "utf8"));
-  await writeFile(
-    state,
-    JSON.stringify({ ...saved, fetchedAt: "2020-01-01T00:00:00.000Z" }),
-  );
+  const staleFetch = "2020-01-01T00:00:00.000Z";
+  await writeFile(state, JSON.stringify({ ...saved, fetchedAt: staleFetch }));
 
   const shell = await bashShell(testRuntime(member));
   await execute(shell.command, [...shell.args, command]);
   // Wait for the sync to finish too: the files change before it releases its
-  // lock, and a sync still writing would stop the test's cleanup.
-  for (let attempt = 0; attempt < 100; attempt++) {
+  // lock, and a sync still writing would stop the test's cleanup. A detached
+  // Node process that fetches and syncs can take well over ten seconds on a
+  // busy Windows runner, so wait by time, within the 60 s test timeout.
+  const deadline = Date.now() + BACKGROUND_SYNC_WAIT_MS;
+  while (Date.now() < deadline) {
     const text = await installed(member, "skills/code-review/SKILL.md");
     if (
       text.includes("Background.") &&
@@ -811,7 +815,20 @@ test("the session-start entry syncs in a detached process", async (t) => {
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
 
-  expect.unreachable("The background sync did not update the installed Skill");
+  // The entry script discards the sync's output, so say how far it got.
+  const fetchedAt = JSON.parse(await readFile(state, "utf8")).fetchedAt;
+  const progress = [
+    existsSync(barndogPaths(member).syncLock)
+      ? "it still holds the sync lock"
+      : "it isn't running",
+    fetchedAt === staleFetch
+      ? "it never fetched the workspace"
+      : "it fetched the workspace",
+  ].join(", and ");
+
+  expect.unreachable(
+    `The background sync did not update the installed Skill within ${BACKGROUND_SYNC_WAIT_MS / 1000} s: ${progress}`,
+  );
 });
 
 test("repo status answers from barndog.yaml", async (t) => {
