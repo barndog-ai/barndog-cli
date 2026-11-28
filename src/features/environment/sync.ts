@@ -13,6 +13,7 @@ import { selectionState, withSelection } from "../../config/environment.js";
 import type { SyncEvent } from "./events.js";
 import { heldName, settleNames } from "./settle-names.js";
 import { stageAssets } from "./stage.js";
+import { mcpRecords } from "./mcp-records.js";
 import { assertSupportedConfigHomes, startupEntries } from "./own-entries.js";
 import { resolveAssets } from "../asset-selection/index.js";
 import { pruneCache } from "../workspace/packages.js";
@@ -211,6 +212,16 @@ export async function synchronize(
     });
 
     const { links: desired, native, trees } = staged;
+    const mcpServers = await mcpRecords({
+      assets: effective.assets,
+      previous: before.mcpServers,
+      definitions: staged.definitions,
+      invalid,
+      vanished,
+      localNames,
+      source,
+    });
+
     events.push(...staged.events);
     native.push(...startupEntries(settings, runtime, { knowledge: !!source }));
 
@@ -245,7 +256,7 @@ export async function synchronize(
         kind: "file",
         path: stateFile,
         before: rawState,
-        after: stateText({ links: desired, native, trees }),
+        after: stateText({ links: desired, native, trees, mcpServers }),
       },
     ];
 

@@ -45,6 +45,8 @@ export type StagedAssets = {
   native: NativeEntry[];
   trees: InstalledTree[];
   events: SyncEvent[];
+  /** The definitions of the MCP servers staged, by asset ID, as the workspace has them. */
+  definitions: Map<string, McpDefinition>;
 };
 
 /**
@@ -103,6 +105,7 @@ export async function stageAssets(input: {
   const native: NativeEntry[] = [];
   const trees: InstalledTree[] = [];
   const events: SyncEvent[] = [];
+  const definitions = new Map<string, McpDefinition>();
   const names = new Set<string>();
   const ids = new Set<string>();
   /** Installed MCP servers, to report the variables they find no value for. */
@@ -263,6 +266,7 @@ export async function stageAssets(input: {
       );
     } else if (ref.kind === "mcp") {
       const definition = await source.mcpDefinition(ref);
+      definitions.set(ref.id, definition);
       const values = input.kept.servers[ref.id] ?? {};
       const applied = applyKeptValues(definition, values);
       servers.push({ name, definition, values });
@@ -308,7 +312,7 @@ export async function stageAssets(input: {
 
   events.push(...valueEvents(servers, input.kept, input.runtime.env));
 
-  return { links: desired, native, trees, events };
+  return { links: desired, native, trees, events, definitions };
 }
 
 /**

@@ -3,8 +3,12 @@ import { createProgram } from "../program.js";
 import { askSecret, askUseUnassigned, readStdin } from "../ui/secret-input.js";
 import { CliError } from "../errors.js";
 import { pickOne } from "../ui/pick.js";
-import type { InventoryItem } from "../features/inventory/index.js";
-import type { KeptVariable, ServerVariable } from "../features/mcps/values.js";
+import type { McpServerRecord } from "../config/state.js";
+import type {
+  KeptValueChange,
+  KeptVariable,
+  ServerVariable,
+} from "../features/mcps/values.js";
 import type { KeptValue } from "../features/secrets/index.js";
 
 vi.mock("../ui/pick.js", async (original) => ({
@@ -53,40 +57,52 @@ const row = (text: string, first: string, second: string) =>
     .map((line) => line.trim().split(/\s{2,}/))
     .find((cells) => cells[0] === first && cells[1] === second);
 
-const tickets: InventoryItem = {
+const tickets: McpServerRecord = {
   id: "id-tickets",
-  kind: "mcp",
   name: "tickets",
   installedName: "tickets",
-  origin: "local",
-  via: ["individual"],
-  state: "installed",
-  harnesses: ["claude"],
-  paths: [],
+  versionId: "v1",
   variables: ["API_KEY", "TOKEN"],
+  enabled: true,
+};
+
+const paused: McpServerRecord = {
+  ...tickets,
+  id: "id-paused",
+  name: "paused",
+  installedName: "paused",
+  enabled: false,
 };
 
 function program(
   interactive: boolean,
   extra: string[] = [],
   machine: Machine = host,
+  notWritten?: KeptValueChange["notWritten"],
 ) {
   const kept: [ServerVariable, KeptValue][] = [];
   const assigned: ServerVariable[] = [];
   const forgotten: (ServerVariable | string)[] = [];
   const output: string[] = [];
   const secrets = inHome(machine, ".barndog", "secrets.json");
-  const change = { file: secrets, events: [] };
+  const change: KeptValueChange = {
+    file: secrets,
+    events: [],
+    ...(notWritten ? { notWritten } : {}),
+  };
+
   const listed: KeptVariable[] = [
     {
       server: "tickets",
       assetId: "id-tickets",
+      enabled: true,
       variable: "API_KEY",
       writtenTo: [inHome(machine, ".claude.json")],
     },
     {
       server: "github",
       assetId: "id-github",
+      enabled: true,
       variable: "GITHUB_PERSONAL_ACCESS_TOKEN",
       from: "GITHUB_TOKEN",
       writtenTo: [],
@@ -94,10 +110,24 @@ function program(
     {
       server: "github",
       assetId: "id-github",
+      enabled: true,
       variable: "OTHER",
       writtenTo: [],
     },
-    { server: null, assetId: null, variable: "UNUSED", writtenTo: [] },
+    {
+      server: "paused",
+      assetId: "id-paused",
+      enabled: false,
+      variable: "API_KEY",
+      writtenTo: [],
+    },
+    {
+      server: null,
+      assetId: null,
+      enabled: null,
+      variable: "UNUSED",
+      writtenTo: [],
+    },
   ];
 
   const cli = createProgram({
@@ -137,14 +167,7 @@ function program(
       return change;
     },
     listKeptValues: async () => listed,
-    inventory: async () => ({
-      harnesses: [],
-      server: null,
-      knowledge: false,
-      offline: null,
-      moving: [],
-      items: [tickets, { ...tickets, kind: "skill", id: "id-skill" }],
-    }),
+    recordedMcpServers: async () => [tickets, paused],
   });
 
   const run = (...args: string[]) =>
@@ -259,6 +282,13 @@ test("list shows each server's values, never the values themselves", async () =>
     "not written anywhere yet",
   ]);
 
+  expect(row(text, "paused", "API_KEY")).toStrictEqual([
+    "paused",
+    "API_KEY",
+    "kept",
+    "not written (disabled)",
+  ]);
+
   expect(row(text, "not assigned", "UNUSED")).toStrictEqual([
     "not assigned",
     "UNUSED",
@@ -371,7 +401,8 @@ test("in a terminal, set picks the server and then the variable from lists", asy
 
   const [servers, variables] = vi.mocked(pickOne).mock.calls;
   expect(servers![1]).toStrictEqual([
-    { value: tickets, name: "tickets", hint: "local · installed" },
+    { value: tickets, name: "tickets", hint: undefined },
+    { value: paused, name: "paused", hint: "disabled" },
   ]);
 
   expect(variables![0]).toBe("Choose a variable of tickets");
@@ -409,6 +440,7 @@ test("in a terminal, unset picks a server with kept values, then one of its valu
   expect(servers![1].map((choice) => choice.name)).toStrictEqual([
     "tickets",
     "github",
+    "paused",
   ]);
 
   expect(values![1].map((choice) => choice.value)).toStrictEqual([
@@ -422,4 +454,42 @@ test("in a terminal, unset picks a server with kept values, then one of its valu
     { server: "github", variable: "OTHER" },
     "UNUSED",
   ]);
+});
+
+test("a change the tools didn't get says why, and --json carries the reason", async () => {
+  vi.mocked(readStdin).mockResolvedValue("value");
+  const disabled = program(false, [], host, { because: "disabled" });
+  await disabled.run("set", "paused", "API_KEY", "--stdin");
+  expect(disabled.output.join("\n")).toContain(
+    "paused is disabled, so your coding tools get the change when you enable it.",
+  );
+
+  // Nothing was synced, so no sync summary is shown.
+  expect(disabled.output.join("\n")).not.toContain("Sync complete");
+
+  const failed = program(false, [], host, {
+    because: "sync-failed",
+    message: "Can't reach the BarnDog server at https://barndog.dev.",
+    fix: "barndog doctor",
+  });
+
+  await failed.run("set", "tickets", "API_KEY", "--stdin");
+  const text = failed.output.join("\n");
+  expect(text).toContain("Saved API_KEY for tickets");
+  expect(text).toContain(
+    "Your coding tools weren't updated: Can't reach the BarnDog server at https://barndog.dev.",
+  );
+
+  expect(text).toContain("the next barndog sync writes it into them.");
+  expect(text).toContain("Fix: barndog doctor");
+  expect(text).not.toContain("Sync complete");
+
+  const json = program(false, ["--json"], host, { because: "disabled" });
+  await json.run("set", "paused", "API_KEY", "--stdin");
+  expect(JSON.parse(json.output[0]!)).toStrictEqual({
+    server: "paused",
+    variable: "API_KEY",
+    file: inHome(host, ".barndog", "secrets.json"),
+    notWritten: { because: "disabled" },
+  });
 });

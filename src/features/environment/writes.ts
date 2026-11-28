@@ -5,7 +5,7 @@
  * something BarnDog doesn't own, or a hand edit, is in the way.
  */
 import type { RuntimeContext } from "../../runtime.js";
-import type { Link, State } from "../../config/state.js";
+import type { Link, McpServerRecord, State } from "../../config/state.js";
 import type { Settings } from "../../config/settings.js";
 import type { PackageKind } from "../../config/selection.js";
 import { CliError } from "../../errors.js";
@@ -357,6 +357,7 @@ export function stateText(plan: {
   links: readonly Link[];
   native: readonly NativeEntry[];
   trees: readonly InstalledTree[];
+  mcpServers: readonly McpServerRecord[];
 }): string {
   return (
     JSON.stringify(
@@ -377,6 +378,7 @@ export function stateText(plan: {
             versionId,
           }),
         ),
+        mcpServers: plan.mcpServers,
       },
       null,
       2,

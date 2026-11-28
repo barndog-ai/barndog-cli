@@ -143,6 +143,7 @@ import {
   forgetUnassignedValue,
   keepMcpValue,
   listKeptValues,
+  recordedMcpServers,
 } from "./features/mcps/values.js";
 import { readSettings } from "./config/settings.js";
 
@@ -534,6 +535,8 @@ export function createProgram(options: ProgramOptions = {}): Command {
       options.forgetUnassignedValue ??
       ((variable) => forgetUnassignedValue(variable, runtime)),
     listKeptValues: options.listKeptValues ?? (() => listKeptValues(runtime)),
+    recordedMcpServers:
+      options.recordedMcpServers ?? (() => recordedMcpServers(runtime)),
     showPackage:
       options.showPackage ??
       ((kind, name, origin) => showPackage(kind, name, origin, runtime)),
