@@ -412,7 +412,8 @@ test("kept values list each settings file on its own line, under ~", () => {
         files: ["/home/test/.claude.json", "/home/test/.codex/config.toml"],
       },
     ],
-    uiRuntime,
+    // POSIX paths, so the expected text is the same on every OS.
+    testRuntime("/home/test", { platform: "linux" }),
   ).map((line) => stripVTControlCharacters(line));
 
   expect(lines.join("\n")).toContain(

@@ -8,7 +8,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { parse as parseToml } from "smol-toml";
 import { expect, test, vi, type TestContext } from "vitest";
 import { saveSettings } from "../config/settings.js";
@@ -138,8 +138,10 @@ test("kept values are written into every tool, and state.json records only their
   expect(output).toMatch(/never uploaded/);
   // Every tool got the same value, so one sentence, then each file under it.
   expect(output.match(/Wrote the kept value of API_KEY/g)).toHaveLength(1);
-  expect(stripVTControlCharacters(output)).toMatch(
-    /Wrote the kept value of API_KEY for tickets\. It stays on this machine\.\n {4}~\/\.claude\.json\n {4}~\/\.codex\/config\.toml\n/,
+  // Paths show with the platform's own separator, as displayPath() writes them.
+  const shown = (...parts: string[]) => ["~", ...parts].join(sep);
+  expect(stripVTControlCharacters(output)).toContain(
+    `Wrote the kept value of API_KEY for tickets. It stays on this machine.\n    ${shown(".claude.json")}\n    ${shown(".codex", "config.toml")}\n`,
   );
 
   // One sentence per outcome, then a column of variables under each server.
