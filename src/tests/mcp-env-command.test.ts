@@ -458,6 +458,9 @@ test("a change the tools didn't get says why, and --json carries the reason", as
     "paused is disabled, so your coding tools get the change when you enable it.",
   );
 
+  // Nothing was synced, so no sync summary is shown.
+  expect(disabled.output.join("\n")).not.toContain("Sync complete");
+
   const failed = program(false, [], host, {
     because: "sync-failed",
     message: "Can't reach the BarnDog server at https://barndog.dev.",
@@ -473,6 +476,7 @@ test("a change the tools didn't get says why, and --json carries the reason", as
 
   expect(text).toContain("the next barndog sync writes it into them.");
   expect(text).toContain("Fix: barndog doctor");
+  expect(text).not.toContain("Sync complete");
 
   const json = program(false, ["--json"], host, { because: "disabled" });
   await json.run("set", "paused", "API_KEY", "--stdin");

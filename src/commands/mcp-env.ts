@@ -49,8 +49,11 @@ export function registerMcpEnv(mcp: Command, context: CommandContext) {
     }
 
     context.write(`${ok("✔")} ${message}`);
-    for (const line of renderSyncOutput(result.events)) {
-      context.write(line);
+    // Nothing was synced, so there is no sync summary to show.
+    if (!notWritten) {
+      for (const line of renderSyncOutput(result.events)) {
+        context.write(line);
+      }
     }
 
     if (notWritten?.because === "disabled") {
