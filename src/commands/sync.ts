@@ -58,7 +58,7 @@ export function registerSync(program: Command, context: CommandContext): void {
           return context.write(json(events));
         }
 
-        for (const line of renderSyncOutput(events, {
+        for (const line of renderSyncOutput(events, context.runtime, {
           title: options.dryRun ? "sync --dry-run" : "sync",
           preview: options.dryRun,
           verbose: options.verbose,

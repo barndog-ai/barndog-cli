@@ -29,7 +29,6 @@ import { patchNative } from "../native/configuration.js";
 import { validMcpName, VARIABLE_NAME } from "../../shared/patterns.js";
 import { assetKinds } from "../asset-kinds/index.js";
 import { queryParameters } from "../asset-kinds/url-query.js";
-import { LOCAL_ORIGIN } from "../workspace/overlay.js";
 import { ensureLocalWorkspace } from "../imports/local.js";
 import {
   keptValues,
@@ -345,12 +344,6 @@ export function convertServer(
 
     // Claude Code writes `oauth` and Cursor writes `auth` for servers that sign in natively.
     const signsIn = oauth || !!server.oauth || !!server.auth;
-    if (signsIn) {
-      notes.push(
-        `Sign in once it's added: barndog mcp auth ${name} --origin ${LOCAL_ORIGIN} --harness <tool>`,
-      );
-    }
-
     candidate = {
       ...common,
       transport: "http",
@@ -596,6 +589,43 @@ export async function localMcpNamed(
 /** Something to do before an added server works, and which server it's for. */
 type ServerNote = { server: string; text: string };
 
+const toolList = new Intl.ListFormat("en", { type: "conjunction" });
+
+/** A server in the local folder, by the asset ID sync installs it under. */
+export type LocalServer = {
+  id: string;
+  name: string;
+  definition: McpDefinition;
+};
+
+/** A server that signs in through its coding tools, and the tools sync installed it in. */
+export type SignIn = { server: string; harnesses: Harness[] };
+
+/**
+ * The servers that sign in through each coding tool, which `mcp auth` starts
+ * once per tool. Read by asset ID from `state.json` after the sync, since a
+ * clash rename changes the name a tool has the server under.
+ */
+export async function signInTools(
+  servers: readonly LocalServer[],
+  runtime: RuntimeContext,
+): Promise<SignIn[]> {
+  const { native } = await readState(runtime.home);
+
+  return servers
+    .filter(({ definition }) => definition.authentication === "native-oauth")
+    .map(({ id, name }) => ({
+      server: name,
+      harnesses: [
+        ...new Set(
+          native
+            .filter((entry) => entry.kind === "mcp" && entry.id === id)
+            .map((entry) => entry.harness),
+        ),
+      ],
+    }));
+}
+
 /** What `mcp add` added, and what the developer still has to do. */
 export type AddedServers = {
   added: string[];
@@ -604,6 +634,8 @@ export type AddedServers = {
   values: McpValue[];
   /** Copies of the tool settings files it changed. */
   backups: string[];
+  /** The added servers that sign in through each coding tool (`mcp auth`). */
+  signIn: SignIn[];
   events: SyncEvent[];
 };
 
@@ -647,7 +679,7 @@ export async function addMcpServers(
       const conflicts = await conflictingEntries(name, runtime);
       if (conflicts.length && !options.replace) {
         throw new CliError(
-          `${name} is already configured in ${conflicts.map((c) => c.file).join(" and ")}. Replacing it is required for BarnDog to manage it.`,
+          `${name} is already configured in ${toolList.format(conflicts.map((c) => adapters[c.harness].name))}. Replacing it is required for BarnDog to manage it.`,
           `barndog mcp add ${name} --replace`,
         );
       }
@@ -701,21 +733,19 @@ export async function addMcpServers(
 
     // Saved before the sync, which writes them into the tools' settings.
     const model = await localRepoSource(workspace, runtime).model();
-    await keepLiteralValues(
-      servers.map((server) => ({
-        ...server,
-        id: defined(
-          model.assets.find(
-            (asset) =>
-              asset.kind === "mcp" &&
-              asset.path === `org/mcp/${server.name}.yaml`,
-          )?.id,
-          `The local folder has no ${server.name} after writing it`,
-        ),
-      })),
-      options.keep,
-      runtime,
-    );
+    const saved = servers.map((server) => ({
+      ...server,
+      id: defined(
+        model.assets.find(
+          (asset) =>
+            asset.kind === "mcp" &&
+            asset.path === `org/mcp/${server.name}.yaml`,
+        )?.id,
+        `The local folder has no ${server.name} after writing it`,
+      ),
+    }));
+
+    await keepLiteralValues(saved, options.keep, runtime);
 
     const events = await synchronize(undefined, runtime, undefined, {
       prompt: false,
@@ -730,6 +760,7 @@ export async function addMcpServers(
         literalValues(s.name, s.literals, options.keep),
       ),
       backups,
+      signIn: await signInTools(saved, runtime),
       events,
     };
   });

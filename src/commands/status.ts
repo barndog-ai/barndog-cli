@@ -39,7 +39,9 @@ export function registerStatus(program: Command, context: CommandContext) {
       }
 
       if ("changes" in working) {
-        for (const line of renderCollaboration(working)) {
+        for (const line of renderCollaboration(working, {
+          runtime: context.runtime,
+        })) {
           context.write(line);
         }
 

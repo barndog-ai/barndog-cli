@@ -55,7 +55,10 @@ function printer(context: CommandContext) {
     if (context.mode.json) {
       context.write(json(result));
     } else {
-      for (const line of renderCollaboration(result, options)) {
+      for (const line of renderCollaboration(result, {
+        ...options,
+        runtime: context.runtime,
+      })) {
         context.write(line);
       }
     }

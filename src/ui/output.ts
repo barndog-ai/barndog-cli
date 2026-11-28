@@ -8,10 +8,10 @@ import { basename } from "node:path";
 import { isInside } from "../shared/files.js";
 import { SetupRequiredError } from "../config/settings.js";
 import {
-  unassignedValueMessage,
-  unsetValueMessage,
+  keptValuesMessage,
   type SyncEvent,
 } from "../features/environment/events.js";
+import { variableProblemLines } from "./variable-problems.js";
 import { adapters, isHarness } from "../harnesses/registry.js";
 import { primary, danger } from "./theme.js";
 import {
@@ -106,6 +106,7 @@ function rows(events: SyncEvent[]): Row[] {
     if (
       event.type === "disabled" ||
       event.type === "notice" ||
+      event.type === "kept-values" ||
       event.type === "unset-variable" ||
       event.type === "unassigned-value"
     ) {
@@ -174,6 +175,7 @@ function rows(events: SyncEvent[]): Row[] {
  */
 export function renderSyncOutput(
   events: SyncEvent[],
+  runtime: RuntimeContext,
   options: { title?: string; verbose?: boolean; preview?: boolean } = {},
 ): string[] {
   const all = rows(events);
@@ -190,9 +192,10 @@ export function renderSyncOutput(
     ["installed", "updated", "removed"].includes(row.action),
   );
 
-  // Something was left out or read from an old copy, so "up to date" would be untrue.
+  // Something was left out, read from an old copy or can't run yet, so "up to date" would be untrue.
   const incomplete =
-    count("skipped") > 0 || events.some((event) => event.type === "notice");
+    count("skipped") > 0 ||
+    events.some((event) => problemTypes.has(event.type));
 
   const quiet = incomplete
     ? dim("Nothing else changed.")
@@ -244,33 +247,40 @@ export function renderSyncOutput(
   }
 
   for (const event of events) {
-    output.push(...problemLines(event));
+    output.push(...problemLines(event, runtime));
   }
+
+  output.push(...variableProblemLines(events));
 
   output.push("");
 
   return output;
 }
 
+/** The settings files a `kept-values` event names, one per line under its sentence. */
+export const keptValueFiles = (
+  event: { files: readonly string[] },
+  runtime: RuntimeContext,
+) => event.files.map((file) => dim(`    ${displayPath(file, runtime)}`));
+
+/** Events that mean the installation isn't fully working yet. */
+const problemTypes = new Set<SyncEvent["type"]>([
+  "notice",
+  "unset-variable",
+  "unassigned-value",
+]);
+
 /** What a sync event asks the developer to look at, after the summary; nothing for the rest. */
-function problemLines(event: SyncEvent): string[] {
+function problemLines(event: SyncEvent, runtime: RuntimeContext): string[] {
   if (event.type === "notice") {
     return ["", `${warn("!")} ${event.message}`];
   }
 
-  if (event.type === "unset-variable") {
+  if (event.type === "kept-values") {
     return [
       "",
-      `${warn("!")} ${unsetValueMessage(event)}`,
-      `  ${hint(`barndog mcp env set ${event.server} ${event.variable}`, "Fix")}`,
-    ];
-  }
-
-  if (event.type === "unassigned-value") {
-    return [
-      "",
-      `${warn("!")} ${unassignedValueMessage(event.variable)}`,
-      `  ${hint(`barndog mcp env set <server> ${event.variable}`, "Fix")}`,
+      `${warn("!")} ${keptValuesMessage(event)}`,
+      ...keptValueFiles(event, runtime),
     ];
   }
 

@@ -59,6 +59,8 @@ import type { Harness } from "../harnesses/types.js";
 import type { McpDefinition } from "@barndog-ai/api-contract";
 import type { RuntimeContext } from "../runtime.js";
 
+const uiRuntime = testRuntime("/home/test");
+
 /** An MCP entry with every variable left as a reference, as before values were kept. */
 const referenceEntry = (
   harness: Harness,
@@ -165,7 +167,6 @@ test("mcp add marks OAuth servers, by flag or from the pasted JSON", () => {
 
   const flagged = convertServer(server, undefined, true);
   expect(flagged.definition.authentication).toBe("native-oauth");
-  expect(flagged.notes.join()).toMatch(/mcp auth docs --origin local/);
   expect(
     convertServer({
       name: "docs",
@@ -408,19 +409,25 @@ test("knowledge list reflects whether session-start listing is on", async (t) =>
 
 test("sync doesn't call skipped or stale results up to date", () => {
   const skipped = plain(
-    renderSyncOutput([
-      { type: "invalid", kind: "skill", name: "bad", reason: "Broken" },
-    ]),
+    renderSyncOutput(
+      [{ type: "invalid", kind: "skill", name: "bad", reason: "Broken" }],
+      uiRuntime,
+    ),
   );
 
   expect(skipped).not.toMatch(/Everything is up to date/);
   expect(skipped).toMatch(/Nothing else changed/);
   const stale = plain(
-    renderSyncOutput([{ type: "notice", message: "Can't reach the repo." }]),
+    renderSyncOutput(
+      [{ type: "notice", message: "Can't reach the repo." }],
+      uiRuntime,
+    ),
   );
 
   expect(stale).not.toMatch(/Everything is up to date/);
-  expect(plain(renderSyncOutput([]))).toMatch(/Everything is up to date/);
+  expect(plain(renderSyncOutput([], uiRuntime))).toMatch(
+    /Everything is up to date/,
+  );
 });
 
 test("sync keeps BarnDog's own entries out of the summary", () => {
@@ -448,15 +455,18 @@ test("sync keeps BarnDog's own entries out of the summary", () => {
     },
   ];
 
-  const quiet = plain(renderSyncOutput(events));
+  const quiet = plain(renderSyncOutput(events, uiRuntime));
   expect(quiet).toMatch(/Sync complete · 1 unchanged/);
   expect(quiet).not.toMatch(/knowledge index|workspace sync/);
-  const verbose = plain(renderSyncOutput(events, { verbose: true }));
+  const verbose = plain(renderSyncOutput(events, uiRuntime, { verbose: true }));
   expect(verbose).toMatch(/Sync complete · 1 unchanged/);
   expect(verbose).toMatch(/knowledge index/);
   expect(verbose).toMatch(/workspace sync/);
   const installed = plain(
-    renderSyncOutput([{ ...events[1]!, action: "installed" as const }]),
+    renderSyncOutput(
+      [{ ...events[1]!, action: "installed" as const }],
+      uiRuntime,
+    ),
   );
 
   expect(installed).not.toMatch(/workspace sync|1 installed/);
@@ -465,22 +475,26 @@ test("sync keeps BarnDog's own entries out of the summary", () => {
 
 test("review output uses names and hides noise about new files", () => {
   const diff = (oldExecutable: unknown, newExecutable: unknown) =>
-    renderCollaboration([
-      { kind: "added", path: "a", patch: "", oldExecutable, newExecutable },
-    ]).join("\n");
+    renderCollaboration(
+      [{ kind: "added", path: "a", patch: "", oldExecutable, newExecutable }],
+      { runtime: uiRuntime },
+    ).join("\n");
 
   expect(diff(null, false)).not.toMatch(/executable/);
   expect(diff(null, true)).toMatch(/executable/);
   expect(diff(false, true)).toMatch(/executable: false → true/);
-  const [row] = renderCollaboration([
-    {
-      number: 2,
-      commit: "abc",
-      description: "Second",
-      publishedBy: "uuid-1",
-      publisherName: "Alice Doe",
-    },
-  ]);
+  const [row] = renderCollaboration(
+    [
+      {
+        number: 2,
+        commit: "abc",
+        description: "Second",
+        publishedBy: "uuid-1",
+        publisherName: "Alice Doe",
+      },
+    ],
+    { runtime: uiRuntime },
+  );
 
   expect(row!).toMatch(/published by Alice Doe/);
   expect(row!).not.toMatch(/uuid-1/);

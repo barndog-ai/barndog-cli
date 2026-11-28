@@ -549,8 +549,9 @@ test("mcp add --from opencode reads every OpenCode config file and takes a serve
     },
   ]);
 
+  // The error names the tool, not the settings file's full path.
   await expect(addMcpServers([docs], { keep: [] }, runtime)).rejects.toThrow(
-    /already configured/,
+    "docs is already configured in OpenCode.",
   );
 
   const { backups } = await addMcpServers(

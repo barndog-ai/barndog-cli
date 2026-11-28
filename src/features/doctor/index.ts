@@ -9,6 +9,7 @@ import { adapters } from "../../harnesses/registry.js";
 import { authStatus } from "../auth/session.js";
 import { LoginRequiredError } from "../auth/transport.js";
 import { synchronize } from "../environment/sync.js";
+import { keptValuesMessage } from "../environment/events.js";
 import { assetKinds } from "../asset-kinds/index.js";
 import { barndogPaths } from "../../config/paths.js";
 import type { Check } from "./check.js";
@@ -174,6 +175,14 @@ export async function doctor(runtime: RuntimeContext): Promise<Check[]> {
     for (const event of events) {
       if (event.type === "notice") {
         checks.push({ name: "Notice", status: "warn", detail: event.message });
+      }
+
+      if (event.type === "kept-values") {
+        checks.push({
+          name: "Kept values",
+          status: "warn",
+          detail: `${keptValuesMessage(event)} Files: ${event.files.join(", ")}.`,
+        });
       }
 
       if (event.type === "clash") {

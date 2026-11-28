@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 import { runSetInstall } from "../ui/scope-install.js";
+import { testRuntime } from "./runtime.js";
 
 function fixture() {
   const calls: { action: string; options: unknown }[] = [];
@@ -12,6 +13,7 @@ function fixture() {
   const applied = () => ({ status: "applied" as const, events: [] });
   const context = {
     write: () => {},
+    runtime: testRuntime("/home/test"),
     installSet: async (options: object) => {
       calls.push({ action: "install", options });
 
