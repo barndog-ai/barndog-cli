@@ -5,6 +5,7 @@ import {
   badge,
   choiceDescription,
   dim,
+  off,
   ok,
   warn,
   fields,
@@ -16,7 +17,7 @@ import {
 
 // Tests run with FORCE_COLOR=0 (setup.ts), where every style is plain text, so
 // a badge's color can only be checked with color forced on.
-const tones = { ok, warn, bad, dim };
+const tones = { ok, warn, bad, off, dim };
 for (const [state, tone] of [
   ["installed", "ok"],
   ["enabled", "ok"],
@@ -26,7 +27,7 @@ for (const [state, tone] of [
   ["skipped", "warn"],
   ["missing", "bad"],
   ["unavailable", "bad"],
-  ["disabled", "dim"],
+  ["disabled", "off"],
 ] as const) {
   test(`${state} badge is styled ${tone} and keeps its label`, () => {
     vi.stubEnv("FORCE_COLOR", "1");
