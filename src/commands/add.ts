@@ -147,14 +147,16 @@ export function registerAdd(program: Command, context: CommandContext) {
             );
 
             if (result.changes.length) {
-              for (const line of renderCollaboration(result.changes)) {
+              for (const line of renderCollaboration(result.changes, {
+                runtime: context.runtime,
+              })) {
                 context.write(line);
               }
             }
           }
 
           if (applied) {
-            for (const line of renderSyncOutput(events)) {
+            for (const line of renderSyncOutput(events, context.runtime)) {
               context.write(line);
             }
 

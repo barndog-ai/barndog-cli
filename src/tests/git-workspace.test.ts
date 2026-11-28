@@ -113,6 +113,8 @@ import {
 } from "../features/imports/remote.js";
 import { runSetup } from "../ui/onboarding.js";
 
+const uiRuntime = testRuntime("/home/test");
+
 const execute = promisify(execFile);
 
 process.env.GIT_AUTHOR_NAME = "Test";
@@ -1083,7 +1085,10 @@ test("working copies push review branches and merge upstream edits", async (t) =
   };
 
   expect(status.changes.length).toBe(2);
-  expect(renderCollaboration(status).join("\n")).toMatch(/Base: [0-9a-f]{7}/);
+  expect(
+    renderCollaboration(status, { runtime: uiRuntime }).join("\n"),
+  ).toMatch(/Base: [0-9a-f]{7}/);
+
   const pushed = (await pushWorkingCopy(
     { title: "Clarify" },
     testRuntime(member, { cwd: work }),
@@ -1093,7 +1098,10 @@ test("working copies push review branches and merge upstream edits", async (t) =
   };
 
   expect(pushed.branch).toMatch(/^barndog\/org-code-review-[0-9a-f]{6}$/);
-  expect(renderCollaboration(pushed).join("\n")).toMatch(/Open a pull request/);
+  expect(
+    renderCollaboration(pushed, { runtime: uiRuntime }).join("\n"),
+  ).toMatch(/Open a pull request/);
+
   // Nothing lands on the default branch until the host merges it.
   await run(clone, "fetch", "origin");
   expect(

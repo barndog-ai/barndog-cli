@@ -30,8 +30,14 @@ import {
   warn,
 } from "./format.js";
 import { displayPath } from "./output.js";
+import { variableProblemLines } from "./variable-problems.js";
 import type { KeptChoice } from "../features/mcps/import.js";
-import { LOCAL_URL_QUERY, renderMcpValues, renderUrlQueries } from "./mcp.js";
+import {
+  LOCAL_URL_QUERY,
+  renderMcpValues,
+  renderSignIn,
+  renderUrlQueries,
+} from "./mcp.js";
 import { checkboxTheme, promptTheme } from "./theme.js";
 
 /** Asks which scanned assets to adopt and returns their keys; tests pass their own answer. */
@@ -268,7 +274,9 @@ export function renderAdoption(
     );
   }
 
+  output.push(...renderSignIn(result.signIn));
   output.push(...renderMcpValues(result.values));
+  output.push(...variableProblemLines(result.events, result.values));
 
   output.push(
     "",

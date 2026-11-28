@@ -536,6 +536,7 @@ test("adopt passes its options to the adoption functions", async () => {
           adopted: [],
           backup: "/b",
           notes: [],
+          signIn: [],
           values: [],
           events: [],
           canShare: false,

@@ -25,7 +25,10 @@ import { ensureLocalWorkspace } from "../imports/local.js";
 import {
   keepLiteralValues,
   literalValues,
+  signInTools,
   type KeptChoice,
+  type LocalServer,
+  type SignIn,
   type McpValue,
 } from "../mcps/import.js";
 import { writePackage } from "../workspace/directory.js";
@@ -119,6 +122,8 @@ export type AdoptionResult = {
   backup: string;
   /** What to do before an adopted asset works. */
   notes: AdoptionNote[];
+  /** The adopted MCP servers that sign in through each coding tool (`mcp auth`). */
+  signIn: SignIn[];
   /** The literal values adopted MCP servers held, and which of them BarnDog keeps. */
   values: McpValue[];
   events: SyncEvent[];
@@ -154,6 +159,29 @@ function adoptionNotes(
       literalValues(asset.name, sourceOf(asset).literals, keep),
     ),
   };
+}
+
+/** The adopted MCP servers, once each, under the asset ID their copy got. */
+function adoptedServers(
+  plan: PlannedAsset[],
+  record: Adoption,
+  sourceOf: (asset: PlannedAsset) => FoundAsset,
+): LocalServer[] {
+  const servers = new Map<string, LocalServer>();
+
+  for (const [index, asset] of plan.entries()) {
+    const { content } = sourceOf(asset);
+    if (content.kind === "mcp") {
+      servers.set(asset.source.key, {
+        id: defined(record.items[index], "Each planned asset has an item")
+          .assetId,
+        name: asset.name,
+        definition: content.definition,
+      });
+    }
+  }
+
+  return [...servers.values()];
 }
 
 /** Takes over the chosen assets; on any failure, puts back what it changed. */
@@ -247,6 +275,10 @@ export async function adoptNative(
         adopted: plan,
         backup: paths.folder,
         ...adoptionNotes(plan, sourceOf, keep),
+        signIn: await signInTools(
+          adoptedServers(plan, record, sourceOf),
+          runtime,
+        ),
         events,
         canShare: await hasSharedWorkspace(home),
       };

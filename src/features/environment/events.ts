@@ -1,6 +1,18 @@
 import type { Link } from "../../config/state.js";
 import type { Harness } from "../../harnesses/types.js";
 
+/**
+ * Kept MCP values sync wrote into, or took out of, the settings `files`.
+ * Each file holds the same `variables`; see kept-value-events.ts.
+ */
+export type KeptValuesEvent = {
+  type: "kept-values";
+  action: "wrote" | "removed";
+  server: string;
+  variables: string[];
+  files: string[];
+};
+
 /** One thing a sync did or noticed, reported to the user in order. */
 export type SyncEvent =
   | {
@@ -27,6 +39,7 @@ export type SyncEvent =
   /** A value a version 1 `secrets.json` kept that no MCP server has yet. */
   | { type: "unassigned-value"; variable: string }
   | { type: "notice"; message: string }
+  | KeptValuesEvent
   | {
       type: "invalid";
       kind: "skill" | "mcp" | "hook";
@@ -51,6 +64,20 @@ export function unsetValueMessage(event: {
   return event.from
     ? `${event.from} has no value here, so ${event.server} can't read ${event.variable} from it.`
     : `${event.variable} has no value here, so ${event.server} can't use it.`;
+}
+
+/** What a `kept-values` event means, naming no file; its files are listed after it. */
+export function keptValuesMessage(event: KeptValuesEvent): string {
+  const { action, server, variables } = event;
+  const listed = `${variables.length === 1 ? "value of" : "values of"} ${variables.join(", ")}`;
+
+  if (action === "removed") {
+    return `Removed the kept ${listed} for ${server}.`;
+  }
+
+  const stay = variables.length === 1 ? "It stays" : "They stay";
+
+  return `Wrote the kept ${listed} for ${server}. ${stay} on this machine.`;
 }
 
 /** What an `unassigned-value` event means, as one sentence. */

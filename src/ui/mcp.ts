@@ -5,7 +5,7 @@ import confirm from "@inquirer/confirm";
 import { mcpDefinitionSchema } from "@barndog-ai/api-contract";
 import { z } from "zod";
 
-import type { McpValue } from "../features/mcps/import.js";
+import type { McpValue, SignIn } from "../features/mcps/import.js";
 import type {
   ConfirmUrlQuery,
   UrlQuery,
@@ -23,6 +23,7 @@ import {
   warn,
 } from "./format.js";
 import { promptTheme } from "./theme.js";
+import { LOCAL_ORIGIN } from "../features/workspace/overlay.js";
 
 const shownMcpSchema = z.looseObject({
   name: z.string(),
@@ -53,6 +54,21 @@ const signIn = {
   environment: "environment variables",
   "native-oauth": "OAuth, through each coding tool",
 } as const;
+
+/** How to sign in to each local server that signs in through its coding tools: one `mcp auth` per tool. */
+export function renderSignIn(signIns: readonly SignIn[]): string[] {
+  return signIns.flatMap(({ server, harnesses }) => {
+    const tools: string[] = harnesses.length ? harnesses : ["<tool>"];
+
+    return [
+      `${warn("!")} ${bold(clean(server))} signs in through each coding tool. Sign in once in each:`,
+      ...tools.map(
+        (tool) =>
+          `    ${bold(`barndog mcp auth ${clean(server)} --origin ${LOCAL_ORIGIN} --harness ${tool}`)}`,
+      ),
+    ];
+  });
+}
 
 /**
  * Where each literal MCP value went: one sentence for the values BarnDog keeps

@@ -8,7 +8,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { parse as parseToml } from "smol-toml";
 import { expect, test, vi, type TestContext } from "vitest";
 import { saveSettings } from "../config/settings.js";
@@ -136,8 +136,12 @@ test("kept values are written into every tool, and state.json records only their
 
   const output = m.lines.join("\n");
   expect(output).toMatch(/never uploaded/);
-  expect(output).toMatch(
-    /Wrote the kept value of API_KEY into .*\.claude\.json for tickets/,
+  // Every tool got the same value, so one sentence, then each file under it.
+  expect(output.match(/Wrote the kept value of API_KEY/g)).toHaveLength(1);
+  // Paths show with the platform's own separator, as displayPath() writes them.
+  const shown = (...parts: string[]) => ["~", ...parts].join(sep);
+  expect(stripVTControlCharacters(output)).toContain(
+    `Wrote the kept value of API_KEY for tickets. It stays on this machine.\n    ${shown(".claude.json")}\n    ${shown(".codex", "config.toml")}\n`,
   );
 
   // One sentence per outcome, then a column of variables under each server.
@@ -251,15 +255,21 @@ test("mcp env changes a kept value, lists where it's written, and forgets it", a
   expect(JSON.stringify(listed)).not.toContain("sk-new");
 
   const forgotten = await forgetMcpValue(tickets, m.runtime);
+  // Every tool lost the same value, so one event names all their files.
   expect(
-    forgotten.events.some(
-      (e) =>
-        e.type === "notice" &&
-        /Removed the kept value of API_KEY from .*\.claude\.json/.test(
-          e.message,
-        ),
-    ),
-  ).toBe(true);
+    forgotten.events.filter((e) => e.type === "kept-values"),
+  ).toStrictEqual([
+    {
+      type: "kept-values",
+      action: "removed",
+      server: "tickets",
+      variables: ["API_KEY"],
+      files: expect.arrayContaining([
+        join(m.home, ".claude.json"),
+        join(m.home, ".codex/config.toml"),
+      ]),
+    },
+  ]);
 
   expect(
     JSON.parse(await m.file(".claude.json")).mcpServers.tickets.env.API_KEY,

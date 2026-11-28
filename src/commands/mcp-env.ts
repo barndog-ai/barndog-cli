@@ -42,7 +42,7 @@ export function registerMcpEnv(mcp: Command, context: CommandContext) {
     }
 
     context.write(`${ok("✔")} ${message}`);
-    for (const line of renderSyncOutput(result.events)) {
+    for (const line of renderSyncOutput(result.events, context.runtime)) {
       context.write(line);
     }
   };

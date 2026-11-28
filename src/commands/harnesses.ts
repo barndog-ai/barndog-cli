@@ -72,7 +72,7 @@ export function registerHarnesses(program: Command, context: CommandContext) {
       return context.write(json(result));
     }
 
-    for (const line of renderSyncOutput(result.events)) {
+    for (const line of renderSyncOutput(result.events, context.runtime)) {
       context.write(line);
     }
 
