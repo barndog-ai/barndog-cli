@@ -80,7 +80,7 @@ export function renderSignIn(
 
     const commands = (tools.length ? tools : ["<tool>"]).map(
       (tool) =>
-        `    ${bold(`barndog mcp auth ${server} --origin ${LOCAL_ORIGIN} --harness ${tool}`)}`,
+        `    ${bold(`barndog mcp auth ${clean(server)} --origin ${LOCAL_ORIGIN} --harness ${tool}`)}`,
     );
 
     return [

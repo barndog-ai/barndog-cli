@@ -594,7 +594,7 @@ const toolList = new Intl.ListFormat("en", { type: "conjunction" });
 /** The servers that sign in through each coding tool, which `mcp auth` starts. */
 export const signsIn = (
   servers: readonly { name: string; definition: McpDefinition }[],
-) =>
+): string[] =>
   servers
     .filter(({ definition }) => definition.authentication === "native-oauth")
     .map(({ name }) => name);
