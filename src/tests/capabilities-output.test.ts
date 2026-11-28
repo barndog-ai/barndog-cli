@@ -16,10 +16,10 @@ afterEach(() => {
 
 async function doctorOutput(checks: Check[]) {
   const write = vi.fn();
-  await createProgram({ write, doctor: async () => checks }).parseAsync(
-    ["doctor"],
-    { from: "user" },
-  );
+  await createProgram({
+    write,
+    doctor: async () => ({ checks, hooksMissingTools: 0 }),
+  }).parseAsync(["doctor"], { from: "user" });
 
   return write.mock.calls.flat().join("\n").split("\n");
 }
@@ -105,10 +105,10 @@ test("doctor lists a grouped check's names under its detail, aligned by label", 
 test("doctor --json prints the checks as they are", async () => {
   const write = vi.fn();
   const checks = [passing, failing];
-  await createProgram({ write, doctor: async () => checks }).parseAsync(
-    ["doctor", "--json"],
-    { from: "user" },
-  );
+  await createProgram({
+    write,
+    doctor: async () => ({ checks, hooksMissingTools: 0 }),
+  }).parseAsync(["doctor", "--json"], { from: "user" });
 
   expect(JSON.parse(write.mock.lastCall![0])).toEqual(checks);
 });

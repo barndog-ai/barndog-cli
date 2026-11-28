@@ -12,6 +12,7 @@ import {
   unsetValueMessage,
   type SyncEvent,
 } from "../features/environment/events.js";
+import type { HookSkip } from "../features/native/requirements.js";
 import { adapters, isHarness } from "../harnesses/registry.js";
 import { primary, danger } from "./theme.js";
 import {
@@ -22,6 +23,7 @@ import {
   hint,
   json,
   ok,
+  plural,
   table,
   warn,
 } from "./format.js";
@@ -48,8 +50,7 @@ export function displayPath(path: string, runtime: RuntimeContext): string {
   return homeRelative ? `~${paths.sep}${homeRelative}` : "~";
 }
 
-type Action =
-  "installed" | "updated" | "removed" | "unchanged" | "unsupported" | "skipped";
+type Action = "installed" | "updated" | "removed" | "unchanged" | "skipped";
 
 type Row = {
   action: Action;
@@ -64,9 +65,56 @@ const marks: Record<Action, (text: string) => string> = {
   updated: (text) => primary(`~ ${text}`),
   removed: (text) => bad(`- ${text}`),
   unchanged: (text) => dim(`  ${text}`),
-  unsupported: (text) => warn(`! ${text}`),
   skipped: (text) => warn(`! ${text}`),
 };
+
+type Unsupported = Extract<SyncEvent, { type: "unsupported" }>;
+
+/** A Hook skipped in one tool, as a Note cell: `Codex: no implementation`. */
+function skipNote(event: Unsupported) {
+  const words: Record<HookSkip["type"], string> = {
+    "no-implementation": "no implementation",
+    "no-command-hooks": "no command hooks",
+    "missing-requirement": "missing requirement",
+  };
+
+  return `${adapters[event.harness].name}: ${words[event.cause.type]}`;
+}
+
+/**
+ * Where each newly installed Hook isn't, so a developer learns it when the
+ * Hook arrives rather than on every sync.
+ */
+function installNotes(events: readonly SyncEvent[], rows: Row[]) {
+  const skipped = events.filter(
+    (event): event is Unsupported => event.type === "unsupported",
+  );
+
+  for (const row of rows) {
+    if (row.action !== "installed" || row.kind !== "hook") {
+      continue;
+    }
+
+    const notes = skipped
+      .filter((event) => event.name === row.name)
+      .map(skipNote);
+
+    if (notes.length) {
+      row.note = `Not in ${notes.join(", ")}`;
+    }
+  }
+}
+
+/** Hooks with an implementation for a tool that this machine can't run. */
+function cantRun(events: readonly SyncEvent[]) {
+  return new Set(
+    events.flatMap((event) =>
+      event.type === "unsupported" && event.cause.type === "missing-requirement"
+        ? [event.name]
+        : [],
+    ),
+  );
+}
 
 /** BarnDog's own entries in each tool's configuration, not assets the user manages. */
 const internalKinds = new Set(["knowledge", "sync"]);
@@ -105,6 +153,7 @@ function rows(events: SyncEvent[]): Row[] {
   for (const event of events) {
     if (
       event.type === "disabled" ||
+      event.type === "unsupported" ||
       event.type === "notice" ||
       event.type === "unset-variable" ||
       event.type === "unassigned-value"
@@ -124,15 +173,7 @@ function rows(events: SyncEvent[]): Row[] {
         action: "skipped",
         kind: event.kind,
         name: event.skipped.name,
-        note: `${event.skipped.origin} · name taken by ${event.installed.origin}`,
-      });
-    } else if (event.type === "unsupported") {
-      add({
-        action: "unsupported",
-        kind: event.kind,
-        name: event.name,
-        harness: event.harness,
-        note: event.reason,
+        note: `${event.skipped.origin}: name taken by ${event.installed.origin}`,
       });
     } else if (event.type === "native") {
       add({
@@ -156,16 +197,55 @@ function rows(events: SyncEvent[]): Row[] {
     "updated",
     "removed",
     "skipped",
-    "unsupported",
     "unchanged",
   ];
 
-  return [...byKey.values()].sort(
+  const sorted = [...byKey.values()].sort(
     (a, b) =>
       order.indexOf(a.action) - order.indexOf(b.action) ||
       a.kind.localeCompare(b.kind) ||
       a.name.localeCompare(b.name),
   );
+
+  installNotes(events, sorted);
+
+  return sorted;
+}
+
+/** The table of changed assets and a blank line after it; nothing when there are none. */
+function rowLines(shown: readonly Row[]): string[] {
+  if (!shown.length) {
+    return [];
+  }
+
+  // A clash or invalid asset names no tool; without a Tools cell in any row the column goes.
+  const withTools = shown.some((row) => row.harnesses.size > 0);
+
+  return [
+    ...table(
+      shown.map((row) => [
+        marks[row.action](row.action),
+        dim(row.kind),
+        bold(row.name),
+        ...(withTools ? [dim([...row.harnesses].join(", "))] : []),
+        row.action === "installed" ? dim(row.note ?? "") : (row.note ?? ""),
+      ]),
+    ),
+    "",
+  ];
+}
+
+/** One warning for every Hook that can't run, with doctor for the details. */
+function cantRunLines(hooks: number): string[] {
+  if (!hooks) {
+    return [];
+  }
+
+  return [
+    "",
+    `${warn("!")} ${plural(hooks, "Hook")} can't run in a tool ${hooks === 1 ? "it's" : "they're"} written for.`,
+    `  ${hint("barndog doctor", "Tip")}${dim("  to see which and why")}`,
+  ];
 }
 
 /**
@@ -190,9 +270,13 @@ export function renderSyncOutput(
     ["installed", "updated", "removed"].includes(row.action),
   );
 
+  const broken = cantRun(events);
+
   // Something was left out or read from an old copy, so "up to date" would be untrue.
   const incomplete =
-    count("skipped") > 0 || events.some((event) => event.type === "notice");
+    count("skipped") > 0 ||
+    broken.size > 0 ||
+    events.some((event) => event.type === "notice");
 
   const quiet = incomplete
     ? dim("Nothing else changed.")
@@ -203,25 +287,12 @@ export function renderSyncOutput(
       (action) => (count(action) ? [`${count(action)} ${action}`] : []),
     ),
     ...(count("skipped") ? [`${count("skipped")} skipped`] : []),
-    ...(count("unsupported") ? [`${count("unsupported")} unsupported`] : []),
   ].join(", ");
 
-  const output = [`\n${heading(options.title ?? "sync")}\n`];
-  if (shown.length) {
-    output.push(
-      ...table(
-        shown.map((row) => [
-          marks[row.action](row.action),
-          dim(row.kind),
-          bold(row.name),
-          row.note
-            ? `${[...row.harnesses].join(", ")}${row.harnesses.size ? " · " : ""}${row.note}`
-            : dim([...row.harnesses].join(", ")),
-        ]),
-      ),
-      "",
-    );
-  }
+  const output = [
+    `\n${heading(options.title ?? "sync")}\n`,
+    ...rowLines(shown),
+  ];
 
   output.push(
     `${incomplete ? warn("!") : ok("✔")} ${options.preview ? "Preview" : "Sync complete"}${summary ? ` · ${summary}` : ""}`,
@@ -242,6 +313,8 @@ export function renderSyncOutput(
         : quiet,
     );
   }
+
+  output.push(...cantRunLines(broken.size));
 
   for (const event of events) {
     output.push(...problemLines(event));

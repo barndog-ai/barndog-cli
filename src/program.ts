@@ -73,6 +73,7 @@ import {
 import { adaptHook, toolNames } from "./features/hooks/adapt.js";
 import { harnesses } from "./harnesses/registry.js";
 import { hookCompatibility } from "./features/hooks/compatibility.js";
+import { allHookCompatibility } from "./features/inventory/hook-matrix.js";
 import { testHook } from "./features/hooks/test.js";
 import {
   knowledgeGet,
@@ -555,6 +556,8 @@ export function createProgram(options: ProgramOptions = {}): Command {
     hookCompatibility:
       options.hookCompatibility ??
       ((name, origin) => hookCompatibility(name, origin, runtime)),
+    allHookCompatibility:
+      options.allHookCompatibility ?? (() => allHookCompatibility(runtime)),
     adaptHook:
       options.adaptHook ??
       ((name, origin, targets) => adaptHook(name, origin, targets, runtime)),

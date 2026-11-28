@@ -5,7 +5,15 @@ import { type InventoryItem } from "../features/inventory/index.js";
 import { prefixedName } from "../features/environment/names.js";
 import { runSelection } from "../ui/selection.js";
 import { pickMany, pickOne, type PickChoice } from "../ui/pick.js";
-import { bold, clean, ok, ORIGIN_HELP, originLabel } from "../ui/format.js";
+import {
+  bold,
+  clean,
+  dim,
+  ok,
+  ORIGIN_HELP,
+  originLabel,
+} from "../ui/format.js";
+import { stateBadge } from "../ui/assets.js";
 import { assetKinds } from "../features/asset-kinds/index.js";
 import { addArguments, requireArguments } from "./arguments.js";
 import { ask } from "./asset-share.js";
@@ -33,7 +41,7 @@ function localCandidates(
 const localChoice = (item: InventoryItem): PickChoice<InventoryItem> => ({
   value: item,
   name: item.installedName,
-  hint: `${item.origin} · ${item.state}`,
+  columns: [dim(item.origin), stateBadge(item.state)],
 });
 
 /** `install`: adds assets of one kind to the selection and syncs. */
@@ -109,7 +117,10 @@ export function registerInstall(
             .map((row) => ({
               value: row.id,
               name: row.name,
-              hint: `${originLabel(row.origin)} · ${clean(row.version.description)}`,
+              columns: [
+                dim(originLabel(row.origin)),
+                dim(clean(row.version.description)),
+              ],
             })),
           {
             empty: inOrigin.length

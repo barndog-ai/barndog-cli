@@ -3,8 +3,8 @@
  * grouped into one check per message with the names listed under it.
  */
 import { adapters } from "../../harnesses/registry.js";
-import { defined, only } from "../../shared/lookup.js";
-import { assetKinds } from "../asset-kinds/index.js";
+import { only } from "../../shared/lookup.js";
+import { requirementFix, requirementMessage } from "../native/requirements.js";
 import {
   unassignedValueMessage,
   unsetValueMessage,
@@ -13,8 +13,6 @@ import {
 import type { Check, CheckRow } from "./check.js";
 
 type UnsetVariable = Extract<SyncEvent, { type: "unset-variable" }>;
-
-type Unsupported = Extract<SyncEvent, { type: "unsupported" }>;
 
 const SHELL_NOTE =
   "Coding tools opened outside a terminal may not see your shell's variables either.";
@@ -134,37 +132,48 @@ export function variableChecks(events: readonly SyncEvent[]): Check[] {
   return checks;
 }
 
-/** One check per kind and reason, listing the assets skipped in each tool. */
-export function unsupportedChecks(events: readonly SyncEvent[]): Check[] {
-  const groups = new Map<string, Unsupported[]>();
-  for (const event of events) {
-    if (event.type === "unsupported") {
-      const key = JSON.stringify([event.kind, event.reason]);
-      groups.set(key, [...(groups.get(key) ?? []), event]);
-    }
+/** Every Hook that has an implementation for a tool but can't run there, in one check. */
+export function cantRunChecks(events: readonly SyncEvent[]): Check[] {
+  const broken = events.flatMap((event) =>
+    event.type === "unsupported" && event.cause.type === "missing-requirement"
+      ? [{ event, requirement: event.cause.requirement }]
+      : [],
+  );
+
+  if (!broken.length) {
+    return [];
   }
 
-  return [...groups.values()].map((group) => {
-    const { kind, reason } = defined(
-      group[0],
-      "A group has at least one asset",
-    );
+  const hooks = new Set(broken.map(({ event }) => event.name)).size;
+  const fixes = new Set(
+    broken.map(({ event, requirement }) =>
+      requirementFix(event.harness, requirement),
+    ),
+  );
 
-    const skipped =
-      group.length === 1
-        ? `this ${assetKinds[kind].one}`
-        : `these ${assetKinds[kind].many}`;
-
-    return {
-      name: "Unsupported",
+  return [
+    {
+      name: "Hooks",
       status: "warn",
-      detail: `${reason}, so BarnDog skips ${skipped} there.`,
-      rows: rowsOf(
-        group.map((event) => ({
-          label: adapters[event.harness].name,
-          item: event.name,
-        })),
-      ),
-    };
-  });
+      detail: `${hooks} ${hooks === 1 ? "Hook can't run in a tool it's" : "Hooks can't run in a tool they're"} written for.`,
+      table: broken.map(({ event, requirement }) => [
+        event.name,
+        adapters[event.harness].name,
+        requirementMessage(event.harness, requirement),
+      ]),
+      fix: `${only([...fixes]) ?? "Install or update what each Hook needs"}, then run the command below`,
+      command: "barndog sync",
+    },
+  ];
+}
+
+/** How many Hooks aren't written for at least one selected tool: worth a tip, not a warning. */
+export function hooksMissingTools(events: readonly SyncEvent[]): number {
+  return new Set(
+    events.flatMap((event) =>
+      event.type === "unsupported" && event.cause.type !== "missing-requirement"
+        ? [event.name]
+        : [],
+    ),
+  ).size;
 }

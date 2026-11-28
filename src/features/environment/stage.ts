@@ -17,16 +17,13 @@ import { packageFingerprint } from "@barndog-ai/api-contract/package";
 import type { PackageKind } from "../../config/selection.js";
 import type { Link, State } from "../../config/state.js";
 import { CliError } from "../../errors.js";
-import {
-  adapters,
-  isHookHarness,
-  skillDirectory,
-} from "../../harnesses/registry.js";
+import { isHookHarness, skillDirectory } from "../../harnesses/registry.js";
 import type { Harness } from "../../harnesses/types.js";
 import { isInside } from "../../shared/files.js";
 import { defined } from "../../shared/lookup.js";
 import type { SelectionResult } from "../asset-selection/types.js";
 import { hookEntries, hookIssue, mcpEntry } from "../native/adapters.js";
+import { skipReason, type HookSkip } from "../native/requirements.js";
 import type { NativeEntry } from "../native/configuration.js";
 import {
   applyKeptValues,
@@ -323,25 +320,26 @@ async function hookRegistrations(
   const native: NativeEntry[] = [];
   const events: SyncEvent[] = [];
 
-  const unsupported = (harness: Harness, reason: string) =>
+  const unsupported = (harness: Harness, cause: HookSkip) =>
     events.push({
       type: "unsupported",
       kind: "hook",
       harness,
       name: hook.name,
-      reason,
+      cause,
+      reason: skipReason(harness, cause),
     });
 
   for (const harness of harnesses) {
     if (!isHookHarness(harness)) {
-      unsupported(harness, `${adapters[harness].name} has no command hooks`);
+      unsupported(harness, { type: "no-command-hooks" });
 
       continue;
     }
 
-    const reason = await hookIssue(harness, hook.manifest, runtime);
-    if (reason !== null) {
-      unsupported(harness, reason);
+    const skip = await hookIssue(harness, hook.manifest, runtime);
+    if (skip !== null) {
+      unsupported(harness, skip);
 
       continue;
     }

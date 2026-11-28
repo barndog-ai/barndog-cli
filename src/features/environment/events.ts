@@ -1,5 +1,6 @@
 import type { Link } from "../../config/state.js";
 import type { Harness } from "../../harnesses/types.js";
+import type { HookSkip } from "../native/requirements.js";
 
 /** One thing a sync did or noticed, reported to the user in order. */
 export type SyncEvent =
@@ -10,11 +11,16 @@ export type SyncEvent =
       harness: Harness;
       name: string;
     }
+  /**
+   * A Hook BarnDog doesn't install in one tool. `reason` says `cause` in words
+   * for `--json` readers.
+   */
   | {
       type: "unsupported";
-      kind: "mcp" | "hook";
+      kind: "hook";
       harness: Harness;
       name: string;
+      cause: HookSkip;
       reason: string;
     }
   | { type: "disabled"; id: string }

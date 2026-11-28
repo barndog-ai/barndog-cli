@@ -357,7 +357,9 @@ test("a knowledge file with a bad field is reported, not dropped silently", asyn
   ).toBeTruthy();
 
   expect(
-    (await doctor(testRuntime(home))).some((c) => /guide\.md/.test(c.detail)),
+    (await doctor(testRuntime(home))).checks.some((c) =>
+      /guide\.md/.test(c.detail),
+    ),
   ).toBeTruthy();
 });
 

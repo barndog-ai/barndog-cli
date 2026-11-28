@@ -10,7 +10,11 @@ import { hookManifestSchema, hookSchema } from "@barndog-ai/api-contract";
 import type { HookHarness } from "../../harnesses/types.js";
 import { selectAsset } from "../server/catalog.js";
 import { cachedPackage } from "../workspace/packages.js";
-import { runtimeRequirements } from "../native/adapters.js";
+import {
+  requirementFix,
+  requirementMessage,
+  runtimeRequirements,
+} from "../native/requirements.js";
 import { hookInvocation } from "../native/hook-shell.js";
 import { readSettings } from "../../config/settings.js";
 import { repoForOrigin, selectRepoAsset } from "../workspace/assets.js";
@@ -99,7 +103,10 @@ export async function testHook(
   );
 
   if (unmet) {
-    throw new CliError(unmet);
+    throw new CliError(
+      `${name} ${requirementMessage(options.harness, unmet)}.`,
+      requirementFix(options.harness, unmet),
+    );
   }
 
   const event =

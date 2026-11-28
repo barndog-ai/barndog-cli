@@ -1,7 +1,11 @@
 import { bad, dim, json, ok, ORIGIN_HELP } from "../ui/format.js";
 import { Option, type Command } from "commander";
 import { type CommandContext } from "./context.js";
-import { renderHookCompatibility } from "../ui/hook-compatibility.js";
+import {
+  renderHookCompatibility,
+  renderHookMatrix,
+} from "../ui/hook-compatibility.js";
+import { CliError } from "../errors.js";
 import { hookHarnesses } from "../harnesses/registry.js";
 import { type HookHarness } from "../harnesses/types.js";
 import { defined } from "../shared/lookup.js";
@@ -96,30 +100,56 @@ export function registerHooks(program: Command, context: CommandContext) {
   hooks
     .command("compatibility [name]")
     .option("--origin <origin>", ORIGIN_HELP)
+    .option("--all", "Show every selected Hook against each coding tool")
     .description(
       "Inspect version-specific declarations and local runtime requirements",
     )
-    .action(async (name: string | undefined, options: { origin?: string }) => {
-      const located = await locate(
-        "hook",
-        name,
-        options,
-        "barndog hooks compatibility <name>",
-      );
+    .action(
+      async (
+        name: string | undefined,
+        options: { origin?: string; all?: boolean },
+      ) => {
+        if (options.all) {
+          if (name || options.origin) {
+            throw new CliError(
+              "--all shows every selected Hook, so it takes no name or --origin.",
+              "barndog hooks compatibility --all",
+            );
+          }
 
-      const result = await context.hookCompatibility(
-        located.name,
-        located.origin,
-      );
+          const rows = await context.allHookCompatibility();
+          if (context.mode.json) {
+            return context.write(json(rows));
+          }
 
-      if (context.mode.json) {
-        return context.write(json(result));
-      }
+          for (const line of renderHookMatrix(rows)) {
+            context.write(line);
+          }
 
-      for (const line of renderHookCompatibility(located.name, result)) {
-        context.write(line);
-      }
-    });
+          return;
+        }
+
+        const located = await locate(
+          "hook",
+          name,
+          options,
+          "barndog hooks compatibility <name>",
+        );
+
+        const result = await context.hookCompatibility(
+          located.name,
+          located.origin,
+        );
+
+        if (context.mode.json) {
+          return context.write(json(result));
+        }
+
+        for (const line of renderHookCompatibility(located.name, result)) {
+          context.write(line);
+        }
+      },
+    );
 
   hooks
     .command("adapt [name]")

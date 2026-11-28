@@ -55,9 +55,18 @@ const mixed: SyncEvent[] = [
   {
     type: "unsupported",
     kind: "hook",
-    name: "unsupported",
+    name: "check",
+    harness: "codex",
+    cause: { type: "no-implementation" },
+    reason: "No implementation for this harness",
+  },
+  {
+    type: "unsupported",
+    kind: "hook",
+    name: "elsewhere",
     harness: "cursor",
-    reason: "No implementation",
+    cause: { type: "no-implementation" },
+    reason: "No implementation for this harness",
   },
   {
     type: "invalid",
@@ -71,17 +80,15 @@ const mixed: SyncEvent[] = [
 const TITLE = "\nBarnDog sync\n";
 
 const changedRows = [
-  "  + installed    hook   another      Claude Code",
-  "  + installed    hook   check        Claude Code",
-  "  + installed    mcp    server       Claude Code, Codex",
-  "  ~ updated      mcp    changed      Claude Code",
-  "  - removed      mcp    removed      Claude Code",
-  "  ! skipped      skill  broken       Invalid manifest",
-  "  ! unsupported  hook   unsupported  Cursor · No implementation",
+  "  + installed  hook   another  Claude Code",
+  "  + installed  hook   check    Claude Code         Not in Codex: no implementation",
+  "  + installed  mcp    server   Claude Code, Codex",
+  "  ~ updated    mcp    changed  Claude Code",
+  "  - removed    mcp    removed  Claude Code",
+  "  ! skipped    skill  broken                       Invalid manifest",
 ];
 
-const SUMMARY =
-  "3 installed, 1 updated, 1 removed, 1 unchanged, 1 skipped, 1 unsupported";
+const SUMMARY = "3 installed, 1 updated, 1 removed, 1 unchanged, 1 skipped";
 
 describe("a sync with every kind of event", () => {
   test("lists changes by action, merges harnesses and hides unchanged rows", () => {
@@ -100,8 +107,13 @@ describe("a sync with every kind of event", () => {
   test("verbose output adds the unchanged rows last", () => {
     expect(renderSyncOutput(mixed, { verbose: true })).toEqual([
       TITLE,
-      ...changedRows,
-      "    unchanged    mcp    untouched    Claude Code",
+      "  + installed  hook   another    Claude Code",
+      "  + installed  hook   check      Claude Code         Not in Codex: no implementation",
+      "  + installed  mcp    server     Claude Code, Codex",
+      "  ~ updated    mcp    changed    Claude Code",
+      "  - removed    mcp    removed    Claude Code",
+      "  ! skipped    skill  broken                         Invalid manifest",
+      "    unchanged  mcp    untouched  Claude Code",
       "",
       `! Sync complete · ${SUMMARY}`,
       "A restart of your coding tools may be required to pick up the changes.",
@@ -167,7 +179,7 @@ describe("a sync that changed nothing", () => {
     ]);
   });
 
-  test("with only unsupported assets reports them without asking for a restart", () => {
+  test("Hooks not written for a tool are left out entirely", () => {
     expect(
       renderSyncOutput([
         {
@@ -175,17 +187,43 @@ describe("a sync that changed nothing", () => {
           kind: "hook",
           name: "check",
           harness: "cursor",
-          reason: "Missing runtime",
+          cause: { type: "no-implementation" },
+          reason: "No implementation for this harness",
         },
       ]),
-    ).toEqual([
+    ).toEqual([TITLE, "✔ Sync complete", "Everything is up to date.", ""]);
+  });
+
+  test("Hooks that can't run are one warning pointing to doctor", () => {
+    const cantRun = (name: string, harness: "claude" | "codex"): SyncEvent => ({
+      type: "unsupported",
+      kind: "hook",
+      name,
+      harness,
+      cause: {
+        type: "missing-requirement",
+        requirement: { type: "command", command: "deno" },
+      },
+      reason: "needs deno",
+    });
+
+    expect(renderSyncOutput([cantRun("lint", "claude")])).toEqual([
       TITLE,
-      "  ! unsupported  hook  check  Cursor · Missing runtime",
+      "! Sync complete",
+      "Nothing else changed.",
       "",
-      "✔ Sync complete · 1 unsupported",
-      "Everything is up to date.",
+      "! 1 Hook can't run in a tool it's written for.",
+      "  Tip: barndog doctor  to see which and why",
       "",
     ]);
+
+    expect(
+      renderSyncOutput([
+        cantRun("lint", "claude"),
+        cantRun("lint", "codex"),
+        cantRun("format", "claude"),
+      ]).at(-3),
+    ).toBe("! 2 Hooks can't run in a tool they're written for.");
   });
 
   test("a preview of nothing says everything is up to date", () => {
@@ -350,7 +388,7 @@ describe("clashes and invalid assets", () => {
       ]),
     ).toEqual([
       TITLE,
-      "  ! skipped  skill  review  team/web · name taken by org",
+      "  ! skipped  skill  review  team/web: name taken by org",
       "",
       "! Sync complete · 1 skipped",
       "Nothing else changed.",

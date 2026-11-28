@@ -10,6 +10,7 @@ import { promptTheme } from "../ui/theme.js";
 import {
   bold,
   clean,
+  dim,
   hint,
   json,
   ok,
@@ -95,7 +96,10 @@ export function registerSharing(
               (await context.searchCatalog(kind)).map((row) => ({
                 value: row,
                 name: row.name,
-                hint: `${originLabel(row.origin)} · ${clean(row.version.description)}`,
+                columns: [
+                  dim(originLabel(row.origin)),
+                  dim(clean(row.version.description)),
+                ],
               })),
             );
 

@@ -365,13 +365,13 @@ test("in a terminal, set picks the server and then the variable from lists", asy
 
   const [servers, variables] = vi.mocked(pickOne).mock.calls;
   expect(servers![1]).toStrictEqual([
-    { value: tickets, name: "tickets", hint: "local · installed" },
+    { value: tickets, name: "tickets", columns: ["local", "installed"] },
   ]);
 
   expect(variables![0]).toBe("Choose a variable of tickets");
   expect(variables![1]).toStrictEqual([
-    { value: "API_KEY", name: "API_KEY", hint: "kept" },
-    { value: "TOKEN", name: "TOKEN", hint: undefined },
+    { value: "API_KEY", name: "API_KEY", columns: ["kept"] },
+    { value: "TOKEN", name: "TOKEN", columns: [] },
   ]);
 
   // A named server skips the first list.

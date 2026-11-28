@@ -58,7 +58,7 @@ import type {
 import type { CatalogAsset, McpServer } from "../features/asset-kinds/index.js";
 import type { AssetKind, PackageKind } from "../config/selection.js";
 import type { Harness, HookHarness } from "../harnesses/types.js";
-import type { Check } from "../features/doctor/check.js";
+import type { DoctorReport } from "../features/doctor/check.js";
 import type {
   UninstallOptions,
   UninstallResult,
@@ -71,6 +71,7 @@ import type {
   MigrationReport,
 } from "../features/migration/migrate.js";
 import type { PackageDetails } from "../features/inventory/show.js";
+import type { HookCompatibilityRow } from "../features/inventory/hook-matrix.js";
 import type {
   KeptValueChange,
   KeptVariable,
@@ -207,7 +208,7 @@ type FeatureFunctions = {
   ) => Promise<HarnessesApplied>;
   selectHarnesses: (harnesses: readonly Harness[]) => Promise<HarnessesApplied>;
 
-  doctor: () => Promise<Check[]>;
+  doctor: () => Promise<DoctorReport>;
   workspaceUrl: () => Promise<string>;
   repoStatus: () => Promise<RepositoryStatus>;
   validateFolder: (directory: string) => Promise<FolderSummary>;
@@ -267,6 +268,7 @@ type FeatureFunctions = {
     name: string,
     origin: string,
   ) => Promise<HookCompatibility>;
+  allHookCompatibility: () => Promise<HookCompatibilityRow[]>;
   adaptHook: (
     name: string,
     origin: string,

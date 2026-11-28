@@ -11,8 +11,8 @@ import { LoginRequiredError } from "../auth/transport.js";
 import { synchronize } from "../environment/sync.js";
 import { assetKinds } from "../asset-kinds/index.js";
 import { barndogPaths } from "../../config/paths.js";
-import type { Check } from "./check.js";
-import { unsupportedChecks, variableChecks } from "./grouped.js";
+import type { Check, DoctorReport } from "./check.js";
+import { cantRunChecks, hooksMissingTools, variableChecks } from "./grouped.js";
 
 const failure = (error: unknown) => ({
   detail: error instanceof Error ? error.message : String(error),
@@ -72,7 +72,18 @@ async function gitChecks(workspace: GitWorkspace, runtime: RuntimeContext) {
  * Runs every check that can run: a failure hides only the checks that need
  * what failed (a readable configuration, a session).
  */
-export async function doctor(runtime: RuntimeContext): Promise<Check[]> {
+export async function doctor(runtime: RuntimeContext): Promise<DoctorReport> {
+  const found = { hooksMissingTools: 0 };
+  const checks = await allChecks(runtime, found);
+
+  return { checks, ...found };
+}
+
+/** The checks; what is only worth a tip goes into `found`. */
+async function allChecks(
+  runtime: RuntimeContext,
+  found: { hooksMissingTools: number },
+): Promise<Check[]> {
   const { home } = runtime;
 
   const checks: Check[] = [];
@@ -194,7 +205,8 @@ export async function doctor(runtime: RuntimeContext): Promise<Check[]> {
       }
     }
 
-    checks.push(...unsupportedChecks(events));
+    checks.push(...cantRunChecks(events));
+    found.hooksMissingTools = hooksMissingTools(events);
   } catch (error) {
     checks.push({ name: "Installation", status: "fail", ...failure(error) });
   }

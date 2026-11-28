@@ -31,11 +31,16 @@ import type { Harness } from "../../harnesses/types.js";
 import type { AssetKind } from "../../config/selection.js";
 import { isAssetKind } from "../asset-kinds/index.js";
 import { isHarness } from "../../harnesses/registry.js";
+import { hookBlocked } from "./hook-readiness.js";
 
 export type InventoryState =
   | "installed"
   | "disabled"
   | "pending"
+  /** Selected, but this machine lacks what its implementations need, so no tool runs it. */
+  | "cant-run"
+  /** Selected, but it has no implementation for any selected tool. */
+  | "no-version"
   | "outdated"
   | "clash"
   | "modified"
@@ -102,6 +107,8 @@ function inventoryState(asset: {
   present: boolean;
   /** The installed version is older than the published one. */
   outdated: boolean;
+  /** Why sync installs it nowhere, when it is a Hook no selected tool can run. */
+  blocked: "cant-run" | "no-version" | null;
 }): InventoryState {
   if (!asset.enabled) {
     return "disabled";
@@ -116,7 +123,7 @@ function inventoryState(asset: {
   }
 
   if (!asset.present) {
-    return "pending";
+    return asset.blocked ?? "pending";
   }
 
   return asset.outdated ? "outdated" : "installed";
@@ -287,6 +294,17 @@ export async function inventory(
         const entries = nativeOf(asset.id);
         const tree = installed.find((t) => t.id === asset.id);
         const present = links.length > 0 || entries.length > 0;
+        const blocked = await hookBlocked(
+          {
+            kind: asset.kind,
+            enabled: entry.enabled,
+            present,
+            installed: tree,
+          },
+          settings.harnesses,
+          runtime,
+        );
+
         const harnesses = [
           ...new Set([
             ...links.map((l) => l.harness),
@@ -313,6 +331,7 @@ export async function inventory(
             outdated: Boolean(
               tree?.versionId && tree.versionId !== asset.publishedVersion,
             ),
+            blocked,
           }),
           harnesses,
           paths: [

@@ -39,10 +39,14 @@ export type ListFilter = {
 const listGroup = (state: ListedAsset["state"]) =>
   state === "available" || state === "disabled" ? state : "installed";
 
-/** Outdated assets look pending and modified ones look clashed. */
+/** Outdated assets look pending, modified ones look clashed, Hooks that can't run look skipped. */
 function badgeState(state: ListedAsset["state"]) {
   if (state === "outdated") {
     return "pending";
+  }
+
+  if (state === "cant-run") {
+    return "skipped";
   }
 
   return state === "modified" ? "clash" : state;
@@ -87,11 +91,18 @@ const stateLabel: Record<ListedAsset["state"], string> = {
   installed: "installed",
   disabled: "disabled",
   pending: "pending",
+  "cant-run": "can't run",
+  "no-version": "no version for your tools",
   outdated: "update available",
   clash: "clash",
   modified: "edited by hand",
   removing: "pending removal",
 };
+
+/** A state as a table or picker shows it: colored by how much it needs attention. */
+export function stateBadge(state: ListedAsset["state"]) {
+  return badge(badgeState(state), stateLabel[state]);
+}
 
 /** One table of what is selected and installed, with an optional path listing. */
 export function renderInventory(
@@ -115,7 +126,7 @@ export function renderInventory(
             ? item.harnesses.map((h) => adapters[h].name).join(", ")
             : "—",
         ),
-        badge(badgeState(item.state), stateLabel[item.state]),
+        stateBadge(item.state),
       ]),
       { header: ["Name", "Origin", "Via", "Installed in", "State"], flex: 2 },
     ),
@@ -167,6 +178,15 @@ export function inventoryHints(items: readonly InventoryItem[]): string[] {
     output.push(
       hint("barndog sync", "Fix") +
         dim("  in a terminal to choose how to resolve name clashes"),
+    );
+  }
+
+  if (count("cant-run")) {
+    output.push(
+      hint("barndog doctor", "Fix") +
+        dim(
+          `  to see what ${plural(count("cant-run"), "Hook")} ${count("cant-run") === 1 ? "needs" : "need"} to run`,
+        ),
     );
   }
 

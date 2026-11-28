@@ -90,7 +90,7 @@ for (const protection of [true, false, null]) {
         fetched ? { fetchedAt: "2026-01-01T00:00:00Z" } : {},
       );
 
-      const checks = await doctor(testRuntime(server.home));
+      const checks = (await doctor(testRuntime(server.home))).checks;
       expect(checks.find((check) => check.name === "Last fetch")!.status).toBe(
         fetched ? "ok" : "warn",
       );
@@ -124,7 +124,7 @@ for (const [situation, error, expected] of [
   test(`a session that is ${situation} fails with its reason and fix, and later checks are skipped`, async (t) => {
     const server = await cloud(t);
     vi.mocked(authStatus).mockRejectedValue(error);
-    const checks = await doctor(testRuntime(server.home));
+    const checks = (await doctor(testRuntime(server.home))).checks;
     expect(checks.find((check) => check.name === "Session")).toEqual({
       name: "Session",
       status: "fail",
@@ -163,7 +163,7 @@ test("failed git access is reported while installation checks still run", async 
     ),
   );
 
-  expect(await doctor(testRuntime(server.home))).toEqual(
+  expect((await doctor(testRuntime(server.home))).checks).toEqual(
     expect.arrayContaining([
       expect.objectContaining({
         name: "Git access",
@@ -191,7 +191,7 @@ test("a selected coding tool that isn't on this machine is fixed by installing i
     { id: "claude", name: "Claude Code", evidence: "claude on PATH" },
   ]);
 
-  const checks = await doctor(testRuntime(server.home));
+  const checks = (await doctor(testRuntime(server.home))).checks;
   expect(checks).toEqual(
     expect.arrayContaining([
       { name: "Claude Code", status: "ok", detail: "claude on PATH" },
@@ -207,7 +207,7 @@ test("a selected coding tool that isn't on this machine is fixed by installing i
 });
 
 const installation = async (home: string) =>
-  (await doctor(testRuntime(home))).find(
+  (await doctor(testRuntime(home))).checks.find(
     (check) => check.name === "Installation",
   );
 

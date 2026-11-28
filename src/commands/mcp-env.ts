@@ -5,6 +5,7 @@ import { CliError } from "../errors.js";
 import type { KeptValueChange, KeptVariable } from "../features/mcps/values.js";
 import { readsFrom, type KeptValue } from "../features/secrets/index.js";
 import { bold, dim, json, ok, table } from "../ui/format.js";
+import { stateBadge } from "../ui/assets.js";
 import { displayPath, renderSyncOutput } from "../ui/output.js";
 import { pickOne } from "../ui/pick.js";
 import { askSecret, askUseUnassigned, readStdin } from "../ui/secret-input.js";
@@ -254,7 +255,7 @@ variable from your environment instead, such as GITHUB_TOKEN for GITHUB_PERSONAL
           servers.map((candidate) => ({
             value: candidate,
             name: candidate.installedName,
-            hint: `${candidate.origin} · ${candidate.state}`,
+            columns: [dim(candidate.origin), stateBadge(candidate.state)],
           })),
           { empty: "No MCP servers on this machine." },
         );
@@ -279,7 +280,7 @@ variable from your environment instead, such as GITHUB_TOKEN for GITHUB_PERSONAL
       (item.variables ?? []).map((name) => {
         const row = kept.find((candidate) => candidate.variable === name);
 
-        return { value: name, name, hint: row ? describe(row) : undefined };
+        return { value: name, name, columns: row ? [dim(describe(row))] : [] };
       }),
       {
         empty: `BarnDog couldn't find any variables ${item.installedName} uses. Name one: ${SET_USAGE}`,
