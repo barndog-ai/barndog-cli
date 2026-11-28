@@ -329,27 +329,79 @@ test("a Hook no selected tool can run says why rather than staying pending", asy
 
   const missing = await folder(ONLY_CODEX("barndog-test-missing-runtime"));
   expect(
-    await hookBlocked(missing.path, ["claude", "codex"], missing.runtime),
+    await hookBlocked(
+      {
+        kind: "hook",
+        enabled: true,
+        present: false,
+        installed: { path: missing.path },
+      },
+      ["claude", "codex"],
+      missing.runtime,
+    ),
   ).toBe("cant-run");
 
-  expect(await hookBlocked(missing.path, ["claude"], missing.runtime)).toBe(
-    "no-version",
-  );
+  expect(
+    await hookBlocked(
+      {
+        kind: "hook",
+        enabled: true,
+        present: false,
+        installed: { path: missing.path },
+      },
+      ["claude"],
+      missing.runtime,
+    ),
+  ).toBe("no-version");
 
-  expect(await hookBlocked(missing.path, ["opencode"], missing.runtime)).toBe(
-    "no-version",
-  );
+  expect(
+    await hookBlocked(
+      {
+        kind: "hook",
+        enabled: true,
+        present: false,
+        installed: { path: missing.path },
+      },
+      ["opencode"],
+      missing.runtime,
+    ),
+  ).toBe("no-version");
 
-  expect(await hookBlocked(missing.path, [], missing.runtime)).toBeNull();
+  expect(
+    await hookBlocked(
+      {
+        kind: "hook",
+        enabled: true,
+        present: false,
+        installed: { path: missing.path },
+      },
+      [],
+      missing.runtime,
+    ),
+  ).toBeNull();
 
   const runnable = await folder(ONLY_CODEX("sh"));
   expect(
-    await hookBlocked(runnable.path, ["claude", "codex"], runnable.runtime),
+    await hookBlocked(
+      {
+        kind: "hook",
+        enabled: true,
+        present: false,
+        installed: { path: runnable.path },
+      },
+      ["claude", "codex"],
+      runnable.runtime,
+    ),
   ).toBeNull();
 
   expect(
     await hookBlocked(
-      join(runnable.path, "nowhere"),
+      {
+        kind: "hook",
+        enabled: true,
+        present: false,
+        installed: { path: join(runnable.path, "nowhere") },
+      },
       ["codex"],
       runnable.runtime,
     ),
@@ -357,6 +409,45 @@ test("a Hook no selected tool can run says why rather than staying pending", asy
 
   await writeFile(join(runnable.path, "hook.yaml"), "name: [broken");
   expect(
-    await hookBlocked(runnable.path, ["codex"], runnable.runtime),
+    await hookBlocked(
+      {
+        kind: "hook",
+        enabled: true,
+        present: false,
+        installed: { path: runnable.path },
+      },
+      ["codex"],
+      runnable.runtime,
+    ),
   ).toBeNull();
+});
+
+test("only a selected Hook that no tool has is checked", async (t) => {
+  const runtime = await hookFixture(
+    t,
+    ONLY_CODEX("barndog-test-missing-runtime"),
+  );
+
+  const folder = join(
+    (await readSettings(runtime.home))!.localWorkspace!.path,
+    "org/hooks/release-notes",
+  );
+
+  const hook = {
+    kind: "hook",
+    enabled: true,
+    present: false,
+    installed: { path: folder },
+  } as const;
+
+  for (const other of [
+    { ...hook, kind: "skill" },
+    { ...hook, enabled: false },
+    { ...hook, present: true },
+    { ...hook, installed: undefined },
+  ] as const) {
+    expect(await hookBlocked(other, ["codex"], runtime)).toBeNull();
+  }
+
+  expect(await hookBlocked(hook, ["codex"], runtime)).toBe("cant-run");
 });

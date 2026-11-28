@@ -294,10 +294,16 @@ export async function inventory(
         const entries = nativeOf(asset.id);
         const tree = installed.find((t) => t.id === asset.id);
         const present = links.length > 0 || entries.length > 0;
-        const blocked =
-          !present && entry.enabled && asset.kind === "hook" && tree
-            ? await hookBlocked(tree.path, settings.harnesses, runtime)
-            : null;
+        const blocked = await hookBlocked(
+          {
+            kind: asset.kind,
+            enabled: entry.enabled,
+            present,
+            installed: tree,
+          },
+          settings.harnesses,
+          runtime,
+        );
 
         const harnesses = [
           ...new Set([
