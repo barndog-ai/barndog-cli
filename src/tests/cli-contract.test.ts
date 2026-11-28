@@ -33,7 +33,7 @@ import { updateCredentials } from "../features/auth/credentials.js";
 import { saveSettings, readSettings } from "../config/settings.js";
 import { synchronize } from "../features/environment/sync.js";
 import { assertSourceExists } from "../features/imports/folder.js";
-import { convertServer, signsIn } from "../features/mcps/import.js";
+import { convertServer } from "../features/mcps/import.js";
 import { inventory } from "../features/inventory/index.js";
 import {
   knowledgeList,
@@ -167,7 +167,6 @@ test("mcp add marks OAuth servers, by flag or from the pasted JSON", () => {
 
   const flagged = convertServer(server, undefined, true);
   expect(flagged.definition.authentication).toBe("native-oauth");
-  expect(signsIn([flagged])).toStrictEqual(["docs"]);
   expect(
     convertServer({
       name: "docs",

@@ -10,8 +10,24 @@ import { hint, labelledLists, warn } from "./format.js";
 /** Lines under a warning start where its text does. */
 const UNDER = "  ";
 
-export function variableProblemLines(events: readonly SyncEvent[]): string[] {
-  return variableChecks(events).flatMap((check) => [
+/**
+ * `listed` names variables the caller has already shown, such as the literal
+ * values `mcp add` and `adopt` left for the developer to set; they're left out.
+ */
+export function variableProblemLines(
+  events: readonly SyncEvent[],
+  listed: readonly { server: string; variable: string }[] = [],
+): string[] {
+  const unlisted = events.filter(
+    (event) =>
+      event.type !== "unset-variable" ||
+      !listed.some(
+        (value) =>
+          value.server === event.server && value.variable === event.variable,
+      ),
+  );
+
+  return variableChecks(unlisted).flatMap((check) => [
     "",
     `${warn("!")} ${check.detail}`,
     ...labelledLists(check.rows ?? [], { indent: UNDER.length + 2 }),

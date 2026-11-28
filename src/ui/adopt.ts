@@ -30,6 +30,7 @@ import {
   warn,
 } from "./format.js";
 import { displayPath } from "./output.js";
+import { variableProblemLines } from "./variable-problems.js";
 import type { KeptChoice } from "../features/mcps/import.js";
 import {
   LOCAL_URL_QUERY,
@@ -273,8 +274,9 @@ export function renderAdoption(
     );
   }
 
-  output.push(...renderSignIn(result.signIn, result.events));
+  output.push(...renderSignIn(result.signIn));
   output.push(...renderMcpValues(result.values));
+  output.push(...variableProblemLines(result.events, result.values));
 
   output.push(
     "",

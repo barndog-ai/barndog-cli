@@ -213,6 +213,31 @@ test("after adopting beside a shared workspace, the next step is sharing", () =>
   expect(text).toMatch(/Tip: barndog local move/);
 });
 
+test("adoption lists unset variables once, and how to sign in in each tool", () => {
+  const text = stripVTControlCharacters(
+    renderAdoption(
+      {
+        ...result,
+        values: [{ server: "github", variable: "TOKEN", kept: false }],
+        signIn: [{ server: "linear", harnesses: ["claude", "codex"] }],
+        events: [
+          { type: "unset-variable", server: "github", variable: "TOKEN" },
+          { type: "unset-variable", server: "github", variable: "ORG" },
+          { type: "unset-variable", server: "github", variable: "REPO" },
+        ],
+      },
+      runtime,
+    ).join("\n"),
+  );
+
+  // TOKEN is in the values table already, so the warning lists the other two.
+  expect(text).toContain("    github  ORG, REPO");
+  expect(text).toContain("Fix: barndog mcp env set github");
+  expect(text).toContain(
+    "    barndog mcp auth linear --origin local --harness claude\n    barndog mcp auth linear --origin local --harness codex",
+  );
+});
+
 test("nothing is adopted when nothing is picked or the plan is declined", async () => {
   const adoptNative = vi.fn();
   const lines: string[] = [];

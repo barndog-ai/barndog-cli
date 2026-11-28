@@ -341,7 +341,7 @@ function renderAddedServers(
     ...result.notes.map(
       (note) => `${warn("!")} ${bold(note.server)}: ${note.text}`,
     ),
-    ...renderSignIn(result.signIn, result.events),
+    ...renderSignIn(result.signIn),
     ...renderMcpValues(result.values),
     // Sync says where each kept value was written.
     ...result.events.flatMap((event) => {
@@ -357,17 +357,6 @@ function renderAddedServers(
     ...result.backups.map((backup) =>
       dim(`Backup: ${displayPath(backup, runtime)}`),
     ),
-    // renderMcpValues already lists the literal values left for the developer to set.
-    ...variableProblemLines(
-      result.events.filter(
-        (event) =>
-          event.type !== "unset-variable" ||
-          !result.values.some(
-            (value) =>
-              value.server === event.server &&
-              value.variable === event.variable,
-          ),
-      ),
-    ),
+    ...variableProblemLines(result.events, result.values),
   ];
 }

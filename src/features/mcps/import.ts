@@ -591,13 +591,40 @@ type ServerNote = { server: string; text: string };
 
 const toolList = new Intl.ListFormat("en", { type: "conjunction" });
 
-/** The servers that sign in through each coding tool, which `mcp auth` starts. */
-export const signsIn = (
-  servers: readonly { name: string; definition: McpDefinition }[],
-): string[] =>
-  servers
+/** A server in the local folder, by the asset ID sync installs it under. */
+export type LocalServer = {
+  id: string;
+  name: string;
+  definition: McpDefinition;
+};
+
+/** A server that signs in through its coding tools, and the tools sync installed it in. */
+export type SignIn = { server: string; harnesses: Harness[] };
+
+/**
+ * The servers that sign in through each coding tool, which `mcp auth` starts
+ * once per tool. Read by asset ID from `state.json` after the sync, since a
+ * clash rename changes the name a tool has the server under.
+ */
+export async function signInTools(
+  servers: readonly LocalServer[],
+  runtime: RuntimeContext,
+): Promise<SignIn[]> {
+  const { native } = await readState(runtime.home);
+
+  return servers
     .filter(({ definition }) => definition.authentication === "native-oauth")
-    .map(({ name }) => name);
+    .map(({ id, name }) => ({
+      server: name,
+      harnesses: [
+        ...new Set(
+          native
+            .filter((entry) => entry.kind === "mcp" && entry.id === id)
+            .map((entry) => entry.harness),
+        ),
+      ],
+    }));
+}
 
 /** What `mcp add` added, and what the developer still has to do. */
 export type AddedServers = {
@@ -608,7 +635,7 @@ export type AddedServers = {
   /** Copies of the tool settings files it changed. */
   backups: string[];
   /** The added servers that sign in through each coding tool (`mcp auth`). */
-  signIn: string[];
+  signIn: SignIn[];
   events: SyncEvent[];
 };
 
@@ -706,21 +733,19 @@ export async function addMcpServers(
 
     // Saved before the sync, which writes them into the tools' settings.
     const model = await localRepoSource(workspace, runtime).model();
-    await keepLiteralValues(
-      servers.map((server) => ({
-        ...server,
-        id: defined(
-          model.assets.find(
-            (asset) =>
-              asset.kind === "mcp" &&
-              asset.path === `org/mcp/${server.name}.yaml`,
-          )?.id,
-          `The local folder has no ${server.name} after writing it`,
-        ),
-      })),
-      options.keep,
-      runtime,
-    );
+    const saved = servers.map((server) => ({
+      ...server,
+      id: defined(
+        model.assets.find(
+          (asset) =>
+            asset.kind === "mcp" &&
+            asset.path === `org/mcp/${server.name}.yaml`,
+        )?.id,
+        `The local folder has no ${server.name} after writing it`,
+      ),
+    }));
+
+    await keepLiteralValues(saved, options.keep, runtime);
 
     const events = await synchronize(undefined, runtime, undefined, {
       prompt: false,
@@ -735,7 +760,7 @@ export async function addMcpServers(
         literalValues(s.name, s.literals, options.keep),
       ),
       backups,
-      signIn: signsIn(servers),
+      signIn: await signInTools(saved, runtime),
       events,
     };
   });

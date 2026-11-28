@@ -5,7 +5,7 @@ import confirm from "@inquirer/confirm";
 import { mcpDefinitionSchema } from "@barndog-ai/api-contract";
 import { z } from "zod";
 
-import type { McpValue } from "../features/mcps/import.js";
+import type { McpValue, SignIn } from "../features/mcps/import.js";
 import type {
   ConfirmUrlQuery,
   UrlQuery,
@@ -23,7 +23,6 @@ import {
   warn,
 } from "./format.js";
 import { promptTheme } from "./theme.js";
-import type { SyncEvent } from "../features/environment/events.js";
 import { LOCAL_ORIGIN } from "../features/workspace/overlay.js";
 
 const shownMcpSchema = z.looseObject({
@@ -56,36 +55,17 @@ const signIn = {
   "native-oauth": "OAuth, through each coding tool",
 } as const;
 
-/**
- * How to sign in to each local server that signs in through its coding tools:
- * one `mcp auth` per tool the sync installed it in, read from its events.
- */
-export function renderSignIn(
-  servers: readonly string[],
-  events: readonly SyncEvent[],
-): string[] {
-  return servers.flatMap((server) => {
-    const tools = [
-      ...new Set(
-        events.flatMap((event) =>
-          event.type === "native" &&
-          event.kind === "mcp" &&
-          event.name === server &&
-          event.action !== "removed"
-            ? [event.harness]
-            : [],
-        ),
-      ),
-    ];
-
-    const commands = (tools.length ? tools : ["<tool>"]).map(
-      (tool) =>
-        `    ${bold(`barndog mcp auth ${clean(server)} --origin ${LOCAL_ORIGIN} --harness ${tool}`)}`,
-    );
+/** How to sign in to each local server that signs in through its coding tools: one `mcp auth` per tool. */
+export function renderSignIn(signIns: readonly SignIn[]): string[] {
+  return signIns.flatMap(({ server, harnesses }) => {
+    const tools: string[] = harnesses.length ? harnesses : ["<tool>"];
 
     return [
       `${warn("!")} ${bold(clean(server))} signs in through each coding tool. Sign in once in each:`,
-      ...commands,
+      ...tools.map(
+        (tool) =>
+          `    ${bold(`barndog mcp auth ${clean(server)} --origin ${LOCAL_ORIGIN} --harness ${tool}`)}`,
+      ),
     ];
   });
 }
